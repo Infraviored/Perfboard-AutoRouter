@@ -529,21 +529,33 @@ function generateRatsnestSVG() {
   return out;
 }
 
+// --- Fix 2: SVG Z-Index, Label Placement, and Colored Rim ---
 function renderCompSVG(c) {
   const bx = c.ox*SP + SP*.08, by = c.oy*SP + SP*.08;
   const bw = c.w*SP  - SP*.16, bh = c.h*SP  - SP*.16;
   
   let out = `<g transform="translate(0,0)">`;
-  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="${c.color}" stroke="rgba(255,255,255,.18)" stroke-width="1"/>`;
-  out += `<text x="${bx+3}" y="${by+SP*0.25}" fill="rgba(255,255,255,.72)" font-family="'Consolas',monospace" font-size="${Math.min(SP*.3,9)}" font-weight="bold">${c.id}: ${c.value}</text>`;
+  
+  // 1. Draw Component Base (Use the exact component color as thick rim, and a darker tinted fill)
+  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="#111" stroke="${c.color}" stroke-width="2.5"/>`;
+  // Add a slight colored tint to the background of the component
+  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="${c.color}" opacity="0.3"/>`;
 
+  // 2. Draw Pins First (so component labels can render over them if needed)
   c.pins.forEach(p => {
     const px = p.col*SP + SP/2, py = p.row*SP + SP/2;
     out += `<circle cx="${px}" cy="${py}" r="${SP*.28}" fill="#b87333"/>`;
     out += `<circle cx="${px}" cy="${py}" r="${SP*.2}" fill="${netColor(p.net)}"/>`;
     out += `<circle cx="${px}" cy="${py}" r="${SP*.09}" fill="#0d0a06"/>`;
-    out += `<text x="${px}" y="${py - SP*.33 + Math.min(SP*.25,7)/3}" fill="rgba(230,230,230,.9)" font-family="monospace" font-size="${Math.min(SP*.25,7)}" text-anchor="middle">${p.lbl}</text>`;
+    
+    // Pin Labels moved down slightly to prevent overlapping the center hole
+    out += `<text x="${px}" y="${py + SP*.42}" fill="rgba(230,230,230,.9)" font-family="monospace" font-size="${Math.min(SP*.25,7)}" text-anchor="middle">${p.lbl}</text>`;
   });
+
+  // 3. Draw Component Labels Last (On Top)
+  // Shifted component name to the TOP of the component box instead of center/bottom
+  out += `<text x="${bx+3}" y="${by+SP*0.35}" fill="#fff" font-family="'Consolas',monospace" font-size="${Math.min(SP*.3,9)}" font-weight="bold" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${c.id}: ${c.value}</text>`;
+  
   out += `</g>`;
   return out;
 }
@@ -574,13 +586,14 @@ function updateStats() {
   else                 { pe.textContent = pct + '%'; pe.style.color = 'var(--org)';  }
 }
 
+// --- Fix 1: Component List Colors ---
 function renderCompList() {
   const el = document.getElementById('compList');
   if (!components.length) {
     el.innerHTML = '<div style="font-size:.7em;color:var(--txt2)">No components.</div>'; return;
   }
   el.innerHTML = components.map(c => `
-    <div class="comp-card${selComp===c?' sel':''}" onclick="app.selectComp('${c.id}')">
+    <div class="comp-card${selComp===c?' sel':''}" onclick="app.selectComp('${c.id}')" style="border-left: 4px solid ${c.color}">
       <span style="font-weight:600">${c.id}</span>
       <span style="color:var(--txt2);font-size:.88em">${c.value}</span>
       <span style="color:var(--txt2);font-size:.78em">${c.pins.length}p</span>
@@ -696,9 +709,11 @@ function adjZoom(f, cx, cy) {
   panY = oy - (oy - panY) * (nz / zoom);
   zoom = nz; applyT(); render();
 }
+// --- Fix 3: Prevent Board Cutoff ---
 function fitView() {
   const r = ca.getBoundingClientRect();
-  zoom = Math.min(r.width / (COLS*SP), r.height / (ROWS*SP)) * .9;
+  const padding = 60; // generous padding so nothing hits the extreme edges
+  zoom = Math.min((r.width - padding) / (COLS*SP), (r.height - padding) / (ROWS*SP));
   panX = (r.width  - COLS*SP*zoom) / 2;
   panY = (r.height - ROWS*SP*zoom) / 2;
   applyT(); render();
@@ -801,6 +816,74 @@ function debugBoard() {
   const bbox = calculateFootprintArea();
   console.log("Current Bounding Box:", bbox);
   toast("Debug info logged to console", "inf");
+}
+
+function copyLLMPrompt() {
+  const promptText = `Act as an expert electronics engineer. I need you to translate a circuit design into a specific JSON format used by a custom Perfboard Autorouter application.
+
+The JSON must contain two main sections:
+1. "board": (Optional) specify {"cols": X, "rows": Y} for board size. 
+2. "components": An array of component objects. Each needs:
+   - "id": Reference designator (e.g., "R1", "U1").
+   - "name": Component type (e.g., "Resistor", "ESP32").
+   - "value": Component value/spec (e.g., "10k", "SuperMini").
+   - "color": A hex color code for the UI (e.g., "#2e1a08"). Try to use distinct, appropriate colors per component type (e.g., dark green for PCBs, black for ICs, brown for resistors).
+   - "pins": An array of pins. Each pin needs:
+     - "offset": [col, row] grid coordinates relative to component's top-left (0,0).
+     - "net": The net name this pin connects to (e.g., "GND", "VCC", "GATE"). Omit if unconnected.
+     - "label": A short 1-4 character label for the pin (e.g., "+", "G", "1").
+
+3. "connections": An array of objects to document nets.
+   - "net": The net name.
+   - "comment": A human-readable description of what this net connects.
+
+CRITICAL RULES:
+- The grid spacing is exactly 1 unit per hole (standard 0.1" perfboard).
+- Keep pin offsets contiguous where possible, matching the physical layout of real component (e.g., a standard DIP-8 IC has two rows of 4 pins: [0,0] to [3,0] and [0,3] to [3,3]).
+- Ensure net names match EXACTLY across components to ensure the autorouter wires them together.
+
+Example JSON for a simple LED circuit:
+{
+  "board": { "cols": 15, "rows": 10 },
+  "components": [
+    {
+      "id": "J1", "name": "Power", "value": "5V", "color": "#2a2808",
+      "pins": [
+        { "offset": [0, 0], "net": "5V", "label": "+" },
+        { "offset": [0, 1], "net": "GND", "label": "-" }
+      ]
+    },
+    {
+      "id": "R1", "name": "Resistor", "value": "330Ω", "color": "#2e1a08",
+      "pins": [
+        { "offset": [0, 0], "net": "5V", "label": "1" },
+        { "offset": [3, 0], "net": "NET_LED", "label": "2" }
+      ]
+    },
+    {
+      "id": "D1", "name": "LED", "value": "Red", "color": "#4a0a0a",
+      "pins": [
+        { "offset": [0, 0], "net": "NET_LED", "label": "A" },
+        { "offset": [1, 0], "net": "GND", "label": "K" }
+      ]
+    }
+  ],
+  "connections": [
+    { "net": "5V", "comment": "Power supply to Resistor" },
+    { "net": "NET_LED", "comment": "Current limited signal to LED anode" },
+    { "net": "GND", "comment": "Common ground" }
+  ]
+}
+
+Now, please generate JSON for the following circuit description:
+[INSERT YOUR CIRCUIT DESCRIPTION HERE]`;
+
+  navigator.clipboard.writeText(promptText).then(() => {
+    toast('LLM Prompt copied to clipboard! Paste it into ChatGPT/Claude.', 'ok');
+  }).catch(err => {
+    console.error('Failed to copy: ', err);
+    toast('Failed to copy to clipboard', 'err');
+  });
 }
 
 // ── INIT ──
@@ -1402,6 +1485,7 @@ window.app = {
   setTool, adjZoom, fitView, selectComp, setHovNet,
   openCompEditor, closeCompEditor, saveComponentEdit,
   addNewComponent, addNewPin, updatePinProperties, deletePin, deselectPin,
+  copyLLMPrompt,
 };
 
 initializeState();

@@ -169,19 +169,22 @@ text { user-select: none; }
     </div>
 
     <div class="ph">
-      <span><span class="sbadge" id="s2b">2</span>Components JSON</span>
-      <button class="tplbtn" onclick="app.loadTemplate()">📋 Template</button>
+      <span><span class="sbadge" id="s2b">2</span>Circuit Definition</span>
+      <div style="display:flex;gap:4px;">
+        <button class="tplbtn" onclick="app.copyLLMPrompt()" title="Copy instructions for ChatGPT/Claude">🤖 Prompt LLM</button>
+        <button class="tplbtn" onclick="app.loadTemplate()">📋 Template</button>
+      </div>
     </div>
     <div class="lbody">
       <div class="hint">
-        Paste JSON or click Template.<br>
-        <b>Place &amp; Route</b> — optimises placement via simulated annealing, then routes.<br>
-        <b>Route Only</b> — keeps current positions, re-routes.
+        Define components and connections.<br>
+        <b>Place &amp; Route</b> — auto-places & routes.<br>
+        <b>Route Only</b> — keeps positions, re-routes.
       </div>
       <textarea id="jsonInput" spellcheck="false"
-        placeholder="Paste JSON or click Template..."></textarea>
+        placeholder="Paste JSON or generate with an LLM..."></textarea>
       <div class="err" id="jsonErr"></div>
-      <button class="btn blu" onclick="app.loadComponents()">▶ Load Components</button>
+      <button class="btn blu" onclick="app.loadComponents()">▶ Load Circuit</button>
     </div>
 
     <div class="ph">
