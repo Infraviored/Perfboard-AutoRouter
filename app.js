@@ -388,7 +388,8 @@ async function doPlaceAndRoute() {
     setProg(0, 'Routing…');
     const candidateWires = await route(
       components, COLS, ROWS,
-      (p, s) => { setProg(p * 100, `[${attempt}/${maxAttempts}] Route — ${s}`); render(); }
+      (p, s) => { setProg(p * 100, `[${attempt}/${maxAttempts}] Route — ${s}`); render(); },
+      getRouteUnder() // <--- ADDED
     );
 
     const c = completion(candidateWires);
@@ -429,7 +430,7 @@ async function doPlaceAndRoute() {
 async function doRouteOnly() {
   if (!components.length) { toast('No components loaded', 'warn'); return; }
   showOverlay(true); ostep(2); setProg(0, 'Routing…');
-  wires = await route(components, COLS, ROWS, (p, s) => { setProg(p * 100, s); render(); });
+  wires = await route(components, COLS, ROWS, (p, s) => { setProg(p * 100, s); render(); }, getRouteUnder()); // <--- ADDED
   showOverlay(false);
   render(); updateStats(); renderNetPanel();
   finishMsg();
@@ -890,6 +891,11 @@ function fitView() {
   applyT(); render();
 }
 
+function getRouteUnder() {
+  const el = document.getElementById('routeUnder');
+  return el ? el.checked : false;
+}
+
 // ── HELPERS ──
 function gridPos(e) {
   const r = ca.getBoundingClientRect();
@@ -988,7 +994,7 @@ document.addEventListener('keydown', e => {
 // Debug function to print board congestion heatmap
 function debugBoard() {
   console.log("=== DEBUG BOARD CONGESTION ===");
-  const grid = new Grid(COLS, ROWS);
+  const grid = new Grid(COLS, ROWS, getRouteUnder()); // <--- ADDED
   components.forEach(c => grid.registerComp(c));
   wires.forEach(w => {
     if (!w.failed && w.path) {
@@ -1407,12 +1413,17 @@ function calculateFootprintArea() {
     });
   });
   
-  const width = (maxCol - minCol + 1);
-  const height = (maxRow - minRow + 1);
-  return { area: width * height, bounds: { minCol, maxCol, minRow, maxRow } };
+  const width = maxCol - minCol + 1;
+  const height = maxRow - minRow + 1;
+  const area = width * height;
+  
+  return { area, bounds: { minCol, maxCol, minRow, maxRow } };
 }
 
+// --- OPTIMIZATION ALGORITHMS ---
+
 async function tryRotateOptimize() {
+  let bestComp = completion(wires);
   let bestWL = wires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
   let bestArea = calculateFootprintArea().area;
   let improved = false;
@@ -1438,17 +1449,27 @@ async function tryRotateOptimize() {
 
       if (anyOverlap(c, components)) continue;
 
-      const testWires = await route(components, COLS, ROWS, () => {});
+      const testWires = await route(components, COLS, ROWS, () => {}, getRouteUnder());
       const newArea = calculateFootprintArea().area;
       const newWL = testWires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
+      const testComp = completion(testWires);
 
-      if (completion(testWires) === 1.0 && (newArea < bestArea || (newArea === bestArea && newWL < bestWL))) {
-        bestArea = newArea; bestWL = newWL; wires = testWires;
+      // Evaluate Fitness: 1. Completion, 2. Area, 3. Wire Length
+      let isBetter = false;
+      if (testComp > bestComp) isBetter = true;
+      else if (testComp === bestComp) {
+        if (newArea < bestArea) isBetter = true;
+        else if (newArea === bestArea && newWL < bestWL) isBetter = true;
+      }
+
+      if (isBetter) {
+        bestArea = newArea; bestWL = newWL; bestComp = testComp; wires = testWires;
         improved = true; cImproved = true; break; 
       }
     }
 
     if (!cImproved) {
+      // Revert if rotation didn't help
       c.w = originalW; c.h = originalH;
       c.pins.forEach((p, idx) => {
         p.dCol = originalPins[idx].dCol;
@@ -1469,6 +1490,7 @@ async function doRecursivePushPacking() {
     { name: 'Up',    dx: 0, dy: -1, side: 'maxRow' }
   ];
 
+  let bestComp = completion(wires);
   let bestArea = calculateFootprintArea().area;
   let improved = true;
   let loops = 0;
@@ -1511,99 +1533,170 @@ async function doRecursivePushPacking() {
       }
 
       if (validMove) {
-        const testWires = await route(components, COLS, ROWS, () => {});
+        const testWires = await route(components, COLS, ROWS, () => {}, getRouteUnder()); // <--- ADDED
         const newArea = calculateFootprintArea().area;
-        if (completion(testWires) === 1.0 && newArea <= bestArea) {
-          if (newArea < bestArea) { bestArea = newArea; improved = true; }
+        const testComp = completion(testWires);
+
+        let isBetter = false;
+        if (testComp > bestComp) isBetter = true;
+        else if (testComp === bestComp && newArea < bestArea) isBetter = true;
+        // Allow pure sliding if area is equal to pack tight against edges
+        else if (testComp === bestComp && newArea === bestArea) isBetter = true; 
+
+        if (isBetter) {
+          if (newArea < bestArea || testComp > bestComp) {
+            bestArea = newArea;
+            bestComp = testComp;
+            improved = true;
+          }
           wires = testWires;
         } else restoreComps(oldStates);
       } else restoreComps(oldStates);
     }
-    render(); await new Promise(r => setTimeout(r, 10));
+    render(); await new Promise(r => setTimeout(r, 10)); // Yield to UI
   }
 }
 
 async function doOptimizeFootprint() {
-  const MAX_CONFIGS = 50; 
-  const PATIENCE = 6;     
+  if (!components.length) { toast('No components to optimize', 'warn'); return; }
+
+  // 75 configs for a deep search
+  const MAX_CONFIGS = 75; 
+  showOverlay(true);
+  ostep(1);
+
+  // --- 1. TIGHTER VIRTUAL BOARD EXPANSION ---
+  const { bounds } = calculateFootprintArea();
   
-  let globalBestArea = Infinity;
-  let globalBestWL = Infinity;
-  let globalBestComps = null;
-  let globalBestWires = null;
+  // Pad the board by 14 units (gives a 7-hole perimeter).
+  // This is plenty of room for an IC to rotate and slide around the outside, 
+  // but tight enough that pushPacking instantly snaps things back together.
+  const vCols = Math.max(COLS, (bounds.maxCol - bounds.minCol) + 14);
+  const vRows = Math.max(ROWS, (bounds.maxRow - bounds.minRow) + 14);
+  
+  COLS = vCols; ROWS = vRows;
+  document.getElementById('bCols').value = COLS;
+  document.getElementById('bRows').value = ROWS;
+
+  // Shift all components to the exact center of this new virtual space
+  const offsetX = Math.floor(COLS / 2 - (bounds.minCol + (bounds.maxCol - bounds.minCol) / 2));
+  const offsetY = Math.floor(ROWS / 2 - (bounds.minRow + (bounds.maxRow - bounds.minRow) / 2));
+  components.forEach(c => moveComp(c, c.ox + offsetX, c.oy + offsetY));
+
+  // Reroute to establish the baseline on the virtual board
+  setProg(0, `Preparing virtual workspace...`);
+  wires = await route(components, COLS, ROWS, () => {}, getRouteUnder());
+  
+  let globalBestCompletion = completion(wires);
+  let globalBestArea = calculateFootprintArea().area;
+  let globalBestWL = wires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
+  let globalBestComps = saveComps();
+  let globalBestWires = [...wires];
+
   let configsWithoutImprovement = 0;
 
-  showOverlay(true);
-
-  const initialArea = calculateFootprintArea().area;
-  if (initialArea > 0 && completion(wires) === 1.0) {
-    globalBestArea = initialArea;
-    globalBestWL = wires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
-    globalBestComps = saveComps();
-    globalBestWires = [...wires];
-  }
-
+  // --- 2. AGGRESSIVE (BUT CONSTRAINED) OPTIMIZATION LOOP ---
   for (let config = 1; config <= MAX_CONFIGS; config++) {
-    ostep(1);
     
-    if (config > 1 && globalBestComps) {
-      setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Shuffling from best...`);
-      restoreComps(globalBestComps); 
-      
-      components.forEach(c => {
-        if (Math.random() > 0.5) {
-          const dx = (Math.random() > 0.5 ? 1 : -1) * Math.ceil(Math.random() * 2);
-          const dy = (Math.random() > 0.5 ? 1 : -1) * Math.ceil(Math.random() * 2);
-          const nx = Math.max(0, Math.min(COLS - c.w, c.ox + dx));
-          const ny = Math.max(0, Math.min(ROWS - c.h, c.oy + dy));
-          
-          if (!anyOverlap({ ox: nx, oy: ny, w: c.w, h: c.h }, components.filter(oc => oc !== c))) {
-            moveComp(c, nx, ny);
-          }
-        }
-      });
-    }
+    restoreComps(globalBestComps); 
+    
+    // Heat rises slightly slower so we don't scramble too early
+    let mutationStrength = 1 + Math.floor(configsWithoutImprovement / 6);
 
-    setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Initial Pack...`);
+    setProg((config / MAX_CONFIGS) * 100, `Config ${config}/${MAX_CONFIGS}: Mutating (Heat: ${mutationStrength})...`);
+
+    components.forEach(c => {
+      // Cap the maximum chance of mutation at 60% so the cluster doesn't totally dissolve
+      if (Math.random() < Math.min(0.6, 0.2 + (mutationStrength * 0.05))) {
+        const oldW = c.w, oldH = c.h, oldOx = c.ox, oldOy = c.oy;
+        const oldPins = c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow }));
+
+        if (Math.random() < 0.3) {
+          c.w = oldH; c.h = oldW;
+          c.pins.forEach(p => {
+            const r = p.dRow; p.dRow = p.dCol; p.dCol = c.w - 1 - r;
+            p.col = c.ox + p.dCol; p.row = c.oy + p.dRow;
+          });
+        }
+
+        // Tame the scatter: absolute maximum throw distance is 8 units
+        const scatterDist = Math.min(8, Math.ceil(Math.random() * 2 * mutationStrength));
+        let dx = (Math.random() > 0.5 ? 1 : -1) * scatterDist;
+        let dy = (Math.random() > 0.5 ? 1 : -1) * scatterDist;
+
+        // "Rubber Band" effect: Prevent components from wandering into the extreme edges
+        if (c.ox + dx < 3) dx = Math.abs(dx);
+        if (c.ox + dx > COLS - c.w - 3) dx = -Math.abs(dx);
+        if (c.oy + dy < 3) dy = Math.abs(dy);
+        if (c.oy + dy > ROWS - c.h - 3) dy = -Math.abs(dy);
+
+        const nx = Math.max(0, Math.min(COLS - c.w, c.ox + dx));
+        const ny = Math.max(0, Math.min(ROWS - c.h, c.oy + dy));
+
+        moveComp(c, nx, ny);
+
+        if (anyOverlap(c, components)) {
+          c.w = oldW; c.h = oldH;
+          moveComp(c, oldOx, oldOy);
+          c.pins.forEach((p, idx) => {
+            p.dCol = oldPins[idx].dCol;
+            p.dRow = oldPins[idx].dRow;
+            p.col = c.ox + p.dCol; p.row = c.oy + p.dRow;
+          });
+        }
+      }
+    });
+
+    setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Gravity Push Packing...`);
     await doRecursivePushPacking();
 
-    setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Rotating...`);
+    setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Rotating for fit...`);
     await tryRotateOptimize();
 
-    setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Final Pack...`);
+    setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Final Squeeze...`);
     await doRecursivePushPacking();
 
-    const currentArea = calculateFootprintArea().area;
-    const currentWL = wires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
-    const successRate = completion(wires);
+    const testWires = await route(components, COLS, ROWS, () => {}, getRouteUnder());
+    const currentCompArea = calculateFootprintArea().area;
+    const currentCompWL = testWires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
+    const currentCompRate = completion(testWires);
 
-    if (successRate === 1.0 && (currentArea < globalBestArea || (currentArea === globalBestArea && currentWL < globalBestWL))) {
-      globalBestArea = currentArea;
-      globalBestWL = currentWL;
+    let isBetter = false;
+
+    if (currentCompRate > globalBestCompletion) {
+      isBetter = true;
+    } 
+    else if (currentCompRate === globalBestCompletion) {
+      if (currentCompArea < globalBestArea) {
+        isBetter = true;
+      } 
+      else if (currentCompArea === globalBestArea && currentCompWL < globalBestWL) {
+        isBetter = true;
+      }
+    }
+
+    if (isBetter) {
+      globalBestCompletion = currentCompRate;
+      globalBestArea = currentCompArea;
+      globalBestWL = currentCompWL;
       globalBestComps = saveComps();
-      globalBestWires = [...wires];
-      console.log(`[Optimizer ${config}] New Leader: Area ${currentArea}, WL ${currentWL}`);
-      
-      configsWithoutImprovement = 0; 
+      globalBestWires = [...testWires];
+      configsWithoutImprovement = 0; // Reset frustration
+      console.log(`[Optimizer ${config}] New Leader: Comp ${Math.round(currentCompRate*100)}%, Area ${currentCompArea}, WL ${currentCompWL}`);
     } else {
-      configsWithoutImprovement++;
-      console.log(`[Optimizer ${config}] No improvement. Patience: ${configsWithoutImprovement}/${PATIENCE}`);
-    }
-
-    if (configsWithoutImprovement >= PATIENCE && globalBestArea !== Infinity) {
-      console.log(`[Optimizer] Converged after ${config} configs. Minimum footprint reached.`);
-      break;
+      configsWithoutImprovement++; // Increase frustration (raises mutation heat next round)
     }
   }
 
-  if (globalBestComps) {
-    restoreComps(globalBestComps);
-    wires = globalBestWires;
-  }
+  // --- 3. CLEANUP & RESTORE ---
+  restoreComps(globalBestComps);
+  wires = globalBestWires;
+  
+  cutToBoundingBox(); 
   
   showOverlay(false);
   render(); updateStats(); saveState();
-  toast(`Optimized to Area ${globalBestArea}`, "ok");
+  toast(`Optimization complete!`, "ok");
 }
 
 function goBack() {

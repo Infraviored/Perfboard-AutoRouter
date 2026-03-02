@@ -22,9 +22,9 @@ function getHPWLEstimate(pins) {
   return (maxC - minC) + (maxR - minR);
 }
 
-export async function route(components, cols, rows, onProgress) {
+export async function route(components, cols, rows, onProgress, allowRouteUnder = false) {
   const wires = [];
-  const grid = new Grid(cols, rows);
+  const grid = new Grid(cols, rows, allowRouteUnder);
   components.forEach(c => grid.registerComp(c));
 
   const nets = getAllNets(components);

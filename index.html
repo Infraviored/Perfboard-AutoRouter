@@ -144,6 +144,10 @@ text { user-select: none; }
     <input type="checkbox" id="autoOptimize" checked style="margin:0">
     Auto-optimize
   </label>
+  <label style="display:flex;align-items:center;gap:4px;color:var(--txt0);font-size:.8em" title="Allow routing traces under component bodies">
+    <input type="checkbox" id="routeUnder" style="margin:0">
+    Route Under Comps
+  </label>
   <button class="tbtn" onclick="app.doRouteOnly()">〰 Route Only <kbd>Shift+R</kbd></button>
   <button class="tbtn" onclick="app.clearWires()">⊘ Clear Wires</button>
   <div class="sep"></div>
