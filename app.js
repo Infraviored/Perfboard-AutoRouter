@@ -86,7 +86,22 @@ const TEMPLATE = {
 function applyBoard() {
   COLS = Math.max(5, parseInt(document.getElementById('bCols').value) || 22);
   ROWS = Math.max(5, parseInt(document.getElementById('bRows').value) || 16);
-  cv.width = COLS * SP; cv.height = ROWS * SP;
+  
+  // Handle high-DPI displays
+  const dpr = window.devicePixelRatio || 1;
+  const rect = ca.getBoundingClientRect();
+  
+  // Set canvas size accounting for device pixel ratio
+  cv.width = COLS * SP * dpr;
+  cv.height = ROWS * SP * dpr;
+  
+  // Scale canvas down using CSS to match display size
+  cv.style.width = COLS * SP + 'px';
+  cv.style.height = ROWS * SP + 'px';
+  
+  // Scale context to match device pixel ratio
+  ctx.scale(dpr, dpr);
+  
   fitView(); render(); updateStats();
   badge(2);
   toast(`Board: ${COLS}×${ROWS}`, 'ok');
@@ -268,12 +283,17 @@ function finishMsg() {
 // ── RENDER ──
 function render() {
   const W = COLS * SP, H = ROWS * SP;
+  
+  // Enable anti-aliasing and smoothing
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = '#1a1208'; ctx.fillRect(0, 0, W, H);
   ctx.strokeStyle = '#c8a800'; ctx.lineWidth = 2;
   ctx.strokeRect(1, 1, W-2, H-2);
 
-  // All copper pads
+  // All copper pads with better rendering
   for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
     const px = c*SP + SP/2, py = r*SP + SP/2;
     ctx.fillStyle = '#b87333';
@@ -301,6 +321,10 @@ function drawWires() {
     ctx.lineWidth   = hovNet === w.net ? 4.5 : 2.8;
     ctx.strokeStyle = netColor(w.net);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    // Enable anti-aliasing for smooth lines
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    
     w.path.forEach((pt, i) => {
       const px = pt.col*SP + SP/2, py = pt.row*SP + SP/2;
       i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
