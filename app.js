@@ -1296,6 +1296,59 @@ function calculateFootprintArea() {
   return { area: width * height, bounds: { minCol, maxCol, minRow, maxRow } };
 }
 
+// NEW: Component-by-component rotation check
+async function tryRotateOptimize() {
+  let bestWL = wires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
+  let bestArea = calculateFootprintArea().area;
+  let improved = false;
+
+  for (let c of components) {
+    const oldW = c.w, oldH = c.h;
+    const oldPins = c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow }));
+
+    // Try 90, 180, 270 degrees
+    for (let rot = 1; rot <= 3; rot++) {
+      // Perform 90-degree rotation step
+      const tempW = c.w;
+      c.w = c.h;
+      c.h = tempW;
+      c.pins.forEach(p => {
+        const tmp = p.dCol;
+        p.dCol = p.dRow;
+        p.dRow = c.w - 1 - tmp;
+        p.col = c.ox + p.dCol;
+        p.row = c.oy + p.dRow;
+      });
+
+      if (anyOverlap(c, components)) continue;
+
+      const testWires = await route(components, COLS, ROWS, () => {});
+      const newArea = calculateFootprintArea().area;
+      const newWL = testWires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
+
+      // Tie-breaker: Accept if Area is smaller OR (Area same AND WL shorter)
+      if (completion(testWires) === 1.0 && (newArea < bestArea || (newArea === bestArea && newWL < bestWL))) {
+        bestArea = newArea;
+        bestWL = newWL;
+        wires = testWires;
+        improved = true;
+        // Keep this rotation and move to next component
+        break; 
+      } else {
+        // Revert to original pins/size for this rotation step
+        c.w = oldW; c.h = oldH;
+        c.pins.forEach((p, idx) => {
+          p.dCol = oldPins[idx].dCol;
+          p.dRow = oldPins[idx].dRow;
+          p.col = c.ox + p.dCol;
+          p.row = c.oy + p.dRow;
+        });
+      }
+    }
+  }
+  return improved;
+}
+
 // NEW: Recursive Push Logic
 async function doRecursivePushPacking() {
   const directions = [
@@ -1308,8 +1361,6 @@ async function doRecursivePushPacking() {
   let bestArea = calculateFootprintArea().area;
   let improved = true;
   let loops = 0;
-
-  console.log(`Starting Pressure Packing. Initial Area: ${bestArea}`);
 
   while (improved && loops < 20) {
     improved = false;
@@ -1364,7 +1415,6 @@ async function doRecursivePushPacking() {
         // Accept if routing holds AND we didn't grow the box
         if (completion(testWires) === 1.0 && newArea <= bestArea) {
           if (newArea < bestArea) {
-            console.log(`- Area Improved: ${bestArea} -> ${newArea} (via Push ${d.name})`);
             bestArea = newArea;
             improved = true;
           }
@@ -1378,23 +1428,61 @@ async function doRecursivePushPacking() {
     }
     render(); await new Promise(r => setTimeout(r, 10));
   }
-  
-  console.log(`Packing Complete. Final Area: ${bestArea}`);
-  toast(`Layout Packed to ${bestArea} units`, "ok");
-  saveState();
 }
 
-// Manual footprint optimization function
+// MAIN ACTION: Multi-Seed Optimization
 async function doOptimizeFootprint() {
-  if (!components.length) { toast('No components loaded', 'warn'); return; }
-  if (!wires.length) { toast('Please run Place & Route first', 'warn'); return; }
-  
+  const NUM_CONFIGS = 3;
+  let globalBestArea = Infinity;
+  let globalBestWL = Infinity;
+  let globalBestComps = null;
+  let globalBestWires = null;
+
   showOverlay(true);
-  ostep(1);
-  setProg(50, 'Applying Pressure Packing…');
-  await doRecursivePushPacking();
+
+  for (let config = 1; config <= NUM_CONFIGS; config++) {
+    ostep(1);
+    setProg((config / NUM_CONFIGS) * 100, `Config ${config}/${NUM_CONFIGS}: Shuffling...`);
+    
+    // 1. RANDOMIZE: If not the first config, jitter components to find a new state
+    if (config > 1) {
+      components.forEach(c => {
+        const nx = Math.max(0, Math.min(COLS - c.w, c.ox + (Math.random() > 0.5 ? 2 : -2)));
+        const ny = Math.max(0, Math.min(ROWS - c.h, c.oy + (Math.random() > 0.5 ? 2 : -2)));
+        if (!anyOverlap({ ox: nx, oy: ny, w: c.w, h: c.h }, components.filter(oc => oc !== c))) {
+          moveComp(c, nx, ny);
+        }
+      });
+    }
+
+    // 2. PACK: Pressure Packing
+    setProg((config / NUM_CONFIGS) * 100, `Config ${config}/${NUM_CONFIGS}: Packing...`);
+    await doRecursivePushPacking();
+
+    // 3. ROTATE: Component-level optimization
+    setProg((config / NUM_CONFIGS) * 100, `Config ${config}/${NUM_CONFIGS}: Rotating...`);
+    await tryRotateOptimize();
+
+    const currentArea = calculateFootprintArea().area;
+    const currentWL = wires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
+
+    // Track the winner across all seeds
+    if (currentArea < globalBestArea || (currentArea === globalBestArea && currentWL < globalBestWL)) {
+      globalBestArea = currentArea;
+      globalBestWL = currentWL;
+      globalBestComps = saveComps();
+      globalBestWires = [...wires];
+      console.log(`[Config ${config}] New Leader: Area ${currentArea}, WL ${currentWL}`);
+    }
+  }
+
+  // Restore the best across all configurations
+  restoreComps(globalBestComps);
+  wires = globalBestWires;
+  
   showOverlay(false);
-  updateStats();
+  render(); updateStats(); saveState();
+  toast(`Best of ${NUM_CONFIGS} configs: Area ${globalBestArea}`, "ok");
 }
 
 // Go back to previous configuration
