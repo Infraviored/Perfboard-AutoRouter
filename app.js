@@ -872,6 +872,38 @@ function addNewComponent() {
   document.getElementById('compEditorOverlay').style.display = 'flex';
 }
 
+function createPinElement(pinIndex, inGrid) {
+  const pin = document.createElement('div');
+  pin.className = 'pin-element';
+  pin.style.width = '20px';
+  pin.style.height = '20px';
+  pin.style.borderRadius = '50%';
+  pin.style.background = netColor(editingComp.pinNets[pinIndex]);
+  pin.style.border = selectedPinIndex === pinIndex ? '3px solid #fff' : '2px solid #b87333';
+  pin.style.cursor = 'move';
+  // Use relative positioning if it's sitting in the legend flexbox
+  pin.style.position = inGrid ? 'absolute' : 'relative'; 
+  pin.style.display = 'flex';
+  pin.style.alignItems = 'center';
+  pin.style.justifyContent = 'center';
+  pin.style.fontSize = '10px';
+  pin.style.fontWeight = 'bold';
+  pin.style.color = '#fff';
+  pin.style.zIndex = '10';
+  pin.textContent = editingComp.pinLbls[pinIndex];
+  pin.dataset.pinIndex = pinIndex;
+  pin.draggable = true;
+  
+  pin.addEventListener('click', (e) => { 
+    e.stopPropagation(); 
+    selectPinForEditing(pinIndex); 
+  });
+  pin.addEventListener('dragstart', handlePinDragStart);
+  pin.addEventListener('dragend', handlePinDragEnd);
+  
+  return pin;
+}
+
 function generatePinGrid() {
   const grid = document.getElementById('pinGridEditor');
   const width = parseInt(document.getElementById('editCompWidth').value) || editingComp.w;
@@ -884,6 +916,41 @@ function generatePinGrid() {
   grid.style.justifyContent = 'center';
   grid.style.padding = '10px';
   
+  // 1. Setup the Legend Container dynamically if it doesn't exist
+  let legendContainer = document.getElementById('pinLegendContainer');
+  if (!legendContainer) {
+    legendContainer = document.createElement('div');
+    legendContainer.id = 'pinLegendContainer';
+    legendContainer.style.marginTop = '10px';
+    legendContainer.style.padding = '10px';
+    legendContainer.style.background = 'var(--bg3)';
+    legendContainer.style.border = '1px dashed var(--border2)';
+    legendContainer.style.borderRadius = '4px';
+    
+    const title = document.createElement('div');
+    title.style.fontSize = '0.8em';
+    title.style.color = 'var(--txt1)';
+    title.style.marginBottom = '8px';
+    title.textContent = 'Out-of-bounds Pins (Drag to grid or click to edit/delete)';
+    legendContainer.appendChild(title);
+    
+    const legendGrid = document.createElement('div');
+    legendGrid.id = 'pinLegend';
+    legendGrid.style.display = 'flex';
+    legendGrid.style.flexWrap = 'wrap';
+    legendGrid.style.gap = '8px';
+    legendGrid.style.minHeight = '24px';
+    legendContainer.appendChild(legendGrid);
+    
+    // Insert it right after the grid
+    grid.parentNode.insertBefore(legendContainer, grid.nextSibling);
+  }
+  
+  const legend = document.getElementById('pinLegend');
+  legend.innerHTML = ''; // Clear out the legend on re-render
+  const placedPins = new Set(); // Keep track of what fit on the grid
+
+  // 2. Render the Grid
   for (let row = 0; row < height; row++) {
     for (let col = 0; col < width; col++) {
       const cell = document.createElement('div');
@@ -901,32 +968,10 @@ function generatePinGrid() {
       cell.dataset.row = row;
       
       const pinIndex = editingComp.offsets.findIndex(off => off[0] === col && off[1] === row);
+      
       if (pinIndex !== -1) {
-        const pin = document.createElement('div');
-        pin.className = 'pin-element';
-        pin.style.width = '20px';
-        pin.style.height = '20px';
-        pin.style.borderRadius = '50%';
-        pin.style.background = netColor(editingComp.pinNets[pinIndex]);
-        pin.style.border = selectedPinIndex === pinIndex ? '3px solid #fff' : '2px solid #b87333';
-        pin.style.cursor = 'move';
-        pin.style.position = 'absolute';
-        pin.style.display = 'flex';
-        pin.style.alignItems = 'center';
-        pin.style.justifyContent = 'center';
-        pin.style.fontSize = '10px';
-        pin.style.fontWeight = 'bold';
-        pin.style.color = '#fff';
-        pin.style.zIndex = '10';
-        pin.textContent = editingComp.pinLbls[pinIndex];
-        pin.dataset.pinIndex = pinIndex;
-        pin.draggable = true;
-        
-        pin.addEventListener('click', (e) => { e.stopPropagation(); selectPinForEditing(pinIndex); });
-        pin.addEventListener('dragstart', handlePinDragStart);
-        pin.addEventListener('dragend', handlePinDragEnd);
-        
-        cell.appendChild(pin);
+        placedPins.add(pinIndex);
+        cell.appendChild(createPinElement(pinIndex, true));
       } else {
         cell.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -943,6 +988,18 @@ function generatePinGrid() {
       grid.appendChild(cell);
     }
   }
+  
+  // 3. Populate Legend with Orphaned Pins
+  let hasOutPins = false;
+  editingComp.offsets.forEach((off, pinIndex) => {
+    if (!placedPins.has(pinIndex)) {
+      hasOutPins = true;
+      legend.appendChild(createPinElement(pinIndex, false));
+    }
+  });
+  
+  // Only show the legend if there are actually out-of-bounds pins
+  legendContainer.style.display = hasOutPins ? 'block' : 'none';
 }
 
 function selectPinForEditing(pinIndex) {
@@ -1027,6 +1084,14 @@ function saveComponentEdit() {
   editingComp.h = parseInt(document.getElementById('editCompHeight').value);
   
   if (!editingComp.id.trim()) { toast('Component ID cannot be empty', 'warn'); return; }
+  
+  // --- ADDED SAFEGUARD ---
+  const outOfBounds = editingComp.offsets.some(off => off[0] < 0 || off[0] >= editingComp.w || off[1] < 0 || off[1] >= editingComp.h);
+  if (outOfBounds) {
+    toast('Cannot save: Some pins are outside the new component bounds. Place or delete them.', 'err');
+    return;
+  }
+  // -----------------------
   
   if (!isAddingNewComponent) {
     const duplicateIndex = compDefs.findIndex((cd, index) => cd.id === editingComp.id && index !== editingCompIndex);
