@@ -1,0 +1,606 @@
+// app.js — UI orchestration, rendering, drag/drop
+import { anneal }            from './placer.js';
+import { route, getAllNets } from './router.js';
+
+// ── NET COLORS ──
+const NET_PAL = { 
+  VCC:'#ff5252', GND:'#40c4ff', GATE:'#00e676',
+  DRAIN:'#e040fb', SOURCE:'#ff9800', CLK:'#ffea00',
+  DATA:'#9c27b0', ADDR:'#00bcd4', CTRL:'#4caf50',
+  RESET:'#f44336', CLKEN:'#ff5722', EN:'#795548'
+};
+
+// Cache for generated colors to ensure consistency
+const netColorCache = new Map();
+
+function netColor(n) {
+  // Return predefined palette color if exists
+  if (NET_PAL[n]) return NET_PAL[n];
+  
+  // Return cached color if already generated
+  if (netColorCache.has(n)) return netColorCache.get(n);
+  
+  // Generate evenly spaced hue based on string hash
+  let h = 5381;
+  for (const c of n) h = ((h << 5) + h) + c.charCodeAt(0);
+  
+  // Use golden ratio for better distribution
+  const goldenRatio = 0.618033988749895;
+  const hue = (Math.abs(h) / 10000 + goldenRatio) % 1;
+  const hueDegrees = Math.floor(hue * 360);
+  
+  // Use high saturation and medium lightness for vivid colors
+  const color = `hsl(${hueDegrees}, 75%, 55%)`;
+  
+  // Cache the generated color
+  netColorCache.set(n, color);
+  return color;
+}
+
+// ── STATE ──
+let COLS = 22, ROWS = 16, SP = 28;
+let zoom = 1, panX = 0, panY = 0;
+let panning = false, panStart = null;
+let tool = 'sel';
+let components = [];
+let compDefs = [];
+let wires = [];
+let selComp = null;
+let dragging = null, dragOff = null;
+let hovNet = null;
+let toastTid = null;
+
+const cv  = document.getElementById('pcb');
+const ctx = cv.getContext('2d');
+const ca  = document.getElementById('ca');
+
+// ── TEMPLATE ──
+const TEMPLATE = {
+  board: { cols: 22, rows: 16 },
+  components: [
+    { id:'J1', name:'Power', value:'2-pin', color:'#2a2808',
+      pins:[{offset:[0,0],net:'VCC',label:'+'},{offset:[0,1],net:'GND',label:'-'}]},
+    { id:'R1', name:'Resistor', value:'10k', color:'#2e1a08',
+      pins:[{offset:[0,0],net:'VCC',label:'1'},{offset:[2,0],net:'GATE',label:'2'}]},
+    { id:'Q1', name:'N-MOSFET', value:'IRLZ44N', color:'#1a3320',
+      pins:[{offset:[0,0],net:'GATE',label:'G'},
+            {offset:[1,0],net:'DRAIN',label:'D'},
+            {offset:[2,0],net:'SOURCE',label:'S'}]},
+    { id:'RL1', name:'Relay', value:'5V coil', color:'#1a1a2e',
+      pins:[{offset:[0,0],net:'VCC',label:'A'},{offset:[0,1],net:'DRAIN',label:'B'}]},
+    { id:'C1', name:'Cap', value:'100uF', color:'#0e2222',
+      pins:[{offset:[0,0],net:'VCC',label:'+'},{offset:[1,0],net:'GND',label:'-'}]},
+    { id:'D1', name:'Diode', value:'1N4007', color:'#2a0a18',
+      pins:[{offset:[0,0],net:'SOURCE',label:'K'},{offset:[1,0],net:'GND',label:'A'}]}
+  ],
+  connections:[
+    {net:'VCC',    comment:'J1+ → R1[1], RL1[A], C1+'},
+    {net:'GND',    comment:'J1- → C1-, D1[A]'},
+    {net:'GATE',   comment:'R1[2] → Q1[G]'},
+    {net:'DRAIN',  comment:'Q1[D] → RL1[B]'},
+    {net:'SOURCE', comment:'Q1[S] → D1[K]'}
+  ]
+};
+
+// ── BOARD ──
+function applyBoard() {
+  COLS = Math.max(5, parseInt(document.getElementById('bCols').value) || 22);
+  ROWS = Math.max(5, parseInt(document.getElementById('bRows').value) || 16);
+  cv.width = COLS * SP; cv.height = ROWS * SP;
+  fitView(); render(); updateStats();
+  badge(2);
+  toast(`Board: ${COLS}×${ROWS}`, 'ok');
+  setStatus(`${COLS}×${ROWS} board ready`);
+}
+
+function badge(n) {
+  for (let i = 1; i <= 3; i++) {
+    const el = document.getElementById('s' + i + 'b');
+    el.className = 'sbadge' + (i === n ? ' act' : i < n ? ' done' : '');
+  }
+}
+
+// ── TEMPLATE / JSON ──
+function loadTemplate() {
+  document.getElementById('jsonInput').value = JSON.stringify(TEMPLATE, null, 2);
+  document.getElementById('jsonErr').textContent = '';
+}
+
+function loadComponents() {
+  const raw = document.getElementById('jsonInput').value.trim();
+  document.getElementById('jsonErr').textContent = '';
+  let data;
+  try { data = JSON.parse(raw); }
+  catch (e) { document.getElementById('jsonErr').textContent = 'Parse error: ' + e.message; return; }
+
+  if (data.board) {
+    if (data.board.cols) document.getElementById('bCols').value = data.board.cols;
+    if (data.board.rows) document.getElementById('bRows').value = data.board.rows;
+    applyBoard();
+  }
+  if (!data.components?.length) {
+    document.getElementById('jsonErr').textContent = 'Missing "components" array'; return;
+  }
+
+  compDefs = data.components.map((cd, idx) => {
+    if (!cd.pins?.length) return null;
+    const offsets = cd.pins.map(p =>
+      Array.isArray(p.offset) ? [...p.offset] : [p.offset?.col||0, p.offset?.row||0]);
+    return {
+      id: cd.id || ('C'+(idx+1)), name: cd.name||'?', value: cd.value||'',
+      color: cd.color||'#222a22',
+      offsets,
+      pinNets: cd.pins.map(p => p.net || ('NET'+idx)),
+      pinLbls: cd.pins.map(p => p.label || p.lbl || String(idx+1)),
+      w: Math.max(...offsets.map(o=>o[0])) + 1,
+      h: Math.max(...offsets.map(o=>o[1])) + 1,
+    };
+  }).filter(Boolean);
+
+  placeInitial();
+  wires = [];
+  renderCompList(); render(); updateStats(); renderNetPanel();
+  badge(3);
+  toast(`Loaded ${components.length} components`, 'ok');
+  setStatus('Components loaded — click Place & Route');
+}
+
+// ── PLACEMENT ──
+function placeInitial() {
+  components = [];
+  let cx = 1, cy = 1, rowH = 0;
+  compDefs.forEach(cd => {
+    if (cx + cd.w + 1 >= COLS) { cx = 1; cy += rowH + 2; rowH = 0; }
+    if (cy + cd.h >= ROWS) cy = 1;
+    rowH = Math.max(rowH, cd.h);
+    components.push(makeComp(cd, cx, cy));
+    cx += cd.w + 2;
+  });
+}
+
+function makeComp(cd, ox, oy) {
+  return {
+    id: cd.id, name: cd.name, value: cd.value, color: cd.color,
+    w: cd.w, h: cd.h, ox, oy,
+    pins: cd.offsets.map((off, i) => ({
+      col: ox + off[0], row: oy + off[1],
+      net: cd.pinNets[i], lbl: cd.pinLbls[i],
+      dCol: off[0], dRow: off[1]
+    }))
+  };
+}
+
+function moveComp(c, ox, oy) {
+  c.ox = ox; c.oy = oy;
+  c.pins.forEach(p => { p.col = ox + p.dCol; p.row = oy + p.dRow; });
+}
+
+// ── MAIN ACTIONS ──
+async function doPlaceAndRoute() {
+  if (!components.length) { toast('No components loaded', 'warn'); return; }
+
+  const maxIter = Math.max(1, parseInt(document.getElementById('bIter').value) || 3);
+
+  let bestWires      = [];
+  let bestComps      = null;   // deep-copy of component positions
+  let bestCompletion = -1;
+
+  function saveComps() {
+    return components.map(c => ({ id: c.id, ox: c.ox, oy: c.oy }));
+  }
+
+  function restoreComps(saved) {
+    saved.forEach(s => {
+      const c = components.find(x => x.id === s.id);
+      if (c) moveComp(c, s.ox, s.oy);
+    });
+  }
+
+  function completion(ws) {
+    const total = ws.length;
+    if (!total) return 0;
+    return ws.filter(w => !w.failed).length / total;
+  }
+
+  showOverlay(true);
+
+  for (let iter = 1; iter <= maxIter; iter++) {
+    // ① Placement
+    ostep(1);
+    document.getElementById('ot').textContent = `Iteration ${iter} / ${maxIter}`;
+    setProg(0, 'Placing…');
+
+    // Reset to initial placement so SA starts fresh each iteration
+    placeInitial();
+    await anneal(components, COLS, ROWS, (p, s) => {
+      setProg(p * 100, `[${iter}/${maxIter}] SA — ${s}`);
+      render();
+    });
+
+    // ② Routing
+    ostep(2);
+    setProg(0, 'Routing…');
+    const candidateWires = await route(
+      components, COLS, ROWS,
+      (p, s) => { setProg(p * 100, `[${iter}/${maxIter}] Route — ${s}`); render(); }
+    );
+
+    const c = completion(candidateWires);
+
+    if (c > bestCompletion) {
+      bestCompletion = c;
+      bestWires      = candidateWires;
+      bestComps      = saveComps();
+    }
+
+    // If perfect, stop early
+    if (bestCompletion === 1) break;
+  }
+
+  // Restore best configuration
+  restoreComps(bestComps);
+  wires = bestWires;
+
+  showOverlay(false);
+  render(); updateStats(); renderNetPanel();
+  finishMsg();
+}
+
+async function doRouteOnly() {
+  if (!components.length) { toast('No components loaded', 'warn'); return; }
+  showOverlay(true); ostep(2); setProg(0, 'Routing…');
+  wires = await route(components, COLS, ROWS, (p, s) => { setProg(p * 100, s); render(); });
+  showOverlay(false);
+  render(); updateStats(); renderNetPanel();
+  finishMsg();
+}
+
+function clearWires() { wires = []; render(); updateStats(); toast('Wires cleared', 'inf'); }
+
+function finishMsg() {
+  const fail = wires.filter(w => w.failed).length;
+  const ok   = wires.filter(w => !w.failed).length;
+  if (!fail) toast(`✓ Complete — ${ok} segments`, 'ok');
+  else       toast(`⚠ ${fail} unrouted — try Place & Route to reposition`, 'warn');
+  setStatus('Done. Drag components then Route Only, or Place & Route again.');
+}
+
+// ── RENDER ──
+function render() {
+  const W = COLS * SP, H = ROWS * SP;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#1a1208'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#c8a800'; ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, W-2, H-2);
+
+  // All copper pads
+  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
+    const px = c*SP + SP/2, py = r*SP + SP/2;
+    ctx.fillStyle = '#b87333';
+    ctx.beginPath(); ctx.arc(px, py, SP*.22, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#0d0a06';
+    ctx.beginPath(); ctx.arc(px, py, SP*.09, 0, Math.PI*2); ctx.fill();
+  }
+
+  if (!wires.length) drawRatsnest();
+  drawWires();
+  components.forEach(c => renderComp(c));
+
+  if (selComp) {
+    const s = selComp;
+    ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 1.5; ctx.setLineDash([3,3]);
+    ctx.strokeRect(s.ox*SP - 6, s.oy*SP - 6, s.w*SP + 8, s.h*SP + 8);
+    ctx.setLineDash([]);
+  }
+}
+
+function drawWires() {
+  wires.forEach(w => {
+    if (w.failed) return; // draw nothing for failed routes
+    ctx.beginPath();
+    ctx.lineWidth   = hovNet === w.net ? 4.5 : 2.8;
+    ctx.strokeStyle = netColor(w.net);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    w.path.forEach((pt, i) => {
+      const px = pt.col*SP + SP/2, py = pt.row*SP + SP/2;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    });
+    ctx.stroke();
+  });
+
+  // Draw failed routes as dashed red lines ONLY as diagnostic overlay
+  wires.filter(w => w.failed).forEach(w => {
+    const a = w.path[0], b = w.path[w.path.length-1];
+    ctx.beginPath();
+    ctx.lineWidth = 1; ctx.strokeStyle = '#ff2222';
+    ctx.setLineDash([2, 5]);
+    ctx.moveTo(a.col*SP+SP/2, a.row*SP+SP/2);
+    ctx.lineTo(b.col*SP+SP/2, b.row*SP+SP/2);
+    ctx.stroke(); ctx.setLineDash([]);
+  });
+}
+
+function drawRatsnest() {
+  const nets = getAllNets(components);
+  ctx.setLineDash([2,5]); ctx.lineWidth = .8;
+  for (const net in nets) {
+    if (nets[net].length < 2) continue;
+    const pins = nets[net];
+    ctx.strokeStyle = netColor(net) + '55';
+    const conn = new Set([0]);
+    while (conn.size < pins.length) {
+      let bD = Infinity, bI = -1, bJ = -1;
+      conn.forEach(i => pins.forEach((p,j) => {
+        if (conn.has(j)) return;
+        const d = Math.abs(pins[i].col-p.col)+Math.abs(pins[i].row-p.row);
+        if (d < bD) { bD=d; bI=i; bJ=j; }
+      }));
+      if (bJ === -1) break;
+      ctx.beginPath();
+      ctx.moveTo(pins[bI].col*SP+SP/2, pins[bI].row*SP+SP/2);
+      ctx.lineTo(pins[bJ].col*SP+SP/2, pins[bJ].row*SP+SP/2);
+      ctx.stroke();
+      conn.add(bJ);
+    }
+  }
+  ctx.setLineDash([]);
+}
+
+function renderComp(c) {
+  const bx = c.ox*SP + SP*.08, by = c.oy*SP + SP*.08;
+  const bw = c.w*SP  - SP*.16, bh = c.h*SP  - SP*.16;
+  roundRect(ctx, bx, by, bw, bh, 4);
+  ctx.fillStyle = c.color; ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,.72)';
+  ctx.font = `bold ${Math.min(SP*.3,9)}px 'Consolas',monospace`;
+  ctx.textAlign = 'left';
+  ctx.fillText(`${c.id}: ${c.value}`, bx+3, by-2);
+
+  c.pins.forEach(p => {
+    const px = p.col*SP + SP/2, py = p.row*SP + SP/2;
+    ctx.fillStyle = '#b87333';
+    ctx.beginPath(); ctx.arc(px, py, SP*.28, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = netColor(p.net);
+    ctx.beginPath(); ctx.arc(px, py, SP*.2,  0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#0d0a06';
+    ctx.beginPath(); ctx.arc(px, py, SP*.09, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(230,230,230,.9)';
+    ctx.font = `${Math.min(SP*.25,7)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText(p.lbl, px, py - SP*.33);
+  });
+  ctx.textAlign = 'left';
+}
+
+function roundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x+r,y); c.lineTo(x+w-r,y);
+  c.arcTo(x+w,y,x+w,y+r,r); c.lineTo(x+w,y+h-r);
+  c.arcTo(x+w,y+h,x+w-r,y+h,r); c.lineTo(x+r,y+h);
+  c.arcTo(x,y+h,x,y+h-r,r); c.lineTo(x,y+r);
+  c.arcTo(x,y,x+r,y,r); c.closePath();
+}
+
+// ── STATS ──
+function updateStats() {
+  const nets = getAllNets(components);
+  const nk   = Object.keys(nets);
+  const ok   = wires.filter(w => !w.failed).length;
+  const fail = wires.filter(w =>  w.failed).length;
+  const tc   = nk.filter(n => nets[n].length >= 2).reduce((s,n) => s + nets[n].length - 1, 0);
+  const wl   = wires.filter(w => !w.failed).reduce((s,w) => s + w.path.length - 1, 0);
+  const pct  = tc > 0 ? Math.round(ok / tc * 100) : null;
+
+  document.getElementById('stC').textContent = components.length;
+  document.getElementById('stN').textContent = nk.length;
+  document.getElementById('stW').textContent = ok;
+  document.getElementById('stF').textContent = fail;
+  document.getElementById('stL').textContent = wl || '—';
+  const pe = document.getElementById('stP');
+  if (pct === null)    { pe.textContent = '—';       pe.style.color = 'var(--txt2)'; }
+  else if (pct === 100){ pe.textContent = '100% ✓';  pe.style.color = 'var(--grn)';  }
+  else                 { pe.textContent = pct + '%'; pe.style.color = 'var(--org)';  }
+}
+
+function renderCompList() {
+  const el = document.getElementById('compList');
+  if (!components.length) {
+    el.innerHTML = '<div style="font-size:.7em;color:var(--txt2)">No components.</div>'; return;
+  }
+  el.innerHTML = components.map(c => `
+    <div class="comp-card${selComp===c?' sel':''}" onclick="app.selectComp('${c.id}')">
+      <span style="font-weight:600">${c.id}</span>
+      <span style="color:var(--txt2);font-size:.88em">${c.value}</span>
+      <span style="color:var(--txt2);font-size:.78em">${c.pins.length}p</span>
+    </div>`).join('');
+}
+
+function selectComp(id) {
+  selComp = id ? (components.find(c => c.id === id) || null) : null;
+  render(); renderCompList();
+  const el = document.getElementById('selInfo');
+  if (!selComp) {
+    el.innerHTML = '<div class="prop-row"><span class="pk">—</span><span class="pv">nothing</span></div>';
+    return;
+  }
+  const c = selComp;
+  el.innerHTML = `
+    <div class="prop-row"><span class="pk">ID</span><span class="pv">${c.id}</span></div>
+    <div class="prop-row"><span class="pk">Name</span><span class="pv">${c.name}</span></div>
+    <div class="prop-row"><span class="pk">Value</span><span class="pv">${c.value}</span></div>
+    <div class="prop-row"><span class="pk">Pins</span><span class="pv">${c.pins.length}</span></div>
+    <div class="prop-row"><span class="pk">Origin</span><span class="pv">(${c.ox}, ${c.oy})</span></div>
+    ${c.pins.map(p=>`
+    <div class="prop-row">
+      <span class="pk" style="color:${netColor(p.net)}">${p.lbl}</span>
+      <span class="pv">${p.net}</span>
+    </div>`).join('')}`;
+}
+
+function renderNetPanel() {
+  const nets = getAllNets(components);
+  document.getElementById('netPanel').innerHTML = Object.keys(nets).map(n => `
+    <div class="prop-row" style="cursor:pointer"
+      onmouseenter="app.setHovNet('${n}')"
+      onmouseleave="app.setHovNet(null)">
+      <span class="pk"><span style="display:inline-block;width:9px;height:9px;
+        border-radius:50%;background:${netColor(n)};vertical-align:middle"></span></span>
+      <span class="pv" style="font-size:.75em">${n}</span>
+      <span style="font-size:.65em;color:var(--txt2)">${nets[n].length}p</span>
+    </div>`).join('');
+}
+
+function setHovNet(n) { hovNet = n; render(); }
+
+// ── DRAG ──
+function hitComp(col, row) {
+  return components.find(c =>
+    col >= c.ox && col < c.ox + c.w &&
+    row >= c.oy && row < c.oy + c.h
+  ) || null;
+}
+
+ca.addEventListener('mousedown', e => {
+  if (e.button === 1 || e.altKey) {
+    panning = true; panStart = { x: e.clientX - panX, y: e.clientY - panY };
+    ca.style.cursor = 'grabbing'; e.preventDefault(); return;
+  }
+  const { gc, gr } = gridPos(e);
+  if (tool === 'sel') {
+    const hit = hitComp(gc, gr);
+    selComp = hit || null;
+    if (hit) { dragging = hit; dragOff = { dc: gc - hit.ox, dr: gr - hit.oy }; }
+    selectComp(hit ? hit.id : null);
+    render();
+  }
+});
+
+ca.addEventListener('mousemove', e => {
+  const { gc, gr } = gridPos(e);
+  document.getElementById('cCol').textContent = gc;
+  document.getElementById('cRow').textContent = gr;
+  const pin = components.flatMap(c => c.pins).find(p => p.col === gc && p.row === gr);
+  const netEl = document.getElementById('cNet');
+  if (pin) { netEl.textContent = pin.net; netEl.style.color = netColor(pin.net); }
+  else     { netEl.textContent = '—';     netEl.style.color = 'var(--txt1)'; }
+
+  if (panning && panStart) {
+    panX = e.clientX - panStart.x; panY = e.clientY - panStart.y; applyT(); return;
+  }
+  if (dragging) {
+    const nox = Math.max(0, Math.min(COLS - dragging.w, gc - dragOff.dc));
+    const noy = Math.max(0, Math.min(ROWS - dragging.h, gr - dragOff.dr));
+    if (nox !== dragging.ox || noy !== dragging.oy) {
+      moveComp(dragging, nox, noy);
+      wires = []; render(); updateStats();
+    }
+  }
+});
+
+ca.addEventListener('mouseup', () => {
+  if (panning) { panning = false; ca.style.cursor = 'crosshair'; }
+  if (dragging) { dragging = null; dragOff = null; selectComp(selComp?.id||null); renderNetPanel(); }
+});
+
+ca.addEventListener('wheel', e => {
+  e.preventDefault(); adjZoom(e.deltaY < 0 ? 1.13 : .885, e.clientX, e.clientY);
+}, { passive: false });
+
+// ── ZOOM / PAN ──
+function applyT() {
+  cv.style.transform = `translate(${panX}px,${panY}px) scale(${zoom})`;
+  document.getElementById('cZoom').textContent = Math.round(zoom*100) + '%';
+}
+function adjZoom(f, cx, cy) {
+  const r  = ca.getBoundingClientRect();
+  const ox = (cx !== undefined ? cx : r.left + r.width/2)  - r.left;
+  const oy = (cy !== undefined ? cy : r.top  + r.height/2) - r.top;
+  const nz = Math.max(.15, Math.min(6, zoom * f));
+  panX = ox - (ox - panX) * (nz / zoom);
+  panY = oy - (oy - panY) * (nz / zoom);
+  zoom = nz; applyT(); render();
+}
+function fitView() {
+  const r = ca.getBoundingClientRect();
+  zoom = Math.min(r.width / (COLS*SP), r.height / (ROWS*SP)) * .9;
+  panX = (r.width  - COLS*SP*zoom) / 2;
+  panY = (r.height - ROWS*SP*zoom) / 2;
+  applyT(); render();
+}
+
+// ── HELPERS ──
+function gridPos(e) {
+  const r = ca.getBoundingClientRect();
+  return {
+    gc: Math.floor((e.clientX - r.left - panX) / zoom / SP),
+    gr: Math.floor((e.clientY - r.top  - panY) / zoom / SP)
+  };
+}
+function setTool(t) {
+  tool = t;
+  document.getElementById('btnSel').classList.toggle('act', t === 'sel');
+}
+function showOverlay(v) { document.getElementById('overlay').classList.toggle('on', v); }
+function ostep(n) {
+  [1,2].forEach(i => {
+    document.getElementById('os'+i).className =
+      'ostep' + (i===n?' act':i<n?' done':'');
+  });
+}
+function setProg(p, s) {
+  document.getElementById('ofill').style.width = p + '%';
+  document.getElementById('osub').textContent = s;
+}
+function toast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'on ' + (type||'inf');
+  clearTimeout(toastTid); toastTid = setTimeout(() => el.className = '', 3000);
+}
+function setStatus(m) { document.getElementById('smsg').textContent = m; }
+function doExport() {
+  const a = document.createElement('a'); a.download = 'perfboard.png';
+  a.href = cv.toDataURL(); a.click(); toast('Exported PNG', 'ok');
+}
+function fullReset() {
+  components = []; compDefs = []; wires = []; selComp = null;
+  render(); updateStats();
+  document.getElementById('compList').innerHTML =
+    '<div style="font-size:.7em;color:var(--txt2)">No components.</div>';
+  document.getElementById('selInfo').innerHTML =
+    '<div class="prop-row"><span class="pk">—</span><span class="pv">nothing</span></div>';
+  document.getElementById('netPanel').innerHTML = '';
+  badge(1); toast('Reset', 'inf');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key==='v'||e.key==='V') setTool('sel');
+  if (e.key==='F5') { e.preventDefault(); doPlaceAndRoute(); }
+  if (e.key==='F6') { e.preventDefault(); doRouteOnly(); }
+  if (e.key==='Escape') { selComp = null; selectComp(null); render(); }
+  if ((e.key==='Delete'||e.key==='Backspace') && selComp) {
+    components = components.filter(c => c !== selComp);
+    wires = []; selComp = null;
+    selectComp(null); renderCompList(); render(); updateStats();
+    toast('Component removed', 'warn');
+  }
+});
+
+// ── INIT ──
+applyBoard();
+
+// Auto-load default.json if present
+fetch('./default.json')
+  .then(r => { if (!r.ok) throw new Error('no default.json'); return r.json(); })
+  .then(data => {
+    document.getElementById('jsonInput').value = JSON.stringify(data, null, 2);
+    loadComponents();
+    toast('Loaded default.json', 'inf');
+  })
+  .catch(() => { /* no default.json, silent */ });
+
+window.app = {
+  applyBoard, loadTemplate, loadComponents,
+  doPlaceAndRoute, doRouteOnly, clearWires, doExport, fullReset,
+  setTool, adjZoom, fitView, selectComp, setHovNet,
+};
