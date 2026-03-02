@@ -50,6 +50,15 @@ let dragging = null, dragOff = null;
 let hovNet = null;
 let toastTid = null;
 
+// Component Editor State
+let editingComp = null;
+let editingCompIndex = -1;
+let pinGridSize = 30;
+let draggedPin = null;
+let pinDragOffset = null;
+let selectedPinIndex = null;
+let isAddingNewComponent = false;
+
 const cv  = document.getElementById('pcb');
 const ctx = cv.getContext('2d');
 const ca  = document.getElementById('ca');
@@ -141,14 +150,25 @@ function loadComponents() {
     if (!cd.pins?.length) return null;
     const offsets = cd.pins.map(p =>
       Array.isArray(p.offset) ? [...p.offset] : [p.offset?.col||0, p.offset?.row||0]);
+    const colValues = offsets.map(o=>o[0]);
+    const rowValues = offsets.map(o=>o[1]);
+    const minCol = Math.min(...colValues);
+    const minRow = Math.min(...rowValues);
+    const maxCol = Math.max(...colValues);
+    const maxRow = Math.max(...rowValues);
+    
+    // Normalize offsets to start from 0,0 for the component box
+    const normalizedOffsets = offsets.map(off => [off[0] - minCol, off[1] - minRow]);
+    
     return {
       id: cd.id || ('C'+(idx+1)), name: cd.name||'?', value: cd.value||'',
       color: cd.color||'#222a22',
-      offsets,
+      offsets: normalizedOffsets,
       pinNets: cd.pins.map(p => p.net || ('NET'+idx)),
       pinLbls: cd.pins.map(p => p.label || p.lbl || String(idx+1)),
-      w: Math.max(...offsets.map(o=>o[0])) + 1,
-      h: Math.max(...offsets.map(o=>o[1])) + 1,
+      w: maxCol - minCol + 1,
+      h: maxRow - minRow + 1,
+      boardOffset: [minCol, minRow], // Where this component should be placed on board
     };
   }).filter(Boolean);
 
@@ -163,13 +183,11 @@ function loadComponents() {
 // ── PLACEMENT ──
 function placeInitial() {
   components = [];
-  let cx = 1, cy = 1, rowH = 0;
   compDefs.forEach(cd => {
-    if (cx + cd.w + 1 >= COLS) { cx = 1; cy += rowH + 2; rowH = 0; }
-    if (cy + cd.h >= ROWS) cy = 1;
-    rowH = Math.max(rowH, cd.h);
-    components.push(makeComp(cd, cx, cy));
-    cx += cd.w + 2;
+    // Use the boardOffset from JSON, or default to automatic placement
+    const ox = cd.boardOffset ? cd.boardOffset[0] : 1;
+    const oy = cd.boardOffset ? cd.boardOffset[1] : 1;
+    components.push(makeComp(cd, ox, oy));
   });
 }
 
@@ -437,6 +455,10 @@ function renderCompList() {
       <span style="font-weight:600">${c.id}</span>
       <span style="color:var(--txt2);font-size:.88em">${c.value}</span>
       <span style="color:var(--txt2);font-size:.78em">${c.pins.length}p</span>
+      <button onclick="event.stopPropagation(); app.openCompEditor('${c.id}')" 
+              style="margin-left:auto;background:var(--blu);border:1px solid var(--blu);color:#fff;padding:2px 6px;border-radius:3px;font-size:.7em;cursor:pointer">
+        Edit
+      </button>
     </div>`).join('');
 }
 
@@ -627,4 +649,354 @@ window.app = {
   applyBoard, loadTemplate, loadComponents,
   doPlaceAndRoute, doRouteOnly, clearWires, doExport, fullReset,
   setTool, adjZoom, fitView, selectComp, setHovNet,
+  openCompEditor, closeCompEditor, saveComponentEdit,
+  addNewComponent, addNewPin, updatePinProperties, deletePin, deselectPin,
 };
+
+// ── COMPONENT EDITOR ──
+function openCompEditor(compId) {
+  const compIndex = compDefs.findIndex(cd => cd.id === compId);
+  if (compIndex === -1) return;
+  
+  editingComp = JSON.parse(JSON.stringify(compDefs[compIndex])); // Deep copy
+  editingCompIndex = compIndex;
+  isAddingNewComponent = false;
+  
+  // Populate form fields
+  document.getElementById('editCompId').value = editingComp.id;
+  document.getElementById('editCompName').value = editingComp.name;
+  document.getElementById('editCompValue').value = editingComp.value;
+  document.getElementById('editCompColor').value = editingComp.color;
+  document.getElementById('editCompWidth').value = editingComp.w;
+  document.getElementById('editCompHeight').value = editingComp.h;
+  document.getElementById('compEditorTitle').textContent = `Edit Component: ${editingComp.id}`;
+  
+  // Add event listeners for size inputs
+  const widthInput = document.getElementById('editCompWidth');
+  const heightInput = document.getElementById('editCompHeight');
+  
+  // Remove existing listeners
+  widthInput.onchange = null;
+  heightInput.onchange = null;
+  
+  // Add new listeners
+  widthInput.onchange = () => generatePinGrid();
+  heightInput.onchange = () => generatePinGrid();
+  
+  // Generate pin grid
+  generatePinGrid();
+  
+  // Show overlay
+  document.getElementById('compEditorOverlay').style.display = 'flex';
+}
+
+function closeCompEditor() {
+  document.getElementById('compEditorOverlay').style.display = 'none';
+  document.getElementById('pinProperties').style.display = 'none';
+  editingComp = null;
+  editingCompIndex = -1;
+  selectedPinIndex = null;
+  isAddingNewComponent = false;
+  draggedPin = null;
+  pinDragOffset = null;
+}
+
+function addNewComponent() {
+  // Create a new component template
+  editingComp = {
+    id: 'NEW' + Date.now(),
+    name: 'New Component',
+    value: '',
+    color: '#2a2808',
+    offsets: [[0, 0]], // Single pin at origin
+    pinNets: ['NET1'],
+    pinLbls: ['1'],
+    w: 1,
+    h: 1
+  };
+  editingCompIndex = -1; // Will be appended
+  isAddingNewComponent = true;
+  
+  // Populate form fields
+  document.getElementById('editCompId').value = editingComp.id;
+  document.getElementById('editCompName').value = editingComp.name;
+  document.getElementById('editCompValue').value = editingComp.value;
+  document.getElementById('editCompColor').value = editingComp.color;
+  document.getElementById('editCompWidth').value = editingComp.w;
+  document.getElementById('editCompHeight').value = editingComp.h;
+  document.getElementById('compEditorTitle').textContent = 'Create New Component';
+  
+  // Add event listeners for size inputs
+  const widthInput = document.getElementById('editCompWidth');
+  const heightInput = document.getElementById('editCompHeight');
+  widthInput.onchange = () => generatePinGrid();
+  heightInput.onchange = () => generatePinGrid();
+  
+  // Generate pin grid
+  generatePinGrid();
+  
+  // Show overlay
+  document.getElementById('compEditorOverlay').style.display = 'flex';
+}
+
+function generatePinGrid() {
+  const grid = document.getElementById('pinGridEditor');
+  const width = parseInt(document.getElementById('editCompWidth').value) || editingComp.w;
+  const height = parseInt(document.getElementById('editCompHeight').value) || editingComp.h;
+  
+  grid.innerHTML = '';
+  grid.style.display = 'grid';
+  grid.style.gridTemplateColumns = `repeat(${width}, ${pinGridSize}px)`;
+  grid.style.gap = '2px';
+  grid.style.justifyContent = 'center';
+  grid.style.padding = '10px';
+  
+  // Create grid cells
+  for (let row = 0; row < height; row++) {
+    for (let col = 0; col < width; col++) {
+      const cell = document.createElement('div');
+      cell.className = 'pin-grid-cell';
+      cell.style.width = pinGridSize + 'px';
+      cell.style.height = pinGridSize + 'px';
+      cell.style.border = '1px dashed var(--border2)';
+      cell.style.borderRadius = '4px';
+      cell.style.display = 'flex';
+      cell.style.alignItems = 'center';
+      cell.style.justifyContent = 'center';
+      cell.style.position = 'relative';
+      cell.style.cursor = 'pointer';
+      cell.dataset.col = col;
+      cell.dataset.row = row;
+      
+      // Check if there's a pin at this position
+      const pinIndex = editingComp.offsets.findIndex(off => off[0] === col && off[1] === row);
+      if (pinIndex !== -1) {
+        const pin = document.createElement('div');
+        pin.className = 'pin-element';
+        pin.style.width = '20px';
+        pin.style.height = '20px';
+        pin.style.borderRadius = '50%';
+        pin.style.background = netColor(editingComp.pinNets[pinIndex]);
+        pin.style.border = selectedPinIndex === pinIndex ? '3px solid #fff' : '2px solid #b87333';
+        pin.style.cursor = 'move';
+        pin.style.position = 'absolute';
+        pin.style.display = 'flex';
+        pin.style.alignItems = 'center';
+        pin.style.justifyContent = 'center';
+        pin.style.fontSize = '10px';
+        pin.style.fontWeight = 'bold';
+        pin.style.color = '#fff';
+        pin.style.zIndex = '10';
+        pin.textContent = editingComp.pinLbls[pinIndex];
+        pin.dataset.pinIndex = pinIndex;
+        pin.draggable = true;
+        
+        // Add click event for selection
+        pin.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectPinForEditing(pinIndex);
+        });
+        
+        // Add drag events
+        pin.addEventListener('dragstart', handlePinDragStart);
+        pin.addEventListener('dragend', handlePinDragEnd);
+        
+        cell.appendChild(pin);
+      } else {
+        // Empty cell - click to add pin
+        cell.addEventListener('click', (e) => {
+          e.stopPropagation();
+          // Find first empty position to add pin
+          const newPinIndex = editingComp.offsets.length;
+          editingComp.offsets.push([col, row]);
+          editingComp.pinNets.push('NET' + (newPinIndex + 1));
+          editingComp.pinLbls.push(String(newPinIndex + 1));
+          generatePinGrid();
+        });
+      }
+      
+      // Add drop events to grid cells
+      cell.addEventListener('dragover', handlePinDragOver);
+      cell.addEventListener('drop', handlePinDrop);
+      
+      grid.appendChild(cell);
+    }
+  }
+}
+
+function selectPinForEditing(pinIndex) {
+  selectedPinIndex = pinIndex;
+  
+  // Update pin display to show selection
+  generatePinGrid();
+  
+  // Show pin properties panel
+  document.getElementById('pinProperties').style.display = 'block';
+  document.getElementById('editPinLabel').value = editingComp.pinLbls[pinIndex];
+  document.getElementById('editPinNet').value = editingComp.pinNets[pinIndex];
+}
+
+function deselectPin() {
+  selectedPinIndex = null;
+  document.getElementById('pinProperties').style.display = 'none';
+  generatePinGrid();
+}
+
+function updatePinProperties() {
+  if (selectedPinIndex === null) return;
+  
+  editingComp.pinLbls[selectedPinIndex] = document.getElementById('editPinLabel').value;
+  editingComp.pinNets[selectedPinIndex] = document.getElementById('editPinNet').value;
+  
+  generatePinGrid();
+  toast('Pin properties updated', 'ok');
+}
+
+function deletePin() {
+  if (selectedPinIndex === null) return;
+  
+  if (editingComp.offsets.length <= 1) {
+    toast('Component must have at least one pin', 'warn');
+    return;
+  }
+  
+  editingComp.offsets.splice(selectedPinIndex, 1);
+  editingComp.pinNets.splice(selectedPinIndex, 1);
+  editingComp.pinLbls.splice(selectedPinIndex, 1);
+  
+  deselectPin();
+  generatePinGrid();
+  toast('Pin deleted', 'ok');
+}
+
+function addNewPin() {
+  // Find first empty position
+  const width = parseInt(document.getElementById('editCompWidth').value) || editingComp.w;
+  const height = parseInt(document.getElementById('editCompHeight').value) || editingComp.h;
+  
+  for (let row = 0; row < height; row++) {
+    for (let col = 0; col < width; col++) {
+      const exists = editingComp.offsets.some(off => off[0] === col && off[1] === row);
+      if (!exists) {
+        const newPinIndex = editingComp.offsets.length;
+        editingComp.offsets.push([col, row]);
+        editingComp.pinNets.push('NET' + (newPinIndex + 1));
+        editingComp.pinLbls.push(String(newPinIndex + 1));
+        generatePinGrid();
+        toast('Pin added', 'ok');
+        return;
+      }
+    }
+  }
+  
+  toast('No empty positions available. Increase component size.', 'warn');
+}
+
+function handlePinDragStart(e) {
+  draggedPin = parseInt(e.target.dataset.pinIndex);
+  e.dataTransfer.effectAllowed = 'move';
+  e.target.style.opacity = '0.5';
+}
+
+function handlePinDragEnd(e) {
+  e.target.style.opacity = '1';
+  draggedPin = null;
+}
+
+function handlePinDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.style.background = 'var(--bg4)';
+}
+
+function handlePinDrop(e) {
+  e.preventDefault();
+  e.currentTarget.style.background = '';
+  
+  if (draggedPin === null) return;
+  
+  const newCol = parseInt(e.currentTarget.dataset.col);
+  const newRow = parseInt(e.currentTarget.dataset.row);
+  
+  // Check if position is already occupied
+  const existingPin = editingComp.offsets.findIndex(off => off[0] === newCol && off[1] === newRow);
+  if (existingPin !== -1 && existingPin !== draggedPin) {
+    toast('Position already occupied', 'warn');
+    return;
+  }
+  
+  // Update pin position
+  editingComp.offsets[draggedPin] = [newCol, newRow];
+  
+  // Regenerate grid
+  generatePinGrid();
+}
+
+function saveComponentEdit() {
+  // Update component definition
+  editingComp.id = document.getElementById('editCompId').value;
+  editingComp.name = document.getElementById('editCompName').value;
+  editingComp.value = document.getElementById('editCompValue').value;
+  editingComp.color = document.getElementById('editCompColor').value;
+  editingComp.w = parseInt(document.getElementById('editCompWidth').value);
+  editingComp.h = parseInt(document.getElementById('editCompHeight').value);
+  
+  // Validate component ID
+  if (!editingComp.id.trim()) {
+    toast('Component ID cannot be empty', 'warn');
+    return;
+  }
+  
+  // Check for duplicate ID (except for new components)
+  if (!isAddingNewComponent) {
+    const duplicateIndex = compDefs.findIndex((cd, index) => 
+      cd.id === editingComp.id && index !== editingCompIndex
+    );
+    if (duplicateIndex !== -1) {
+      toast('Component ID already exists', 'warn');
+      return;
+    }
+  }
+  
+  if (isAddingNewComponent) {
+    // Add new component to the array
+    compDefs.push(editingComp);
+    toast(`Component ${editingComp.id} created`, 'ok');
+  } else {
+    // Update existing component
+    compDefs[editingCompIndex] = editingComp;
+    toast(`Component ${editingComp.id} updated`, 'ok');
+  }
+  
+  // Update JSON input
+  updateJSONFromComponents();
+  
+  // Reload components to apply changes
+  loadComponents();
+  
+  // Close editor
+  closeCompEditor();
+}
+
+function updateJSONFromComponents() {
+  const data = {
+    board: {
+      cols: parseInt(document.getElementById('bCols').value) || 22,
+      rows: parseInt(document.getElementById('bRows').value) || 16
+    },
+    components: compDefs.map(cd => ({
+      id: cd.id,
+      name: cd.name,
+      value: cd.value,
+      color: cd.color,
+      pins: cd.offsets.map((off, i) => ({
+        offset: [off[0] + (cd.boardOffset ? cd.boardOffset[0] : 0), 
+                off[1] + (cd.boardOffset ? cd.boardOffset[1] : 0)],
+        net: cd.pinNets[i],
+        label: cd.pinLbls[i]
+      }))
+    }))
+  };
+  
+  document.getElementById('jsonInput').value = JSON.stringify(data, null, 2);
+}

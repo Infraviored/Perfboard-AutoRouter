@@ -1,0 +1,77 @@
+{
+  "board": {
+    "cols": 8,
+    "rows": 6
+  },
+  "components": [
+    {
+      "id": "U1",
+      "name": "ESP32-C3",
+      "value": "SuperMini",
+      "color": "#1a3320",
+      "pins": [
+        {"offset": [0, 0], "net": "GND", "label": "GND"},
+        {"offset": [0, 1], "net": "ESP_GPIO", "label": "GPIO"}
+      ]
+    },
+    {
+      "id": "Rg",
+      "name": "Gate Resistor",
+      "value": "220Ω",
+      "color": "#2e1a08",
+      "pins": [
+        {"offset": [2, 0], "net": "ESP_GPIO", "label": "A"},
+        {"offset": [2, 1], "net": "GATE", "label": "B"}
+      ]
+    },
+    {
+      "id": "Rpd",
+      "name": "Pull-down",
+      "value": "47kΩ",
+      "color": "#2e1a08",
+      "pins": [
+        {"offset": [2, 3], "net": "GATE", "label": "A"},
+        {"offset": [2, 4], "net": "GND", "label": "B"}
+      ]
+    },
+    {
+      "id": "Q1",
+      "name": "MOSFET",
+      "value": "IRLB8721",
+      "color": "#1a3320",
+      "pins": [
+        {"offset": [4, 2], "net": "GATE", "label": "G"},
+        {"offset": [5, 2], "net": "DRAIN", "label": "D"},
+        {"offset": [6, 2], "net": "SOURCE", "label": "S"}
+      ]
+    },
+    {
+      "id": "L1",
+      "name": "Door Strike",
+      "value": "12V Coil",
+      "color": "#1a1a2e",
+      "pins": [
+        {"offset": [5, 0], "net": "+12V", "label": "+"},
+        {"offset": [5, 1], "net": "DRAIN", "label": "-"}
+      ]
+    },
+    {
+      "id": "D1",
+      "name": "Flyback Diode",
+      "value": "SS54",
+      "color": "#2a0a18",
+      "pins": [
+        {"offset": [6, 4], "net": "DRAIN", "label": "A"},
+        {"offset": [7, 4], "net": "+12V", "label": "K"}
+      ]
+    }
+  ],
+  "connections": [
+    {"net": "+12V", "comment": "Power supply to door strike and flyback diode"},
+    {"net": "GND", "comment": "Common ground for ESP, pull-down, and MOSFET source"},
+    {"net": "ESP_GPIO", "comment": "ESP GPIO to gate resistor"},
+    {"net": "GATE", "comment": "MOSFET gate from resistor and pull-down"},
+    {"net": "DRAIN", "comment": "MOSFET drain to door strike and flyback diode"},
+    {"net": "SOURCE", "comment": "MOSFET source to ground"}
+  ]
+}
