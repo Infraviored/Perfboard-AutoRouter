@@ -1,7 +1,50 @@
-// grid.js — Board grid, hole blacklist, A* router
+// grid.js
 export const BLOCKED_COMP  = 1;
 export const BLOCKED_PIN   = 2;
 export const BLOCKED_WIRE  = 4;
+
+// High-performance Binary Min-Heap for A*
+class MinHeap {
+  constructor() { this.data = []; }
+  push(val) {
+    this.data.push(val);
+    this.up(this.data.length - 1);
+  }
+  pop() {
+    if (this.data.length === 0) return null;
+    const top = this.data[0];
+    const bottom = this.data.pop();
+    if (this.data.length > 0) {
+      this.data[0] = bottom;
+      this.down(0);
+    }
+    return top;
+  }
+  up(i) {
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (this.data[i].f >= this.data[p].f) break;
+      const tmp = this.data[i];
+      this.data[i] = this.data[p];
+      this.data[p] = tmp;
+      i = p;
+    }
+  }
+  down(i) {
+    const len = this.data.length;
+    while ((i << 1) + 1 < len) {
+      let left = (i << 1) + 1;
+      let right = left + 1;
+      let min = (right < len && this.data[right].f < this.data[left].f) ? right : left;
+      if (this.data[i].f <= this.data[min].f) break;
+      const tmp = this.data[i];
+      this.data[i] = this.data[min];
+      this.data[min] = tmp;
+      i = min;
+    }
+  }
+  get length() { return this.data.length; }
+}
 
 export class Grid {
   constructor(cols, rows) {
@@ -20,9 +63,7 @@ export class Grid {
   canTerminate(c, r) {
     if (!this.inBounds(c,r)) return false;
     const v = this.cells[this.idx(c,r)];
-    if (v & BLOCKED_WIRE) return false;
-    if ((v & BLOCKED_COMP) && !(v & BLOCKED_PIN)) return false;
-    return true;
+    return !(v & BLOCKED_WIRE) && (!((v & BLOCKED_COMP) && !(v & BLOCKED_PIN)));
   }
 
   registerComp(comp) {
@@ -34,97 +75,75 @@ export class Grid {
     comp.pins.forEach(p => this.set(p.col, p.row, BLOCKED_PIN));
   }
 
-  // Multi-source A* for Branching (T-junctions)
-  astarMultiSource(startIndices, ec, er) {
-    const md = (c, r) => Math.abs(c - ec) + Math.abs(r - er);
+  // Optimized Multi-Target A*
+  astarMultiTarget(startIndices, targetIndices) {
     const key = (c, r) => r * this.cols + c;
-    
-    const open = [];
+    const open = new MinHeap();
     const gScore = new Float32Array(this.cols * this.rows).fill(1e6);
     const parent = new Int32Array(this.cols * this.rows).fill(-1);
+    
+    // Convert targets to a fast lookup Set
+    const targets = new Set(targetIndices);
 
     for (const idx of startIndices) {
       gScore[idx] = 0;
-      open.push({ c: idx % this.cols, r: Math.floor(idx / this.cols), f: md(idx % this.cols, Math.floor(idx / this.cols)) });
+      open.push({ c: idx % this.cols, r: Math.floor(idx / this.cols), f: 0 });
     }
 
+    // Unrolled directional arrays to prevent GC pauses
+    const dcs = [0, 0, 1, -1];
+    const drs = [1, -1, 0, 0];
     let iters = 0;
-    while (open.length > 0 && iters++ < this.cols * this.rows * 4) {
-      let bi = 0;
-      for (let i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
-      const { c, r } = open.splice(bi, 1)[0];
 
-      if (c === ec && r === er) {
+    while (open.length > 0 && iters++ < this.cols * this.rows * 4) {
+      const { c, r } = open.pop();
+      const currKey = key(c, r);
+
+      // Early exit: First target hit wins!
+      if (targets.has(currKey)) {
         const path = [];
-        let k = key(ec, er);
+        let k = currKey;
         while (k !== -1 && !startIndices.has(k)) {
           path.unshift({ col: k % this.cols, row: Math.floor(k / this.cols) });
           k = parent[k];
         }
         if (k !== -1) path.unshift({ col: k % this.cols, row: Math.floor(k / this.cols) });
-        return path;
+        
+        // Return path and which target we successfully hit
+        return { path, hitTargetIdx: currKey };
       }
 
-      for (const [dc, dr] of [[0,1],[0,-1],[1,0],[-1,0]]) {
-        const nc = c + dc, nr = r + dr;
+      for (let i = 0; i < 4; i++) {
+        const nc = c + dcs[i];
+        const nr = r + drs[i];
         if (!this.inBounds(nc, nr)) continue;
+        
         const nk = key(nc, nr);
-        const isTarget = (nc === ec && nr === er);
+        const isTarget = targets.has(nk);
 
         if (!isTarget && !this.isFree(nc, nr)) continue;
         if (isTarget && !this.canTerminate(nc, nr)) continue;
 
-        // BENDING PENALTY: $1.5$ extra cost for turns
         let moveCost = 1.0;
-        if (parent[key(c,r)] !== -1) {
-          const pk = parent[key(c,r)];
-          if ((c - (pk % this.cols)) !== dc || (r - Math.floor(pk / this.cols)) !== dr) {
-            moveCost += 1.5;
+        if (parent[currKey] !== -1) {
+          const pk = parent[currKey];
+          if ((c - (pk % this.cols)) !== dcs[i] || (r - Math.floor(pk / this.cols)) !== drs[i]) {
+            moveCost += 1.5; // Turn penalty
           }
         }
 
-        // ESCAPE BUFFER: $2.0$ extra cost to avoid "squeezing" other pins
-        if (!isTarget && this.hasNearbyPin(nc, nr, ec, er)) moveCost += 2.0;
-
-        const ng = gScore[key(c, r)] + moveCost;
+        const ng = gScore[currKey] + moveCost;
         if (ng < gScore[nk]) {
           gScore[nk] = ng;
-          parent[nk] = key(c, r);
-          open.push({ c: nc, r: nr, f: ng + md(nc, nr) });
+          parent[nk] = currKey;
+          open.push({ c: nc, r: nr, f: ng }); // Can add heuristic (Manhattan to nearest target) if needed
         }
       }
     }
-    
-    // Pathfinding timeout warning
-    console.warn(`Path TIMEOUT: to (${ec},${er}) explored ${iters} nodes.`);
     return null;
-  }
-
-  hasNearbyPin(c, r, targetC, targetR) {
-    for (const [dc, dr] of [[0,1],[0,-1],[1,0],[-1,0]]) {
-      const nc = c+dc, nr = r+dr;
-      if (nc === targetC && nr === targetR) continue;
-      if (this.has(nc, nr, BLOCKED_PIN)) return true;
-    }
-    return false;
   }
 
   markWire(path) {
     path.slice(1, -1).forEach(pt => this.set(pt.col, pt.row, BLOCKED_WIRE));
-  }
-
-  // Clean Debug Print (Reduces spam)
-  debugPrint() {
-    const chars = { 1: 'C', 2: 'P', 4: 'W', 0: '.' };
-    let map = "";
-    for (let r = 0; r < this.rows; r++) {
-      for (let c = 0; c < this.cols; c++) {
-        const val = this.cells[this.idx(c, r)];
-        map += chars[val] || '?';
-      }
-      map += "\n";
-    }
-    // Log as one block to prevent console throttle
-    console.log("%c" + map, "font-family: monospace; color: #b87333;");
   }
 }

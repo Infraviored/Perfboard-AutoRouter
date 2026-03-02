@@ -53,6 +53,16 @@ let dragging = null, dragOff = null;
 let hovNet = null;
 let toastTid = null;
 
+// Add these with your other globals
+const bgCanvas = document.createElement('canvas');
+const bgCtx = bgCanvas.getContext('2d');
+// Cache DOM elements to prevent thrashing
+const domElements = {
+  cCol: document.getElementById('cCol'),
+  cRow: document.getElementById('cRow'),
+  cNet: document.getElementById('cNet')
+};
+
 // Component Editor State
 let editingComp = null;
 let editingCompIndex = -1;
@@ -99,20 +109,38 @@ function applyBoard() {
   COLS = Math.max(5, parseInt(document.getElementById('bCols').value) || 22);
   ROWS = Math.max(5, parseInt(document.getElementById('bRows').value) || 16);
   
-  // Handle high-DPI displays
   const dpr = window.devicePixelRatio || 1;
-  const rect = ca.getBoundingClientRect();
+  const W = COLS * SP;
+  const H = ROWS * SP;
   
-  // Set canvas size accounting for device pixel ratio
-  cv.width = COLS * SP * dpr;
-  cv.height = ROWS * SP * dpr;
-  
-  // Scale canvas down using CSS to match display size
-  cv.style.width = COLS * SP + 'px';
-  cv.style.height = ROWS * SP + 'px';
-  
-  // Scale context to match device pixel ratio
+  // Set up main canvas
+  cv.width = W * dpr;
+  cv.height = H * dpr;
+  cv.style.width = W + 'px';
+  cv.style.height = H + 'px';
   ctx.scale(dpr, dpr);
+
+  // Set up and pre-render the Offscreen Background Canvas
+  bgCanvas.width = W * dpr;
+  bgCanvas.height = H * dpr;
+  bgCtx.scale(dpr, dpr);
+  
+  // Draw the heavy background grid ONCE
+  bgCtx.fillStyle = '#1a1208'; 
+  bgCtx.fillRect(0, 0, W, H);
+  bgCtx.strokeStyle = '#c8a800'; 
+  bgCtx.lineWidth = 2;
+  bgCtx.strokeRect(1, 1, W-2, H-2);
+
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < ROWS; r++) {
+      const px = c*SP + SP/2, py = r*SP + SP/2;
+      bgCtx.fillStyle = '#b87333';
+      bgCtx.beginPath(); bgCtx.arc(px, py, SP*.22, 0, Math.PI*2); bgCtx.fill();
+      bgCtx.fillStyle = '#0d0a06';
+      bgCtx.beginPath(); bgCtx.arc(px, py, SP*.09, 0, Math.PI*2); bgCtx.fill();
+    }
+  }
   
   fitView(); render(); updateStats();
   badge(2);
@@ -397,15 +425,33 @@ function exportCompleteState() {
 
 // ── HELPER FUNCTIONS ──
 function saveComps() {
-  return components.map(c => ({ id: c.id, ox: c.ox, oy: c.oy }));
+  return components.map(c => ({ 
+    id: c.id, 
+    ox: c.ox, 
+    oy: c.oy, 
+    w: c.w, 
+    h: c.h,
+    pins: c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow }))
+  }));
 }
 
 function restoreComps(saved) {
   saved.forEach(s => {
     const comp = components.find(c => c.id === s.id);
     if (comp) {
-      comp.ox = s.ox; comp.oy = s.oy;
-      comp.pins.forEach(p => { p.col = s.ox + p.dCol; p.row = s.oy + p.dRow; });
+      comp.ox = s.ox; 
+      comp.oy = s.oy;
+      comp.w = s.w;   // Restore width
+      comp.h = s.h;   // Restore height
+      
+      comp.pins.forEach((p, idx) => { 
+        p.dCol = s.pins[idx].dCol; // Restore pin offsets
+        p.dRow = s.pins[idx].dRow;
+        
+        // Recalculate absolute grid positions
+        p.col = comp.ox + p.dCol; 
+        p.row = comp.oy + p.dRow; 
+      });
     }
   });
 }
@@ -532,43 +578,25 @@ function finishMsg() {
 function render() {
   const W = COLS * SP, H = ROWS * SP;
   
-  // Enable anti-aliasing and smoothing
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   
+  // Clear and stamp the pre-rendered background in ONE operation
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#1a1208'; ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = '#c8a800'; ctx.lineWidth = 2;
-  ctx.strokeRect(1, 1, W-2, H-2);
+  ctx.drawImage(bgCanvas, 0, 0, W, H);
 
-  // All copper pads with better rendering
-  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
-    const px = c*SP + SP/2, py = r*SP + SP/2;
-    ctx.fillStyle = '#b87333';
-    ctx.beginPath(); ctx.arc(px, py, SP*.22, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#0d0a06';
-    ctx.beginPath(); ctx.arc(px, py, SP*.09, 0, Math.PI*2); ctx.fill();
-  }
-
-  if (!wires.length) drawRatsnest();
+  // Only draw wires, ratsnest, and components dynamically
+  if (!wires.length) drawRatsnest(); // (Consider caching ratsnest next for even more FPS!)
   drawWires();
   components.forEach(c => renderComp(c));
   
-  // DRAW CORRECT BOUNDING BOX
   if (components.length > 0) {
     const bbox = calculateFootprintArea();
     const { minCol, maxCol, minRow, maxRow } = bbox.bounds;
-    
-    ctx.strokeStyle = 'rgba(0, 255, 128, 0.4)'; // Subtle green for "safe" box
+    ctx.strokeStyle = 'rgba(0, 255, 128, 0.4)';
     ctx.lineWidth = 2;
     ctx.setLineDash([8, 4]);
-    // The box must cover the full diameter of the outer pads (inclusive)
-    ctx.strokeRect(
-      minCol * SP, 
-      minRow * SP, 
-      (maxCol - minCol + 1) * SP, 
-      (maxRow - minRow + 1) * SP
-    );
+    ctx.strokeRect(minCol * SP, minRow * SP, (maxCol - minCol + 1) * SP, (maxRow - minRow + 1) * SP);
     ctx.setLineDash([]);
   }
 
@@ -778,10 +806,10 @@ ca.addEventListener('mousedown', e => {
 
 ca.addEventListener('mousemove', e => {
   const { gc, gr } = gridPos(e);
-  document.getElementById('cCol').textContent = gc;
-  document.getElementById('cRow').textContent = gr;
+  domElements.cCol.textContent = gc;
+  domElements.cRow.textContent = gr;
   const pin = components.flatMap(c => c.pins).find(p => p.col === gc && p.row === gr);
-  const netEl = document.getElementById('cNet');
+  const netEl = domElements.cNet;
   if (pin) { netEl.textContent = pin.net; netEl.style.color = netColor(pin.net); }
   else     { netEl.textContent = '—';     netEl.style.color = 'var(--txt1)'; }
 
@@ -1303,23 +1331,28 @@ async function tryRotateOptimize() {
   let improved = false;
 
   for (let c of components) {
-    const oldW = c.w, oldH = c.h;
-    const oldPins = c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow }));
+    // Save original state before trying any rotations
+    const originalW = c.w, originalH = c.h;
+    const originalPins = c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow }));
+    let cImproved = false;
 
-    // Try 90, 180, 270 degrees
+    // Try 90, 180, 270 degrees sequentially
     for (let rot = 1; rot <= 3; rot++) {
-      // Perform 90-degree rotation step
+      // Rotate 90 degrees from the CURRENT state
       const tempW = c.w;
       c.w = c.h;
       c.h = tempW;
+      
       c.pins.forEach(p => {
-        const tmp = p.dCol;
-        p.dCol = p.dRow;
-        p.dRow = c.w - 1 - tmp;
+        const oldRow = p.dRow;
+        p.dRow = p.dCol;
+        p.dCol = c.w - 1 - oldRow;
+        
         p.col = c.ox + p.dCol;
         p.row = c.oy + p.dRow;
       });
 
+      // If it overlaps, keep this rotation and try rotating 90 more degrees
       if (anyOverlap(c, components)) continue;
 
       const testWires = await route(components, COLS, ROWS, () => {});
@@ -1332,18 +1365,21 @@ async function tryRotateOptimize() {
         bestWL = newWL;
         wires = testWires;
         improved = true;
-        // Keep this rotation and move to next component
-        break; 
-      } else {
-        // Revert to original pins/size for this rotation step
-        c.w = oldW; c.h = oldH;
-        c.pins.forEach((p, idx) => {
-          p.dCol = oldPins[idx].dCol;
-          p.dRow = oldPins[idx].dRow;
-          p.col = c.ox + p.dCol;
-          p.row = c.oy + p.dRow;
-        });
+        cImproved = true;
+        break; // Stop rotating this component, move to the next
       }
+    }
+
+    // If 90, 180, and 270 all failed or overlapped, revert to original
+    if (!cImproved) {
+      c.w = originalW; 
+      c.h = originalH;
+      c.pins.forEach((p, idx) => {
+        p.dCol = originalPins[idx].dCol;
+        p.dRow = originalPins[idx].dRow;
+        p.col = c.ox + p.dCol;
+        p.row = c.oy + p.dRow;
+      });
     }
   }
   return improved;
@@ -1430,59 +1466,100 @@ async function doRecursivePushPacking() {
   }
 }
 
-// MAIN ACTION: Multi-Seed Optimization
+// MAIN ACTION: Auto-Converging Footprint Optimization
 async function doOptimizeFootprint() {
-  const NUM_CONFIGS = 3;
+  const MAX_CONFIGS = 50; // Hard cap so your browser doesn't hang forever
+  const PATIENCE = 6;     // Stop if we don't improve after this many configs
+  
   let globalBestArea = Infinity;
   let globalBestWL = Infinity;
   let globalBestComps = null;
   let globalBestWires = null;
+  
+  let configsWithoutImprovement = 0;
 
   showOverlay(true);
 
-  for (let config = 1; config <= NUM_CONFIGS; config++) {
+  // Baseline capture (in case current layout is already great)
+  const initialArea = calculateFootprintArea().area;
+  if (initialArea > 0 && completion(wires) === 1.0) {
+    globalBestArea = initialArea;
+    globalBestWL = wires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
+    globalBestComps = saveComps();
+    globalBestWires = [...wires];
+  }
+
+  for (let config = 1; config <= MAX_CONFIGS; config++) {
     ostep(1);
-    setProg((config / NUM_CONFIGS) * 100, `Config ${config}/${NUM_CONFIGS}: Shuffling...`);
     
-    // 1. RANDOMIZE: If not the first config, jitter components to find a new state
-    if (config > 1) {
+    // 1. JITTER (Evolutionary Mutation)
+    if (config > 1 && globalBestComps) {
+      setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Shuffling from best...`);
+      restoreComps(globalBestComps); 
+      
+      // Slightly kick components out of their local minima
       components.forEach(c => {
-        const nx = Math.max(0, Math.min(COLS - c.w, c.ox + (Math.random() > 0.5 ? 2 : -2)));
-        const ny = Math.max(0, Math.min(ROWS - c.h, c.oy + (Math.random() > 0.5 ? 2 : -2)));
-        if (!anyOverlap({ ox: nx, oy: ny, w: c.w, h: c.h }, components.filter(oc => oc !== c))) {
-          moveComp(c, nx, ny);
+        // 50% chance to move a component by 1 or 2 grid units
+        if (Math.random() > 0.5) {
+          const dx = (Math.random() > 0.5 ? 1 : -1) * Math.ceil(Math.random() * 2);
+          const dy = (Math.random() > 0.5 ? 1 : -1) * Math.ceil(Math.random() * 2);
+          const nx = Math.max(0, Math.min(COLS - c.w, c.ox + dx));
+          const ny = Math.max(0, Math.min(ROWS - c.h, c.oy + dy));
+          
+          if (!anyOverlap({ ox: nx, oy: ny, w: c.w, h: c.h }, components.filter(oc => oc !== c))) {
+            moveComp(c, nx, ny);
+          }
         }
       });
     }
 
-    // 2. PACK: Pressure Packing
-    setProg((config / NUM_CONFIGS) * 100, `Config ${config}/${NUM_CONFIGS}: Packing...`);
+    // 2. PACK (Push everything to the center/edges)
+    setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Initial Pack...`);
     await doRecursivePushPacking();
 
-    // 3. ROTATE: Component-level optimization
-    setProg((config / NUM_CONFIGS) * 100, `Config ${config}/${NUM_CONFIGS}: Rotating...`);
+    // 3. ROTATE (Find better orientations)
+    setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Rotating...`);
     await tryRotateOptimize();
 
+    // 4. RE-PACK (Rotation might have opened new gaps!)
+    setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Final Pack...`);
+    await doRecursivePushPacking();
+
+    // 5. EVALUATE
     const currentArea = calculateFootprintArea().area;
     const currentWL = wires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
+    const successRate = completion(wires);
 
-    // Track the winner across all seeds
-    if (currentArea < globalBestArea || (currentArea === globalBestArea && currentWL < globalBestWL)) {
+    // Track the winner across all seeds (must be 100% routed)
+    if (successRate === 1.0 && (currentArea < globalBestArea || (currentArea === globalBestArea && currentWL < globalBestWL))) {
       globalBestArea = currentArea;
       globalBestWL = currentWL;
       globalBestComps = saveComps();
       globalBestWires = [...wires];
-      console.log(`[Config ${config}] New Leader: Area ${currentArea}, WL ${currentWL}`);
+      console.log(`[Optimizer ${config}] New Leader: Area ${currentArea}, WL ${currentWL}`);
+      
+      configsWithoutImprovement = 0; // Reset patience because we found a better one!
+    } else {
+      configsWithoutImprovement++;
+      console.log(`[Optimizer ${config}] No improvement. Patience: ${configsWithoutImprovement}/${PATIENCE}`);
+    }
+
+    // 6. EARLY EXIT (Plateau Detection)
+    if (configsWithoutImprovement >= PATIENCE && globalBestArea !== Infinity) {
+      console.log(`[Optimizer] Converged after ${config} configs. Minimum footprint reached.`);
+      break;
     }
   }
 
-  // Restore the best across all configurations
-  restoreComps(globalBestComps);
-  wires = globalBestWires;
+  // Restore the absolute best configuration found
+  if (globalBestComps) {
+    restoreComps(globalBestComps);
+    wires = globalBestWires;
+  }
   
   showOverlay(false);
   render(); updateStats(); saveState();
-  toast(`Best of ${NUM_CONFIGS} configs: Area ${globalBestArea}`, "ok");
+  toast(`Optimized to Area ${globalBestArea}`, "ok");
 }
 
 // Go back to previous configuration
