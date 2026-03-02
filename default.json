@@ -1,5 +1,4 @@
 {
-  "board": { "cols": 20, "rows": 15 },
   "components": [
     {
       "id": "J1", "name": "Power Connector", "value": "2-pin", "color": "#2a2808",

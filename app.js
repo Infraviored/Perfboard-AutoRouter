@@ -211,7 +211,191 @@ function moveComp(c, ox, oy) {
   c.pins.forEach(p => { p.col = ox + p.dCol; p.row = oy + p.dRow; });
 }
 
-// ── GLOBAL HELPER FUNCTIONS ──
+// ── STATE MANAGEMENT ──
+let stateHistory = [];
+let currentStateIndex = -1;
+
+// Initialize state from localStorage or create default
+function initializeState() {
+  const savedState = localStorage.getItem('autorouterState');
+  if (savedState) {
+    try {
+      const state = JSON.parse(savedState);
+      stateHistory = state.history || [];
+      currentStateIndex = state.index || -1;
+      
+      // Restore current state if exists
+      if (currentStateIndex >= 0 && stateHistory[currentStateIndex]) {
+        restoreState(stateHistory[currentStateIndex]);
+      }
+    } catch (e) {
+      console.error('Failed to load saved state:', e);
+      resetState();
+    }
+  } else {
+    resetState();
+  }
+}
+
+// Reset to default state
+function resetState() {
+  stateHistory = [];
+  currentStateIndex = -1;
+  
+  // Default board size
+  COLS = 40;
+  ROWS = 30;
+  document.getElementById('bCols').value = COLS;
+  document.getElementById('bRows').value = ROWS;
+  
+  components = [];
+  wires = [];
+  compDefs = [];
+  
+  saveState();
+}
+
+// Save current state to history
+function saveState() {
+  const state = {
+    boardSize: { cols: COLS, rows: ROWS },
+    components: components.map(c => ({
+      id: c.id,
+      ox: c.ox,
+      oy: c.oy,
+      w: c.w,
+      h: c.h,
+      pins: c.pins.map(p => ({
+        dCol: p.dCol,
+        dRow: p.dRow,
+        col: p.col,
+        row: p.row,
+        net: p.net,
+        label: p.label
+      }))
+    })),
+    wires: wires.map(w => ({
+      net: w.net,
+      failed: w.failed,
+      path: w.path || []
+    })),
+    compDefs: compDefs,
+    timestamp: Date.now()
+  };
+  
+  // Remove any states after current index (for undo/redo)
+  stateHistory = stateHistory.slice(0, currentStateIndex + 1);
+  
+  // Add new state
+  stateHistory.push(state);
+  currentStateIndex++;
+  
+  // Limit history size (keep last 50 states)
+  if (stateHistory.length > 50) {
+    stateHistory.shift();
+    currentStateIndex--;
+  }
+  
+  // Save to localStorage
+  localStorage.setItem('autorouterState', JSON.stringify({
+    history: stateHistory,
+    index: currentStateIndex
+  }));
+}
+
+// Restore a specific state
+function restoreState(state) {
+  COLS = state.boardSize.cols;
+  ROWS = state.boardSize.rows;
+  document.getElementById('bCols').value = COLS;
+  document.getElementById('bRows').value = ROWS;
+  
+  components = state.components.map(c => ({
+    ...c,
+    pins: c.pins.map(p => ({ ...p }))
+  }));
+  
+  wires = state.wires.map(w => ({
+    ...w,
+    path: w.path || []
+  }));
+  
+  compDefs = state.compDefs || [];
+  
+  render(); updateStats(); renderNetPanel();
+}
+
+// Go back in state history
+function goBackState() {
+  if (currentStateIndex > 0) {
+    currentStateIndex--;
+    restoreState(stateHistory[currentStateIndex]);
+    localStorage.setItem('autorouterState', JSON.stringify({
+      history: stateHistory,
+      index: currentStateIndex
+    }));
+    toast('Reverted to previous state', 'ok');
+  } else {
+    toast('No previous state', 'warn');
+  }
+}
+
+// Go forward in state history
+function goForwardState() {
+  if (currentStateIndex < stateHistory.length - 1) {
+    currentStateIndex++;
+    restoreState(stateHistory[currentStateIndex]);
+    localStorage.setItem('autorouterState', JSON.stringify({
+      history: stateHistory,
+      index: currentStateIndex
+    }));
+    toast('Advanced to next state', 'ok');
+  } else {
+    toast('No next state', 'warn');
+  }
+}
+
+// Export complete state (excluding initial JSON)
+function exportCompleteState() {
+  const state = {
+    boardSize: { cols: COLS, rows: ROWS },
+    components: components.map(c => ({
+      id: c.id,
+      ox: c.ox,
+      oy: c.oy,
+      w: c.w,
+      h: c.h,
+      pins: c.pins.map(p => ({
+        dCol: p.dCol,
+        dRow: p.dRow,
+        col: p.col,
+        row: p.row,
+        net: p.net,
+        label: p.label
+      }))
+    })),
+    wires: wires.map(w => ({
+      net: w.net,
+      failed: w.failed,
+      path: w.path || []
+    })),
+    compDefs: compDefs,
+    timestamp: Date.now(),
+    version: '1.0'
+  };
+  
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `autorouter-complete-state-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  
+  toast('Complete state exported', 'ok');
+}
+
+// ── HELPER FUNCTIONS ──
 function saveComps() {
   return components.map(c => ({ id: c.id, ox: c.ox, oy: c.oy }));
 }
@@ -302,6 +486,7 @@ async function doPlaceAndRoute() {
     }
     
     toast(`Perfect routing achieved!`, 'ok');
+    saveState(); // Save state after successful routing
   } else {
     // No perfect routing found - restore best attempt for user to see
     toast(`No perfect routing found after ${maxAttempts} attempts. Best completion: ${Math.round(bestCompletion * 100)}%`, 'warn');
@@ -1030,13 +1215,14 @@ function updateJSONFromComponents() {
   document.getElementById('jsonInput').value = JSON.stringify(data, null, 2);
 }
 
-// Calculate total footprint area of all components
+// Calculate total footprint area including components and wires
 function calculateFootprintArea() {
   if (components.length === 0) return { area: 0, bounds: { minCol: 0, maxCol: 0, minRow: 0, maxRow: 0 } };
   
   let minCol = Infinity, maxCol = -Infinity;
   let minRow = Infinity, maxRow = -Infinity;
   
+  // Include component bounds
   components.forEach(comp => {
     const compRight = comp.ox + comp.w;
     const compBottom = comp.oy + comp.h;
@@ -1045,6 +1231,18 @@ function calculateFootprintArea() {
     maxCol = Math.max(maxCol, compRight);
     minRow = Math.min(minRow, comp.oy);
     maxRow = Math.max(maxRow, compBottom);
+  });
+  
+  // Include wire path bounds
+  wires.forEach(wire => {
+    if (wire.path && wire.path.length > 0) {
+      wire.path.forEach(point => {
+        minCol = Math.min(minCol, point.col);
+        maxCol = Math.max(maxCol, point.col);
+        minRow = Math.min(minRow, point.row);
+        maxRow = Math.max(maxRow, point.row);
+      });
+    }
   });
   
   const width = maxCol - minCol;
@@ -1143,6 +1341,8 @@ async function optimizeFootprint() {
   // Restore best configuration
   restoreComps(bestComps);
   wires = bestWires;
+  
+  saveState(); // Save state after optimization
 }
 
 // Manual footprint optimization function
@@ -1185,11 +1385,67 @@ function goBack() {
   window.lastState = null;
 }
 
+// Cut board to bounding box of components and wires
+function cutToBoundingBox() {
+  if (!components.length) { 
+    toast('No components loaded', 'warn'); 
+    return; 
+  }
+  
+  const { bounds } = calculateFootprintArea();
+  const newCols = bounds.maxCol - bounds.minCol;
+  const newRows = bounds.maxRow - bounds.minRow;
+  
+  if (newCols <= 0 || newRows <= 0) {
+    toast('Invalid bounding box', 'warn');
+    return;
+  }
+  
+  // Update board dimensions
+  COLS = newCols;
+  ROWS = newRows;
+  document.getElementById('bCols').value = newCols;
+  document.getElementById('bRows').value = newRows;
+  
+  // Shift all components to origin (0,0)
+  const offsetX = -bounds.minCol;
+  const offsetY = -bounds.minRow;
+  
+  components.forEach(comp => {
+    comp.ox += offsetX;
+    comp.oy += offsetY;
+    comp.pins.forEach(pin => {
+      pin.col += offsetX;
+      pin.row += offsetY;
+    });
+  });
+  
+  // Shift all wire paths
+  wires.forEach(wire => {
+    if (wire.path) {
+      wire.path.forEach(point => {
+        point.col += offsetX;
+        point.row += offsetY;
+      });
+    }
+  });
+  
+  applyBoard();
+  render(); updateStats(); renderNetPanel();
+  
+  toast(`Board cut to ${newCols}×${newRows} (reduced from ${document.getElementById('bCols').value + offsetX}×${document.getElementById('bRows').value + offsetY})`, 'ok');
+  
+  saveState(); // Save state after cutting board
+}
+
 // Expose functions to global scope
 window.app = {
   applyBoard, loadTemplate, loadComponents,
-  doPlaceAndRoute, doRouteOnly, doOptimizeFootprint, goBack, clearWires, doExport, fullReset,
+  doPlaceAndRoute, doRouteOnly, doOptimizeFootprint, goBackState, goForwardState, exportCompleteState, cutToBoundingBox, clearWires, doExport, fullReset,
   setTool, adjZoom, fitView, selectComp, setHovNet,
   openCompEditor, closeCompEditor, saveComponentEdit,
   addNewComponent, addNewPin, updatePinProperties, deletePin, deselectPin,
 };
+
+// Initialize state system on load
+initializeState();
