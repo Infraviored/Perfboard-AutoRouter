@@ -10,32 +10,21 @@ const NET_PAL = {
   RESET:'#f44336', CLKEN:'#ff5722', EN:'#795548'
 };
 
-// Cache for generated colors to ensure consistency
 const netColorCache = new Map();
 
 function netColor(n) {
-  // Return gray for null/undefined nets
   if (!n) return '#666';
-  
-  // Return predefined palette color if exists
   if (NET_PAL[n]) return NET_PAL[n];
-  
-  // Return cached color if already generated
   if (netColorCache.has(n)) return netColorCache.get(n);
   
-  // Generate evenly spaced hue based on string hash
   let h = 5381;
   for (const c of n) h = ((h << 5) + h) + c.charCodeAt(0);
   
-  // Use golden ratio for better distribution
   const goldenRatio = 0.618033988749895;
   const hue = (Math.abs(h) / 10000 + goldenRatio) % 1;
   const hueDegrees = Math.floor(hue * 360);
-  
-  // Use high saturation and medium lightness for vivid colors
   const color = `hsl(${hueDegrees}, 75%, 55%)`;
   
-  // Cache the generated color
   netColorCache.set(n, color);
   return color;
 }
@@ -53,17 +42,13 @@ let dragging = null, dragOff = null;
 let hovNet = null;
 let toastTid = null;
 
-// Add these with your other globals
-const bgCanvas = document.createElement('canvas');
-const bgCtx = bgCanvas.getContext('2d');
-// Cache DOM elements to prevent thrashing
+// Cache DOM elements
 const domElements = {
   cCol: document.getElementById('cCol'),
   cRow: document.getElementById('cRow'),
   cNet: document.getElementById('cNet')
 };
 
-// Component Editor State
 let editingComp = null;
 let editingCompIndex = -1;
 let pinGridSize = 30;
@@ -72,9 +57,8 @@ let pinDragOffset = null;
 let selectedPinIndex = null;
 let isAddingNewComponent = false;
 
-const cv  = document.getElementById('pcb');
-const ctx = cv.getContext('2d');
-const ca  = document.getElementById('ca');
+// CHANGED: Grab SVG instead of Canvas
+const pcb = document.getElementById('pcb');
 
 // ── TEMPLATE ──
 const TEMPLATE = {
@@ -109,38 +93,14 @@ function applyBoard() {
   COLS = Math.max(5, parseInt(document.getElementById('bCols').value) || 22);
   ROWS = Math.max(5, parseInt(document.getElementById('bRows').value) || 16);
   
-  const dpr = window.devicePixelRatio || 1;
   const W = COLS * SP;
   const H = ROWS * SP;
   
-  // Set up main canvas
-  cv.width = W * dpr;
-  cv.height = H * dpr;
-  cv.style.width = W + 'px';
-  cv.style.height = H + 'px';
-  ctx.scale(dpr, dpr);
-
-  // Set up and pre-render the Offscreen Background Canvas
-  bgCanvas.width = W * dpr;
-  bgCanvas.height = H * dpr;
-  bgCtx.scale(dpr, dpr);
-  
-  // Draw the heavy background grid ONCE
-  bgCtx.fillStyle = '#1a1208'; 
-  bgCtx.fillRect(0, 0, W, H);
-  bgCtx.strokeStyle = '#c8a800'; 
-  bgCtx.lineWidth = 2;
-  bgCtx.strokeRect(1, 1, W-2, H-2);
-
-  for (let c = 0; c < COLS; c++) {
-    for (let r = 0; r < ROWS; r++) {
-      const px = c*SP + SP/2, py = r*SP + SP/2;
-      bgCtx.fillStyle = '#b87333';
-      bgCtx.beginPath(); bgCtx.arc(px, py, SP*.22, 0, Math.PI*2); bgCtx.fill();
-      bgCtx.fillStyle = '#0d0a06';
-      bgCtx.beginPath(); bgCtx.arc(px, py, SP*.09, 0, Math.PI*2); bgCtx.fill();
-    }
-  }
+  // Update SVG container dimensions directly
+  pcb.setAttribute('width', W);
+  pcb.setAttribute('height', H);
+  pcb.style.width = W + 'px';
+  pcb.style.height = H + 'px';
   
   fitView(); render(); updateStats();
   badge(2);
@@ -188,7 +148,6 @@ function loadComponents() {
     const maxCol = Math.max(...colValues);
     const maxRow = Math.max(...rowValues);
     
-    // Normalize offsets to start from 0,0 for component box
     const normalizedOffsets = offsets.map(off => [off[0] - minCol, off[1] - minRow]);
     
     return {
@@ -199,7 +158,7 @@ function loadComponents() {
       pinLbls: cd.pins.map(p => p.label || p.lbl || String(idx+1)),
       w: maxCol - minCol + 1,
       h: maxRow - minRow + 1,
-      boardOffset: [minCol, minRow], // Where this component should be placed on board
+      boardOffset: [minCol, minRow], 
     };
   }).filter(Boolean);
 
@@ -215,7 +174,6 @@ function loadComponents() {
 function placeInitial() {
   components = [];
   compDefs.forEach(cd => {
-    // Use the boardOffset from JSON, or default to automatic placement
     const ox = cd.boardOffset ? cd.boardOffset[0] : 1;
     const oy = cd.boardOffset ? cd.boardOffset[1] : 1;
     components.push(makeComp(cd, ox, oy));
@@ -243,7 +201,6 @@ function moveComp(c, ox, oy) {
 let stateHistory = [];
 let currentStateIndex = -1;
 
-// Initialize state from localStorage or create default
 function initializeState() {
   const savedState = localStorage.getItem('autorouterState');
   if (savedState) {
@@ -252,7 +209,6 @@ function initializeState() {
       stateHistory = state.history || [];
       currentStateIndex = state.index || -1;
       
-      // Restore current state if exists
       if (currentStateIndex >= 0 && stateHistory[currentStateIndex]) {
         restoreState(stateHistory[currentStateIndex]);
       }
@@ -265,73 +221,47 @@ function initializeState() {
   }
 }
 
-// Reset to default state
 function resetState() {
   stateHistory = [];
   currentStateIndex = -1;
-  
-  // Default board size
   COLS = 40;
   ROWS = 30;
   document.getElementById('bCols').value = COLS;
   document.getElementById('bRows').value = ROWS;
-  
-  components = [];
-  wires = [];
-  compDefs = [];
-  
+  components = []; wires = []; compDefs = [];
   saveState();
 }
 
-// Save current state to history
 function saveState() {
   const state = {
     boardSize: { cols: COLS, rows: ROWS },
     components: components.map(c => ({
-      id: c.id,
-      ox: c.ox,
-      oy: c.oy,
-      w: c.w,
-      h: c.h,
+      id: c.id, ox: c.ox, oy: c.oy, w: c.w, h: c.h,
       pins: c.pins.map(p => ({
-        dCol: p.dCol,
-        dRow: p.dRow,
-        col: p.col,
-        row: p.row,
-        net: p.net,
-        label: p.label
+        dCol: p.dCol, dRow: p.dRow, col: p.col, row: p.row, net: p.net, label: p.label
       }))
     })),
     wires: wires.map(w => ({
-      net: w.net,
-      failed: w.failed,
-      path: w.path || []
+      net: w.net, failed: w.failed, path: w.path || []
     })),
     compDefs: compDefs,
     timestamp: Date.now()
   };
   
-  // Remove any states after current index (for undo/redo)
   stateHistory = stateHistory.slice(0, currentStateIndex + 1);
-  
-  // Add new state
   stateHistory.push(state);
   currentStateIndex++;
   
-  // Limit history size (keep last 50 states)
   if (stateHistory.length > 50) {
     stateHistory.shift();
     currentStateIndex--;
   }
   
-  // Save to localStorage
   localStorage.setItem('autorouterState', JSON.stringify({
-    history: stateHistory,
-    index: currentStateIndex
+    history: stateHistory, index: currentStateIndex
   }));
 }
 
-// Restore a specific state
 function restoreState(state) {
   COLS = state.boardSize.cols;
   ROWS = state.boardSize.rows;
@@ -344,69 +274,42 @@ function restoreState(state) {
   }));
   
   wires = state.wires.map(w => ({
-    ...w,
-    path: w.path || []
+    ...w, path: w.path || []
   }));
   
   compDefs = state.compDefs || [];
   
-  render(); updateStats(); renderNetPanel();
+  applyBoard(); // CHANGED: Must call this so SVG actually resizes!
 }
 
-// Go back in state history
 function goBackState() {
   if (currentStateIndex > 0) {
     currentStateIndex--;
     restoreState(stateHistory[currentStateIndex]);
-    localStorage.setItem('autorouterState', JSON.stringify({
-      history: stateHistory,
-      index: currentStateIndex
-    }));
+    localStorage.setItem('autorouterState', JSON.stringify({ history: stateHistory, index: currentStateIndex }));
     toast('Reverted to previous state', 'ok');
-  } else {
-    toast('No previous state', 'warn');
-  }
+  } else toast('No previous state', 'warn');
 }
 
-// Go forward in state history
 function goForwardState() {
   if (currentStateIndex < stateHistory.length - 1) {
     currentStateIndex++;
     restoreState(stateHistory[currentStateIndex]);
-    localStorage.setItem('autorouterState', JSON.stringify({
-      history: stateHistory,
-      index: currentStateIndex
-    }));
+    localStorage.setItem('autorouterState', JSON.stringify({ history: stateHistory, index: currentStateIndex }));
     toast('Advanced to next state', 'ok');
-  } else {
-    toast('No next state', 'warn');
-  }
+  } else toast('No next state', 'warn');
 }
 
-// Export complete state (excluding initial JSON)
 function exportCompleteState() {
   const state = {
     boardSize: { cols: COLS, rows: ROWS },
     components: components.map(c => ({
-      id: c.id,
-      ox: c.ox,
-      oy: c.oy,
-      w: c.w,
-      h: c.h,
+      id: c.id, ox: c.ox, oy: c.oy, w: c.w, h: c.h,
       pins: c.pins.map(p => ({
-        dCol: p.dCol,
-        dRow: p.dRow,
-        col: p.col,
-        row: p.row,
-        net: p.net,
-        label: p.label
+        dCol: p.dCol, dRow: p.dRow, col: p.col, row: p.row, net: p.net, label: p.label
       }))
     })),
-    wires: wires.map(w => ({
-      net: w.net,
-      failed: w.failed,
-      path: w.path || []
-    })),
+    wires: wires.map(w => ({ net: w.net, failed: w.failed, path: w.path || [] })),
     compDefs: compDefs,
     timestamp: Date.now(),
     version: '1.0'
@@ -419,18 +322,12 @@ function exportCompleteState() {
   a.download = `autorouter-complete-state-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  
   toast('Complete state exported', 'ok');
 }
 
-// ── HELPER FUNCTIONS ──
 function saveComps() {
   return components.map(c => ({ 
-    id: c.id, 
-    ox: c.ox, 
-    oy: c.oy, 
-    w: c.w, 
-    h: c.h,
+    id: c.id, ox: c.ox, oy: c.oy, w: c.w, h: c.h,
     pins: c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow }))
   }));
 }
@@ -439,16 +336,12 @@ function restoreComps(saved) {
   saved.forEach(s => {
     const comp = components.find(c => c.id === s.id);
     if (comp) {
-      comp.ox = s.ox; 
-      comp.oy = s.oy;
-      comp.w = s.w;   // Restore width
-      comp.h = s.h;   // Restore height
+      comp.ox = s.ox; comp.oy = s.oy;
+      comp.w = s.w; comp.h = s.h; 
       
       comp.pins.forEach((p, idx) => { 
-        p.dCol = s.pins[idx].dCol; // Restore pin offsets
+        p.dCol = s.pins[idx].dCol; 
         p.dRow = s.pins[idx].dRow;
-        
-        // Recalculate absolute grid positions
         p.col = comp.ox + p.dCol; 
         p.row = comp.oy + p.dRow; 
       });
@@ -473,29 +366,22 @@ function anyOverlap(comp, allComps) {
 // ── MAIN ACTIONS ──
 async function doPlaceAndRoute() {
   if (!components.length) { toast('No components loaded', 'warn'); return; }
-  const maxAttempts = 100; // Try up to 100 configurations
-  let perfectWires = null;
-  let perfectComps = null;
-  let bestWires = null;
-  let bestComps = null;
-  let bestCompletion = 0;
+  const maxAttempts = 100;
+  let perfectWires = null; let perfectComps = null;
+  let bestWires = null; let bestComps = null; let bestCompletion = 0;
 
   showOverlay(true);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    // ① Placement
     ostep(1);
     document.getElementById('ot').textContent = `Attempt ${attempt} / ${maxAttempts}`;
     setProg(0, 'Placing…');
 
-    // Reset to initial placement so SA starts fresh each attempt
     placeInitial();
     await anneal(components, COLS, ROWS, (p, s) => {
-      setProg(p * 100, `[${attempt}/${maxAttempts}] SA — ${s}`);
-      render();
+      setProg(p * 100, `[${attempt}/${maxAttempts}] SA — ${s}`); render();
     });
 
-    // ② Routing
     ostep(2);
     setProg(0, 'Routing…');
     const candidateWires = await route(
@@ -505,49 +391,30 @@ async function doPlaceAndRoute() {
 
     const c = completion(candidateWires);
 
-    // Track best attempt even if not perfect
     if (c > bestCompletion) {
       bestCompletion = c;
       bestWires = candidateWires;
       bestComps = saveComps();
     }
 
-    // Only accept if 100% successful (no failures)
     if (c === 1.0) {
-      perfectWires = candidateWires;
-      perfectComps = saveComps();
-      console.log(`Perfect routing found on attempt ${attempt}!`);
-      break; // Stop immediately when we find perfect routing
-    }
-
-    // Log progress for debugging
-    if (attempt % 10 === 0) {
-      console.log(`Attempt ${attempt}: ${Math.round(c * 100)}% completion, still searching for perfect routing...`);
+      perfectWires = candidateWires; perfectComps = saveComps();
+      break; 
     }
   }
 
   if (perfectWires) {
-    // Restore perfect configuration
-    restoreComps(perfectComps);
-    wires = perfectWires;
-    
-    // ③ Post-placement optimization (optional)
+    restoreComps(perfectComps); wires = perfectWires;
     const autoOptimize = document.getElementById('autoOptimize').checked;
     if (autoOptimize) {
-      ostep(3);
-      setProg(0, 'Optimizing footprint…');
+      ostep(3); setProg(0, 'Optimizing footprint…');
       await doRecursivePushPacking();
     }
-    
     toast(`Perfect routing achieved!`, 'ok');
-    saveState(); // Save state after successful routing
+    saveState(); 
   } else {
-    // No perfect routing found - restore best attempt for user to see
-    toast(`No perfect routing found after ${maxAttempts} attempts. Best completion: ${Math.round(bestCompletion * 100)}%`, 'warn');
-    if (bestComps) {
-      restoreComps(bestComps);
-      wires = bestWires;
-    }
+    toast(`No perfect routing found. Best completion: ${Math.round(bestCompletion * 100)}%`, 'warn');
+    if (bestComps) { restoreComps(bestComps); wires = bestWires; }
   }
 
   showOverlay(false);
@@ -574,77 +441,70 @@ function finishMsg() {
   setStatus('Done. Drag components then Route Only, or Place & Route again.');
 }
 
-// ── RENDER ──
+// ── SVG RENDER ENGINE ──
 function render() {
   const W = COLS * SP, H = ROWS * SP;
   
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  
-  // Clear and stamp the pre-rendered background in ONE operation
-  ctx.clearRect(0, 0, W, H);
-  ctx.drawImage(bgCanvas, 0, 0, W, H);
+  // 1. Defs + Background Pattern
+  let svg = `
+    <defs>
+      <pattern id="perfPattern" patternUnits="userSpaceOnUse" width="${SP}" height="${SP}">
+        <rect width="${SP}" height="${SP}" fill="#1a1208"/>
+        <circle cx="${SP/2}" cy="${SP/2}" r="${SP*.22}" fill="#b87333"/>
+        <circle cx="${SP/2}" cy="${SP/2}" r="${SP*.09}" fill="#0d0a06"/>
+      </pattern>
+    </defs>
+    <rect width="${W}" height="${H}" fill="url(#perfPattern)"/>
+    <rect x="1" y="1" width="${W-2}" height="${H-2}" fill="none" stroke="#c8a800" stroke-width="2"/>
+  `;
 
-  // Only draw wires, ratsnest, and components dynamically
-  if (!wires.length) drawRatsnest(); // (Consider caching ratsnest next for even more FPS!)
-  drawWires();
-  components.forEach(c => renderComp(c));
+  // 2. Wires
+  if (!wires.length) svg += generateRatsnestSVG();
+  svg += generateWiresSVG();
+
+  // 3. Components
+  components.forEach(c => { svg += renderCompSVG(c); });
   
+  // 4. Bounding Box Highlight
   if (components.length > 0) {
     const bbox = calculateFootprintArea();
     const { minCol, maxCol, minRow, maxRow } = bbox.bounds;
-    ctx.strokeStyle = 'rgba(0, 255, 128, 0.4)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([8, 4]);
-    ctx.strokeRect(minCol * SP, minRow * SP, (maxCol - minCol + 1) * SP, (maxRow - minRow + 1) * SP);
-    ctx.setLineDash([]);
+    const bbW = (maxCol - minCol + 1) * SP;
+    const bbH = (maxRow - minRow + 1) * SP;
+    svg += `<rect x="${minCol * SP}" y="${minRow * SP}" width="${bbW}" height="${bbH}" fill="none" stroke="rgba(0, 255, 128, 0.4)" stroke-width="2" stroke-dasharray="8 4"/>`;
   }
 
+  // 5. Selection Highlight
   if (selComp) {
     const s = selComp;
-    ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 1.5; ctx.setLineDash([3,3]);
-    ctx.strokeRect(s.ox*SP - 6, s.oy*SP - 6, s.w*SP + 8, s.h*SP + 8);
-    ctx.setLineDash([]);
+    svg += `<rect x="${s.ox*SP - 6}" y="${s.oy*SP - 6}" width="${s.w*SP + 8}" height="${s.h*SP + 8}" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="3 3"/>`;
   }
+
+  pcb.innerHTML = svg;
 }
 
-function drawWires() {
+function generateWiresSVG() {
+  let out = '';
   wires.forEach(w => {
-    if (w.failed) return; // draw nothing for failed routes
-    ctx.beginPath();
-    ctx.lineWidth   = hovNet === w.net ? 4.5 : 2.8;
-    ctx.strokeStyle = netColor(w.net);
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    // Enable anti-aliasing for smooth lines
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    if (w.failed) {
+      const a = w.path[0], b = w.path[w.path.length-1];
+      out += `<line x1="${a.col*SP+SP/2}" y1="${a.row*SP+SP/2}" x2="${b.col*SP+SP/2}" y2="${b.row*SP+SP/2}" stroke="#ff2222" stroke-width="1" stroke-dasharray="2 5"/>`;
+      return; 
+    }
     
-    w.path.forEach((pt, i) => {
-      const px = pt.col*SP + SP/2, py = pt.row*SP + SP/2;
-      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-    });
-    ctx.stroke();
+    const strokeW = hovNet === w.net ? 4.5 : 2.8;
+    const pts = w.path.map(pt => `${pt.col*SP + SP/2},${pt.row*SP + SP/2}`).join(' ');
+    out += `<polyline points="${pts}" fill="none" stroke="${netColor(w.net)}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round"/>`;
   });
-
-  // Draw failed routes as dashed red lines ONLY as diagnostic overlay
-  wires.filter(w => w.failed).forEach(w => {
-    const a = w.path[0], b = w.path[w.path.length-1];
-    ctx.beginPath();
-    ctx.lineWidth = 1; ctx.strokeStyle = '#ff2222';
-    ctx.setLineDash([2, 5]);
-    ctx.moveTo(a.col*SP+SP/2, a.row*SP+SP/2);
-    ctx.lineTo(b.col*SP+SP/2, b.row*SP+SP/2);
-    ctx.stroke(); ctx.setLineDash([]);
-  });
+  return out;
 }
 
-function drawRatsnest() {
+function generateRatsnestSVG() {
   const nets = getAllNets(components);
-  ctx.setLineDash([2,5]); ctx.lineWidth = .8;
+  let out = '';
   for (const net in nets) {
     if (nets[net].length < 2) continue;
     const pins = nets[net];
-    ctx.strokeStyle = netColor(net) + '55';
     const conn = new Set([0]);
     while (conn.size < pins.length) {
       let bD = Infinity, bI = -1, bJ = -1;
@@ -654,50 +514,30 @@ function drawRatsnest() {
         if (d < bD) { bD=d; bI=i; bJ=j; }
       }));
       if (bJ === -1) break;
-      ctx.beginPath();
-      ctx.moveTo(pins[bI].col*SP+SP/2, pins[bI].row*SP+SP/2);
-      ctx.lineTo(pins[bJ].col*SP+SP/2, pins[bJ].row*SP+SP/2);
-      ctx.stroke();
+      out += `<line x1="${pins[bI].col*SP+SP/2}" y1="${pins[bI].row*SP+SP/2}" x2="${pins[bJ].col*SP+SP/2}" y2="${pins[bJ].row*SP+SP/2}" stroke="${netColor(net)}55" stroke-width="0.8" stroke-dasharray="2 5"/>`;
       conn.add(bJ);
     }
   }
-  ctx.setLineDash([]);
+  return out;
 }
 
-function renderComp(c) {
+function renderCompSVG(c) {
   const bx = c.ox*SP + SP*.08, by = c.oy*SP + SP*.08;
   const bw = c.w*SP  - SP*.16, bh = c.h*SP  - SP*.16;
-  roundRect(ctx, bx, by, bw, bh, 4);
-  ctx.fillStyle = c.color; ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,.72)';
-  ctx.font = `bold ${Math.min(SP*.3,9)}px 'Consolas',monospace`;
-  ctx.textAlign = 'left';
-  ctx.fillText(`${c.id}: ${c.value}`, bx+3, by-2);
+  
+  let out = `<g transform="translate(0,0)">`;
+  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="${c.color}" stroke="rgba(255,255,255,.18)" stroke-width="1"/>`;
+  out += `<text x="${bx+3}" y="${by+SP*0.25}" fill="rgba(255,255,255,.72)" font-family="'Consolas',monospace" font-size="${Math.min(SP*.3,9)}" font-weight="bold">${c.id}: ${c.value}</text>`;
 
   c.pins.forEach(p => {
     const px = p.col*SP + SP/2, py = p.row*SP + SP/2;
-    ctx.fillStyle = '#b87333';
-    ctx.beginPath(); ctx.arc(px, py, SP*.28, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = netColor(p.net);
-    ctx.beginPath(); ctx.arc(px, py, SP*.2,  0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#0d0a06';
-    ctx.beginPath(); ctx.arc(px, py, SP*.09, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = 'rgba(230,230,230,.9)';
-    ctx.font = `${Math.min(SP*.25,7)}px monospace`;
-    ctx.textAlign = 'center';
-    ctx.fillText(p.lbl, px, py - SP*.33);
+    out += `<circle cx="${px}" cy="${py}" r="${SP*.28}" fill="#b87333"/>`;
+    out += `<circle cx="${px}" cy="${py}" r="${SP*.2}" fill="${netColor(p.net)}"/>`;
+    out += `<circle cx="${px}" cy="${py}" r="${SP*.09}" fill="#0d0a06"/>`;
+    out += `<text x="${px}" y="${py - SP*.33 + Math.min(SP*.25,7)/3}" fill="rgba(230,230,230,.9)" font-family="monospace" font-size="${Math.min(SP*.25,7)}" text-anchor="middle">${p.lbl}</text>`;
   });
-  ctx.textAlign = 'left';
-}
-
-function roundRect(c, x, y, w, h, r) {
-  c.beginPath();
-  c.moveTo(x+r,y); c.lineTo(x+w-r,y);
-  c.arcTo(x+w,y,x+w,y+r,r); c.lineTo(x+w,y+h-r);
-  c.arcTo(x+w,y+h,x+w-r,y+h,r); c.lineTo(x+r,y+h);
-  c.arcTo(x,y+h,x,y+h-r,r); c.lineTo(x,y+r);
-  c.arcTo(x,y,x+r,y,r); c.closePath();
+  out += `</g>`;
+  return out;
 }
 
 // ── STATS ──
@@ -710,7 +550,6 @@ function updateStats() {
   const wl   = wires.filter(w => !w.failed).reduce((s,w) => s + w.path.length - 1, 0);
   const pct  = tc > 0 ? Math.round(ok / tc * 100) : null;
   
-  // Calculate bounding box area
   const bboxArea = (components.length > 0 && (wires.length > 0 || components.length > 0)) 
     ? calculateFootprintArea().area 
     : 0;
@@ -828,7 +667,7 @@ ca.addEventListener('mousemove', e => {
 
 ca.addEventListener('mouseup', () => {
   if (panning) { panning = false; ca.style.cursor = 'crosshair'; }
-  if (dragging) { dragging = null; dragOff = null; selectComp(selComp?.id||null); renderNetPanel(); }
+  if (dragging) { dragging = null; dragOff = null; selectComp(selComp?.id||null); renderNetPanel(); saveState(); }
 });
 
 ca.addEventListener('wheel', e => {
@@ -837,7 +676,7 @@ ca.addEventListener('wheel', e => {
 
 // ── ZOOM / PAN ──
 function applyT() {
-  cv.style.transform = `translate(${panX}px,${panY}px) scale(${zoom})`;
+  pcb.style.transform = `translate(${panX}px,${panY}px) scale(${zoom})`;
   document.getElementById('cZoom').textContent = Math.round(zoom*100) + '%';
 }
 function adjZoom(f, cx, cy) {
@@ -886,10 +725,18 @@ function toast(msg, type) {
   clearTimeout(toastTid); toastTid = setTimeout(() => el.className = '', 3000);
 }
 function setStatus(m) { document.getElementById('smsg').textContent = m; }
+
+// CHANGED: Exports actual vector SVG instead of PNG!
 function doExport() {
-  const a = document.createElement('a'); a.download = 'perfboard.png';
-  a.href = cv.toDataURL(); a.click(); toast('Exported PNG', 'ok');
+  const a = document.createElement('a'); 
+  a.download = 'perfboard.svg';
+  const svgData = new XMLSerializer().serializeToString(pcb);
+  const blob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+  a.href = URL.createObjectURL(blob); 
+  a.click(); 
+  toast('Exported Vector SVG', 'ok');
 }
+
 function fullReset() {
   components = []; compDefs = []; wires = []; selComp = null;
   render(); updateStats();
@@ -927,7 +774,6 @@ function debugBoard() {
   });
   grid.debugPrint();
   
-  // Also show current bounding box anchors
   const bbox = calculateFootprintArea();
   console.log("Current Bounding Box:", bbox);
   toast("Debug info logged to console", "inf");
@@ -936,7 +782,6 @@ function debugBoard() {
 // ── INIT ──
 applyBoard();
 
-// Auto-load default.json if present
 fetch('./default.json')
   .then(r => { if (!r.ok) throw new Error('no default.json'); return r.json(); })
   .then(data => {
@@ -951,11 +796,10 @@ function openCompEditor(compId) {
   const compIndex = compDefs.findIndex(cd => cd.id === compId);
   if (compIndex === -1) return;
   
-  editingComp = JSON.parse(JSON.stringify(compDefs[compIndex])); // Deep copy
+  editingComp = JSON.parse(JSON.stringify(compDefs[compIndex]));
   editingCompIndex = compIndex;
   isAddingNewComponent = false;
   
-  // Populate form fields
   document.getElementById('editCompId').value = editingComp.id;
   document.getElementById('editCompName').value = editingComp.name;
   document.getElementById('editCompValue').value = editingComp.value;
@@ -964,53 +808,29 @@ function openCompEditor(compId) {
   document.getElementById('editCompHeight').value = editingComp.h;
   document.getElementById('compEditorTitle').textContent = `Edit Component: ${editingComp.id}`;
   
-  // Add event listeners for size inputs
   const widthInput = document.getElementById('editCompWidth');
   const heightInput = document.getElementById('editCompHeight');
-  
-  // Remove existing listeners
-  widthInput.onchange = null;
-  heightInput.onchange = null;
-  
-  // Add new listeners
   widthInput.onchange = () => generatePinGrid();
   heightInput.onchange = () => generatePinGrid();
   
-  // Generate pin grid
   generatePinGrid();
-  
-  // Show overlay
   document.getElementById('compEditorOverlay').style.display = 'flex';
 }
 
 function closeCompEditor() {
   document.getElementById('compEditorOverlay').style.display = 'none';
   document.getElementById('pinProperties').style.display = 'none';
-  editingComp = null;
-  editingCompIndex = -1;
-  selectedPinIndex = null;
-  isAddingNewComponent = false;
-  draggedPin = null;
-  pinDragOffset = null;
+  editingComp = null; editingCompIndex = -1; selectedPinIndex = null;
+  isAddingNewComponent = false; draggedPin = null; pinDragOffset = null;
 }
 
 function addNewComponent() {
-  // Create a new component template
   editingComp = {
-    id: 'NEW' + Date.now(),
-    name: 'New Component',
-    value: '',
-    color: '#2a2808',
-    offsets: [[0, 0]], // Single pin at origin
-    pinNets: ['NET1'],
-    pinLbls: ['1'],
-    w: 1,
-    h: 1
+    id: 'NEW' + Date.now(), name: 'New Component', value: '', color: '#2a2808',
+    offsets: [[0, 0]], pinNets: ['NET1'], pinLbls: ['1'], w: 1, h: 1
   };
-  editingCompIndex = -1; // Will be appended
-  isAddingNewComponent = true;
+  editingCompIndex = -1; isAddingNewComponent = true;
   
-  // Populate form fields
   document.getElementById('editCompId').value = editingComp.id;
   document.getElementById('editCompName').value = editingComp.name;
   document.getElementById('editCompValue').value = editingComp.value;
@@ -1019,16 +839,12 @@ function addNewComponent() {
   document.getElementById('editCompHeight').value = editingComp.h;
   document.getElementById('compEditorTitle').textContent = 'Create New Component';
   
-  // Add event listeners for size inputs
   const widthInput = document.getElementById('editCompWidth');
   const heightInput = document.getElementById('editCompHeight');
   widthInput.onchange = () => generatePinGrid();
   heightInput.onchange = () => generatePinGrid();
   
-  // Generate pin grid
   generatePinGrid();
-  
-  // Show overlay
   document.getElementById('compEditorOverlay').style.display = 'flex';
 }
 
@@ -1044,7 +860,6 @@ function generatePinGrid() {
   grid.style.justifyContent = 'center';
   grid.style.padding = '10px';
   
-  // Create grid cells
   for (let row = 0; row < height; row++) {
     for (let col = 0; col < width; col++) {
       const cell = document.createElement('div');
@@ -1061,7 +876,6 @@ function generatePinGrid() {
       cell.dataset.col = col;
       cell.dataset.row = row;
       
-      // Check if there's a pin at this position
       const pinIndex = editingComp.offsets.findIndex(off => off[0] === col && off[1] === row);
       if (pinIndex !== -1) {
         const pin = document.createElement('div');
@@ -1084,22 +898,14 @@ function generatePinGrid() {
         pin.dataset.pinIndex = pinIndex;
         pin.draggable = true;
         
-        // Add click event for selection
-        pin.addEventListener('click', (e) => {
-          e.stopPropagation();
-          selectPinForEditing(pinIndex);
-        });
-        
-        // Add drag events
+        pin.addEventListener('click', (e) => { e.stopPropagation(); selectPinForEditing(pinIndex); });
         pin.addEventListener('dragstart', handlePinDragStart);
         pin.addEventListener('dragend', handlePinDragEnd);
         
         cell.appendChild(pin);
       } else {
-        // Empty cell - click to add pin
         cell.addEventListener('click', (e) => {
           e.stopPropagation();
-          // Find first empty position to add pin
           const newPinIndex = editingComp.offsets.length;
           editingComp.offsets.push([col, row]);
           editingComp.pinNets.push('NET' + (newPinIndex + 1));
@@ -1108,10 +914,8 @@ function generatePinGrid() {
         });
       }
       
-      // Add drop events to grid cells
       cell.addEventListener('dragover', handlePinDragOver);
       cell.addEventListener('drop', handlePinDrop);
-      
       grid.appendChild(cell);
     }
   }
@@ -1119,11 +923,7 @@ function generatePinGrid() {
 
 function selectPinForEditing(pinIndex) {
   selectedPinIndex = pinIndex;
-  
-  // Update pin display to show selection
   generatePinGrid();
-  
-  // Show pin properties panel
   document.getElementById('pinProperties').style.display = 'block';
   document.getElementById('editPinLabel').value = editingComp.pinLbls[pinIndex];
   document.getElementById('editPinNet').value = editingComp.pinNets[pinIndex];
@@ -1137,33 +937,25 @@ function deselectPin() {
 
 function updatePinProperties() {
   if (selectedPinIndex === null) return;
-  
   editingComp.pinLbls[selectedPinIndex] = document.getElementById('editPinLabel').value;
   editingComp.pinNets[selectedPinIndex] = document.getElementById('editPinNet').value;
-  
   generatePinGrid();
   toast('Pin properties updated', 'ok');
 }
 
 function deletePin() {
   if (selectedPinIndex === null) return;
-  
-  if (editingComp.offsets.length <= 1) {
-    toast('Component must have at least one pin', 'warn');
-    return;
-  }
+  if (editingComp.offsets.length <= 1) { toast('Component must have at least one pin', 'warn'); return; }
   
   editingComp.offsets.splice(selectedPinIndex, 1);
   editingComp.pinNets.splice(selectedPinIndex, 1);
   editingComp.pinLbls.splice(selectedPinIndex, 1);
   
-  deselectPin();
-  generatePinGrid();
+  deselectPin(); generatePinGrid();
   toast('Pin deleted', 'ok');
 }
 
 function addNewPin() {
-  // Find first empty position
   const width = parseInt(document.getElementById('editCompWidth').value) || editingComp.w;
   const height = parseInt(document.getElementById('editCompHeight').value) || editingComp.h;
   
@@ -1181,52 +973,28 @@ function addNewPin() {
       }
     }
   }
-  
   toast('No empty positions available. Increase component size.', 'warn');
 }
 
-function handlePinDragStart(e) {
-  draggedPin = parseInt(e.target.dataset.pinIndex);
-  e.dataTransfer.effectAllowed = 'move';
-  e.target.style.opacity = '0.5';
-}
-
-function handlePinDragEnd(e) {
-  e.target.style.opacity = '1';
-  draggedPin = null;
-}
-
-function handlePinDragOver(e) {
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  e.currentTarget.style.background = 'var(--bg4)';
-}
+function handlePinDragStart(e) { draggedPin = parseInt(e.target.dataset.pinIndex); e.dataTransfer.effectAllowed = 'move'; e.target.style.opacity = '0.5'; }
+function handlePinDragEnd(e) { e.target.style.opacity = '1'; draggedPin = null; }
+function handlePinDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; e.currentTarget.style.background = 'var(--bg4)'; }
 
 function handlePinDrop(e) {
-  e.preventDefault();
-  e.currentTarget.style.background = '';
-  
+  e.preventDefault(); e.currentTarget.style.background = '';
   if (draggedPin === null) return;
   
   const newCol = parseInt(e.currentTarget.dataset.col);
   const newRow = parseInt(e.currentTarget.dataset.row);
   
-  // Check if position is already occupied
   const existingPin = editingComp.offsets.findIndex(off => off[0] === newCol && off[1] === newRow);
-  if (existingPin !== -1 && existingPin !== draggedPin) {
-    toast('Position already occupied', 'warn');
-    return;
-  }
+  if (existingPin !== -1 && existingPin !== draggedPin) { toast('Position already occupied', 'warn'); return; }
   
-  // Update pin position
   editingComp.offsets[draggedPin] = [newCol, newRow];
-  
-  // Regenerate grid
   generatePinGrid();
 }
 
 function saveComponentEdit() {
-  // Update component definition
   editingComp.id = document.getElementById('editCompId').value;
   editingComp.name = document.getElementById('editCompName').value;
   editingComp.value = document.getElementById('editCompValue').value;
@@ -1234,82 +1002,46 @@ function saveComponentEdit() {
   editingComp.w = parseInt(document.getElementById('editCompWidth').value);
   editingComp.h = parseInt(document.getElementById('editCompHeight').value);
   
-  // Validate component ID
-  if (!editingComp.id.trim()) {
-    toast('Component ID cannot be empty', 'warn');
-    return;
-  }
+  if (!editingComp.id.trim()) { toast('Component ID cannot be empty', 'warn'); return; }
   
-  // Check for duplicate ID (except for new components)
   if (!isAddingNewComponent) {
-    const duplicateIndex = compDefs.findIndex((cd, index) => 
-      cd.id === editingComp.id && index !== editingCompIndex
-    );
-    if (duplicateIndex !== -1) {
-      toast('Component ID already exists', 'warn');
-      return;
-    }
+    const duplicateIndex = compDefs.findIndex((cd, index) => cd.id === editingComp.id && index !== editingCompIndex);
+    if (duplicateIndex !== -1) { toast('Component ID already exists', 'warn'); return; }
   }
   
-  if (isAddingNewComponent) {
-    // Add new component to the array
-    compDefs.push(editingComp);
-    toast(`Component ${editingComp.id} created`, 'ok');
-  } else {
-    // Update existing component
-    compDefs[editingCompIndex] = editingComp;
-    toast(`Component ${editingComp.id} updated`, 'ok');
-  }
+  if (isAddingNewComponent) { compDefs.push(editingComp); toast(`Component ${editingComp.id} created`, 'ok'); } 
+  else { compDefs[editingCompIndex] = editingComp; toast(`Component ${editingComp.id} updated`, 'ok'); }
   
-  // Update JSON input
-  updateJSONFromComponents();
-  
-  // Reload components to apply changes
-  loadComponents();
-  
-  // Close editor
-  closeCompEditor();
+  updateJSONFromComponents(); loadComponents(); closeCompEditor();
 }
 
 function updateJSONFromComponents() {
   const data = {
-    board: {
-      cols: parseInt(document.getElementById('bCols').value) || 22,
-      rows: parseInt(document.getElementById('bRows').value) || 16
-    },
+    board: { cols: parseInt(document.getElementById('bCols').value) || 22, rows: parseInt(document.getElementById('bRows').value) || 16 },
     components: compDefs.map(cd => ({
-      id: cd.id,
-      name: cd.name,
-      value: cd.value,
-      color: cd.color,
+      id: cd.id, name: cd.name, value: cd.value, color: cd.color,
       pins: cd.offsets.map((off, i) => ({
-        offset: [off[0] + (cd.boardOffset ? cd.boardOffset[0] : 0), 
-                off[1] + (cd.boardOffset ? cd.boardOffset[1] : 0)],
-        net: cd.pinNets[i],
-        label: cd.pinLbls[i]
+        offset: [off[0] + (cd.boardOffset ? cd.boardOffset[0] : 0), off[1] + (cd.boardOffset ? cd.boardOffset[1] : 0)],
+        net: cd.pinNets[i], label: cd.pinLbls[i]
       }))
     }))
   };
-  
   document.getElementById('jsonInput').value = JSON.stringify(data, null, 2);
 }
 
-// FIXED: Comprehensive Bounding Box calculation
 function calculateFootprintArea() {
   if (components.length === 0) return { area: 0, bounds: { minCol: 0, maxCol: 0, minRow: 0, maxRow: 0 } };
   
   let minCol = Infinity, maxCol = -Infinity;
   let minRow = Infinity, maxRow = -Infinity;
   
-  // Account for components
   components.forEach(c => {
     minCol = Math.min(minCol, c.ox);
-    maxCol = Math.max(maxCol, c.ox + c.w - 1); // Inclusive grid units
+    maxCol = Math.max(maxCol, c.ox + c.w - 1); 
     minRow = Math.min(minRow, c.oy);
     maxRow = Math.max(maxRow, c.oy + c.h - 1);
   });
   
-  // Account for wires (even failed ones for safety)
   wires.forEach(w => {
     if (w.path) w.path.forEach(pt => {
       minCol = Math.min(minCol, pt.col);
@@ -1324,21 +1056,17 @@ function calculateFootprintArea() {
   return { area: width * height, bounds: { minCol, maxCol, minRow, maxRow } };
 }
 
-// NEW: Component-by-component rotation check
 async function tryRotateOptimize() {
   let bestWL = wires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
   let bestArea = calculateFootprintArea().area;
   let improved = false;
 
   for (let c of components) {
-    // Save original state before trying any rotations
     const originalW = c.w, originalH = c.h;
     const originalPins = c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow }));
     let cImproved = false;
 
-    // Try 90, 180, 270 degrees sequentially
     for (let rot = 1; rot <= 3; rot++) {
-      // Rotate 90 degrees from the CURRENT state
       const tempW = c.w;
       c.w = c.h;
       c.h = tempW;
@@ -1352,28 +1080,20 @@ async function tryRotateOptimize() {
         p.row = c.oy + p.dRow;
       });
 
-      // If it overlaps, keep this rotation and try rotating 90 more degrees
       if (anyOverlap(c, components)) continue;
 
       const testWires = await route(components, COLS, ROWS, () => {});
       const newArea = calculateFootprintArea().area;
       const newWL = testWires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
 
-      // Tie-breaker: Accept if Area is smaller OR (Area same AND WL shorter)
       if (completion(testWires) === 1.0 && (newArea < bestArea || (newArea === bestArea && newWL < bestWL))) {
-        bestArea = newArea;
-        bestWL = newWL;
-        wires = testWires;
-        improved = true;
-        cImproved = true;
-        break; // Stop rotating this component, move to the next
+        bestArea = newArea; bestWL = newWL; wires = testWires;
+        improved = true; cImproved = true; break; 
       }
     }
 
-    // If 90, 180, and 270 all failed or overlapped, revert to original
     if (!cImproved) {
-      c.w = originalW; 
-      c.h = originalH;
+      c.w = originalW; c.h = originalH;
       c.pins.forEach((p, idx) => {
         p.dCol = originalPins[idx].dCol;
         p.dRow = originalPins[idx].dRow;
@@ -1385,7 +1105,6 @@ async function tryRotateOptimize() {
   return improved;
 }
 
-// NEW: Recursive Push Logic
 async function doRecursivePushPacking() {
   const directions = [
     { name: 'Right', dx: 1, dy: 0, side: 'minCol' },
@@ -1404,7 +1123,6 @@ async function doRecursivePushPacking() {
 
     for (const d of directions) {
       const bbox = calculateFootprintArea().bounds;
-      // 1. Identify "Seed" components on current outermost edge
       let movingSet = new Set(components.filter(c => {
         if (d.side === 'minCol') return c.ox === bbox.minCol;
         if (d.side === 'maxCol') return (c.ox + c.w - 1) === bbox.maxCol;
@@ -1414,73 +1132,53 @@ async function doRecursivePushPacking() {
 
       if (movingSet.size === 0) continue;
 
-      // 2. Recursive expansion: find everything these seeds would hit
       let changed = true;
       while (changed) {
         changed = false;
         for (const c of movingSet) {
           const nx = c.ox + d.dx, ny = c.oy + d.dy;
-          // Find overlaps if THIS component moved
           components.forEach(other => {
             if (movingSet.has(other)) return;
-            // Check if 'c' moved by (dx, dy) would hit 'other'
             const overlap = (nx < other.ox + other.w && nx + c.w > other.ox &&
                              ny < other.oy + other.h && ny + c.h > other.oy);
-            if (overlap) {
-              movingSet.add(other);
-              changed = true;
-            }
+            if (overlap) { movingSet.add(other); changed = true; }
           });
         }
       }
 
-      // 3. Try to move the entire cluster
       const oldStates = saveComps();
       let validMove = true;
       for (const c of movingSet) {
         const nx = c.ox + d.dx, ny = c.oy + d.dy;
-        if (nx < 0 || nx + c.w > COLS || ny < 0 || ny + c.h > ROWS) {
-          validMove = false; break;
-        }
+        if (nx < 0 || nx + c.w > COLS || ny < 0 || ny + c.h > ROWS) { validMove = false; break; }
         moveComp(c, nx, ny);
       }
 
       if (validMove) {
         const testWires = await route(components, COLS, ROWS, () => {});
         const newArea = calculateFootprintArea().area;
-        // Accept if routing holds AND we didn't grow the box
         if (completion(testWires) === 1.0 && newArea <= bestArea) {
-          if (newArea < bestArea) {
-            bestArea = newArea;
-            improved = true;
-          }
+          if (newArea < bestArea) { bestArea = newArea; improved = true; }
           wires = testWires;
-        } else {
-          restoreComps(oldStates);
-        }
-      } else {
-        restoreComps(oldStates);
-      }
+        } else restoreComps(oldStates);
+      } else restoreComps(oldStates);
     }
     render(); await new Promise(r => setTimeout(r, 10));
   }
 }
 
-// MAIN ACTION: Auto-Converging Footprint Optimization
 async function doOptimizeFootprint() {
-  const MAX_CONFIGS = 50; // Hard cap so your browser doesn't hang forever
-  const PATIENCE = 6;     // Stop if we don't improve after this many configs
+  const MAX_CONFIGS = 50; 
+  const PATIENCE = 6;     
   
   let globalBestArea = Infinity;
   let globalBestWL = Infinity;
   let globalBestComps = null;
   let globalBestWires = null;
-  
   let configsWithoutImprovement = 0;
 
   showOverlay(true);
 
-  // Baseline capture (in case current layout is already great)
   const initialArea = calculateFootprintArea().area;
   if (initialArea > 0 && completion(wires) === 1.0) {
     globalBestArea = initialArea;
@@ -1492,14 +1190,11 @@ async function doOptimizeFootprint() {
   for (let config = 1; config <= MAX_CONFIGS; config++) {
     ostep(1);
     
-    // 1. JITTER (Evolutionary Mutation)
     if (config > 1 && globalBestComps) {
       setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Shuffling from best...`);
       restoreComps(globalBestComps); 
       
-      // Slightly kick components out of their local minima
       components.forEach(c => {
-        // 50% chance to move a component by 1 or 2 grid units
         if (Math.random() > 0.5) {
           const dx = (Math.random() > 0.5 ? 1 : -1) * Math.ceil(Math.random() * 2);
           const dy = (Math.random() > 0.5 ? 1 : -1) * Math.ceil(Math.random() * 2);
@@ -1513,24 +1208,19 @@ async function doOptimizeFootprint() {
       });
     }
 
-    // 2. PACK (Push everything to the center/edges)
     setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Initial Pack...`);
     await doRecursivePushPacking();
 
-    // 3. ROTATE (Find better orientations)
     setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Rotating...`);
     await tryRotateOptimize();
 
-    // 4. RE-PACK (Rotation might have opened new gaps!)
     setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Final Pack...`);
     await doRecursivePushPacking();
 
-    // 5. EVALUATE
     const currentArea = calculateFootprintArea().area;
     const currentWL = wires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
     const successRate = completion(wires);
 
-    // Track the winner across all seeds (must be 100% routed)
     if (successRate === 1.0 && (currentArea < globalBestArea || (currentArea === globalBestArea && currentWL < globalBestWL))) {
       globalBestArea = currentArea;
       globalBestWL = currentWL;
@@ -1538,20 +1228,18 @@ async function doOptimizeFootprint() {
       globalBestWires = [...wires];
       console.log(`[Optimizer ${config}] New Leader: Area ${currentArea}, WL ${currentWL}`);
       
-      configsWithoutImprovement = 0; // Reset patience because we found a better one!
+      configsWithoutImprovement = 0; 
     } else {
       configsWithoutImprovement++;
       console.log(`[Optimizer ${config}] No improvement. Patience: ${configsWithoutImprovement}/${PATIENCE}`);
     }
 
-    // 6. EARLY EXIT (Plateau Detection)
     if (configsWithoutImprovement >= PATIENCE && globalBestArea !== Infinity) {
       console.log(`[Optimizer] Converged after ${config} configs. Minimum footprint reached.`);
       break;
     }
   }
 
-  // Restore the absolute best configuration found
   if (globalBestComps) {
     restoreComps(globalBestComps);
     wires = globalBestWires;
@@ -1562,24 +1250,18 @@ async function doOptimizeFootprint() {
   toast(`Optimized to Area ${globalBestArea}`, "ok");
 }
 
-// Go back to previous configuration
 function goBack() {
-  if (!window.lastState) {
-    toast('No previous state to go back to', 'warn');
-    return;
-  }
+  if (!window.lastState) { toast('No previous state to go back to', 'warn'); return; }
   
   restoreComps(window.lastState.comps);
   wires = window.lastState.wires;
   
   render(); updateStats(); renderNetPanel();
   toast('Reverted to previous configuration', 'ok');
-  
-  // Clear the stored state
   window.lastState = null;
 }
 
-// Cut board to bounding box of components and wires
+// CHANGED: Added 1-unit padding to prevent elements from touching the absolute borders.
 function cutToBoundingBox() {
   if (!components.length) { 
     toast('No components loaded', 'warn'); 
@@ -1587,23 +1269,21 @@ function cutToBoundingBox() {
   }
   
   const { bounds } = calculateFootprintArea();
-  const newCols = bounds.maxCol - bounds.minCol;
-  const newRows = bounds.maxRow - bounds.minRow;
   
-  if (newCols <= 0 || newRows <= 0) {
-    toast('Invalid bounding box', 'warn');
-    return;
-  }
+  // Create 1-grid-unit padding around the bounding box
+  const pad = 1;
+  const newCols = (bounds.maxCol - bounds.minCol) + 1 + (pad * 2);
+  const newRows = (bounds.maxRow - bounds.minRow) + 1 + (pad * 2);
   
-  // Update board dimensions
+  if (newCols <= 0 || newRows <= 0) { toast('Invalid bounding box', 'warn'); return; }
+  
   COLS = newCols;
   ROWS = newRows;
   document.getElementById('bCols').value = newCols;
   document.getElementById('bRows').value = newRows;
   
-  // Shift all components to origin (0,0)
-  const offsetX = -bounds.minCol;
-  const offsetY = -bounds.minRow;
+  const offsetX = -bounds.minCol + pad;
+  const offsetY = -bounds.minRow + pad;
   
   components.forEach(comp => {
     comp.ox += offsetX;
@@ -1614,7 +1294,6 @@ function cutToBoundingBox() {
     });
   });
   
-  // Shift all wire paths
   wires.forEach(wire => {
     if (wire.path) {
       wire.path.forEach(point => {
@@ -1624,15 +1303,13 @@ function cutToBoundingBox() {
     }
   });
   
+  // This will cleanly resize the SVG
   applyBoard();
-  render(); updateStats(); renderNetPanel();
   
-  toast(`Board cut to ${newCols}×${newRows} (reduced from ${document.getElementById('bCols').value + offsetX}×${document.getElementById('bRows').value + offsetY})`, 'ok');
-  
-  saveState(); // Save state after cutting board
+  toast(`Board cut to ${newCols}×${newRows}`, 'ok');
+  saveState(); 
 }
 
-// Expose functions to global scope
 window.app = {
   applyBoard, loadTemplate, loadComponents,
   doPlaceAndRoute, doRouteOnly, doOptimizeFootprint, goBackState, goForwardState, exportCompleteState, cutToBoundingBox, clearWires, doExport, fullReset,
@@ -1641,5 +1318,4 @@ window.app = {
   addNewComponent, addNewPin, updatePinProperties, deletePin, deselectPin,
 };
 
-// Initialize state system on load
 initializeState();
