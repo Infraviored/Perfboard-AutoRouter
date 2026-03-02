@@ -131,6 +131,12 @@ textarea{min-height:100px;font-size:.68em;line-height:1.5}
   <button class="tbtn act" id="btnSel" onclick="app.setTool('sel')">↖ Select <kbd>V</kbd></button>
   <div class="sep"></div>
   <button class="tbtn grn" onclick="app.doPlaceAndRoute()">⚡ Place &amp; Route <kbd>F5</kbd></button>
+  <button class="tbtn" onclick="app.doOptimizeFootprint()">🔧 Optimize Footprint</button>
+  <button class="tbtn" onclick="app.goBack()">↶ Go Back</button>
+  <label style="display:flex;align-items:center;gap:4px;color:var(--txt0);font-size:.8em">
+    <input type="checkbox" id="autoOptimize" checked style="margin:0">
+    Auto-optimize
+  </label>
   <button class="tbtn" onclick="app.doRouteOnly()">〰 Route Only <kbd>F6</kbd></button>
   <button class="tbtn" onclick="app.clearWires()">⊘ Clear Wires</button>
   <div class="sep"></div>

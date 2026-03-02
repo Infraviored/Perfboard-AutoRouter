@@ -211,45 +211,49 @@ function moveComp(c, ox, oy) {
   c.pins.forEach(p => { p.col = ox + p.dCol; p.row = oy + p.dRow; });
 }
 
+// ── GLOBAL HELPER FUNCTIONS ──
+function saveComps() {
+  return components.map(c => ({ id: c.id, ox: c.ox, oy: c.oy }));
+}
+
+function restoreComps(saved) {
+  saved.forEach(s => {
+    const comp = components.find(c => c.id === s.id);
+    if (comp) {
+      comp.ox = s.ox; comp.oy = s.oy;
+      comp.pins.forEach(p => { p.col = s.ox + p.dCol; p.row = s.oy + p.dRow; });
+    }
+  });
+}
+
+function completion(wires) {
+  if (!wires.length) return 0;
+  const successful = wires.filter(w => !w.failed).length;
+  return successful / wires.length;
+}
+
 // ── MAIN ACTIONS ──
 async function doPlaceAndRoute() {
   if (!components.length) { toast('No components loaded', 'warn'); return; }
-
-  const maxIter = Math.max(1, parseInt(document.getElementById('bIter').value) || 3);
-
-  let bestWires      = [];
-  let bestComps      = null;   // deep-copy of component positions
-  let bestCompletion = -1;
-
-  function saveComps() {
-    return components.map(c => ({ id: c.id, ox: c.ox, oy: c.oy }));
-  }
-
-  function restoreComps(saved) {
-    saved.forEach(s => {
-      const c = components.find(x => x.id === s.id);
-      if (c) moveComp(c, s.ox, s.oy);
-    });
-  }
-
-  function completion(ws) {
-    const total = ws.length;
-    if (!total) return 0;
-    return ws.filter(w => !w.failed).length / total;
-  }
+  const maxAttempts = 100; // Try up to 100 configurations
+  let perfectWires = null;
+  let perfectComps = null;
+  let bestWires = null;
+  let bestComps = null;
+  let bestCompletion = 0;
 
   showOverlay(true);
 
-  for (let iter = 1; iter <= maxIter; iter++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     // ① Placement
     ostep(1);
-    document.getElementById('ot').textContent = `Iteration ${iter} / ${maxIter}`;
+    document.getElementById('ot').textContent = `Attempt ${attempt} / ${maxAttempts}`;
     setProg(0, 'Placing…');
 
-    // Reset to initial placement so SA starts fresh each iteration
+    // Reset to initial placement so SA starts fresh each attempt
     placeInitial();
     await anneal(components, COLS, ROWS, (p, s) => {
-      setProg(p * 100, `[${iter}/${maxIter}] SA — ${s}`);
+      setProg(p * 100, `[${attempt}/${maxAttempts}] SA — ${s}`);
       render();
     });
 
@@ -258,24 +262,54 @@ async function doPlaceAndRoute() {
     setProg(0, 'Routing…');
     const candidateWires = await route(
       components, COLS, ROWS,
-      (p, s) => { setProg(p * 100, `[${iter}/${maxIter}] Route — ${s}`); render(); }
+      (p, s) => { setProg(p * 100, `[${attempt}/${maxAttempts}] Route — ${s}`); render(); }
     );
 
     const c = completion(candidateWires);
 
+    // Track best attempt even if not perfect
     if (c > bestCompletion) {
       bestCompletion = c;
-      bestWires      = candidateWires;
-      bestComps      = saveComps();
+      bestWires = candidateWires;
+      bestComps = saveComps();
     }
 
-    // If perfect, stop early
-    if (bestCompletion === 1) break;
+    // Only accept if 100% successful (no failures)
+    if (c === 1.0) {
+      perfectWires = candidateWires;
+      perfectComps = saveComps();
+      console.log(`Perfect routing found on attempt ${attempt}!`);
+      break; // Stop immediately when we find perfect routing
+    }
+
+    // Log progress for debugging
+    if (attempt % 10 === 0) {
+      console.log(`Attempt ${attempt}: ${Math.round(c * 100)}% completion, still searching for perfect routing...`);
+    }
   }
 
-  // Restore best configuration
-  restoreComps(bestComps);
-  wires = bestWires;
+  if (perfectWires) {
+    // Restore perfect configuration
+    restoreComps(perfectComps);
+    wires = perfectWires;
+    
+    // ③ Post-placement optimization (optional)
+    const autoOptimize = document.getElementById('autoOptimize').checked;
+    if (autoOptimize) {
+      ostep(3);
+      setProg(0, 'Optimizing footprint…');
+      await optimizeFootprint();
+    }
+    
+    toast(`Perfect routing achieved!`, 'ok');
+  } else {
+    // No perfect routing found - restore best attempt for user to see
+    toast(`No perfect routing found after ${maxAttempts} attempts. Best completion: ${Math.round(bestCompletion * 100)}%`, 'warn');
+    if (bestComps) {
+      restoreComps(bestComps);
+      wires = bestWires;
+    }
+  }
 
   showOverlay(false);
   render(); updateStats(); renderNetPanel();
@@ -648,14 +682,6 @@ fetch('./default.json')
   })
   .catch(() => { /* no default.json, silent */ });
 
-window.app = {
-  applyBoard, loadTemplate, loadComponents,
-  doPlaceAndRoute, doRouteOnly, clearWires, doExport, fullReset,
-  setTool, adjZoom, fitView, selectComp, setHovNet,
-  openCompEditor, closeCompEditor, saveComponentEdit,
-  addNewComponent, addNewPin, updatePinProperties, deletePin, deselectPin,
-};
-
 // ── COMPONENT EDITOR ──
 function openCompEditor(compId) {
   const compIndex = compDefs.findIndex(cd => cd.id === compId);
@@ -1003,3 +1029,167 @@ function updateJSONFromComponents() {
   
   document.getElementById('jsonInput').value = JSON.stringify(data, null, 2);
 }
+
+// Calculate total footprint area of all components
+function calculateFootprintArea() {
+  if (components.length === 0) return { area: 0, bounds: { minCol: 0, maxCol: 0, minRow: 0, maxRow: 0 } };
+  
+  let minCol = Infinity, maxCol = -Infinity;
+  let minRow = Infinity, maxRow = -Infinity;
+  
+  components.forEach(comp => {
+    const compRight = comp.ox + comp.w;
+    const compBottom = comp.oy + comp.h;
+    
+    minCol = Math.min(minCol, comp.ox);
+    maxCol = Math.max(maxCol, compRight);
+    minRow = Math.min(minRow, comp.oy);
+    maxRow = Math.max(maxRow, compBottom);
+  });
+  
+  const width = maxCol - minCol;
+  const height = maxRow - minRow;
+  const area = width * height;
+  
+  return { area, bounds: { minCol, maxCol, minRow, maxRow } };
+}
+
+// Try to move components to reduce footprint area
+async function optimizeFootprint() {
+  const iterations = 50;
+  const originalComps = saveComps();
+  const originalWires = [...wires];
+  let bestArea = calculateFootprintArea().area;
+  let bestComps = originalComps;
+  let bestWires = originalWires;
+  let improvements = 0;
+  
+  console.log(`Starting optimization, initial area: ${bestArea}`);
+  
+  for (let i = 0; i < iterations; i++) {
+    setProg(i / iterations, `Optimization ${i+1}/${iterations} (Improvements: ${improvements})`);
+    
+    // Try moving one component
+    const compIndex = Math.floor(Math.random() * components.length);
+    const comp = components[compIndex];
+    const oldOx = comp.ox, oldOy = comp.oy;
+    
+    // Try moving component in random direction with larger steps
+    const stepSize = Math.random() < 0.5 ? 1 : 2;
+    const directions = [[0, -stepSize], [0, stepSize], [-stepSize, 0], [stepSize, 0], 
+                        [-stepSize, -stepSize], [-stepSize, stepSize], [stepSize, -stepSize], [stepSize, stepSize]];
+    const [dx, dy] = directions[Math.floor(Math.random() * directions.length)];
+    
+    const newOx = Math.max(0, Math.min(COLS - comp.w, comp.ox + dx));
+    const newOy = Math.max(0, Math.min(ROWS - comp.h, comp.oy + dy));
+    
+    // Skip if move doesn't actually change position
+    if (newOx === oldOx && newOy === oldOy) continue;
+    
+    // Check for overlaps
+    comp.ox = newOx; comp.oy = newOy;
+    comp.pins.forEach(p => { p.col = newOx + p.dCol; p.row = newOy + p.dRow; });
+    
+    const hasOverlap = components.some(other => 
+      other !== comp && 
+      comp.ox < other.ox + other.w && comp.ox + comp.w > other.ox &&
+      comp.oy < other.oy + other.h && comp.oy + comp.h > other.oy
+    );
+    
+    if (hasOverlap) {
+      // Restore position
+      comp.ox = oldOx; comp.oy = oldOy;
+      comp.pins.forEach(p => { p.col = oldOx + p.dCol; p.row = oldOy + p.dRow; });
+      continue;
+    }
+    
+    // Calculate new footprint area
+    const newArea = calculateFootprintArea().area;
+    
+    // Only consider moves that reduce area
+    if (newArea <= bestArea) {
+      // Try routing with new position to see if we can maintain perfect routing
+      const testWires = await route(components, COLS, ROWS, () => {});
+      const testCompletion = completion(testWires);
+      
+      // Only accept if we can still achieve perfect routing
+      if (testCompletion === 1.0) {
+        if (newArea < bestArea) {
+          improvements++;
+          console.log(`Improvement ${improvements}: ${bestArea} -> ${newArea} (perfect routing maintained)`);
+        }
+        bestArea = newArea;
+        bestComps = saveComps();
+        bestWires = [...testWires];
+        // Keep the new position - don't restore
+      } else {
+        // Restore position - routing would be broken
+        comp.ox = oldOx; comp.oy = oldOy;
+        comp.pins.forEach(p => { p.col = oldOx + p.dCol; p.row = oldOy + p.dRow; });
+        console.log(`Move rejected: would reduce routing to ${Math.round(testCompletion * 100)}%`);
+      }
+    } else {
+      // Restore position - area increased
+      comp.ox = oldOx; comp.oy = oldOy;
+      comp.pins.forEach(p => { p.col = oldOx + p.dCol; p.row = oldOy + p.dRow; });
+    }
+    
+    render();
+    await new Promise(r => setTimeout(r, 50)); // Slightly longer delay for routing test
+  }
+  
+  console.log(`Optimization complete. Best area: ${bestArea}, Total improvements: ${improvements}`);
+  
+  // Restore best configuration
+  restoreComps(bestComps);
+  wires = bestWires;
+}
+
+// Manual footprint optimization function
+async function doOptimizeFootprint() {
+  if (!components.length) { toast('No components loaded', 'warn'); return; }
+  if (!wires.length) { toast('Please run Place & Route first', 'warn'); return; }
+  
+  // Save current state before optimization
+  const previousComps = saveComps();
+  const previousWires = [...wires];
+  
+  showOverlay(true);
+  ostep(1);
+  setProg(0, 'Optimizing footprint…');
+  
+  await optimizeFootprint();
+  
+  showOverlay(false);
+  render(); updateStats(); renderNetPanel();
+  finishMsg();
+  
+  // Store previous state for go back
+  window.lastState = { comps: previousComps, wires: previousWires };
+}
+
+// Go back to previous configuration
+function goBack() {
+  if (!window.lastState) {
+    toast('No previous state to go back to', 'warn');
+    return;
+  }
+  
+  restoreComps(window.lastState.comps);
+  wires = window.lastState.wires;
+  
+  render(); updateStats(); renderNetPanel();
+  toast('Reverted to previous configuration', 'ok');
+  
+  // Clear the stored state
+  window.lastState = null;
+}
+
+// Expose functions to global scope
+window.app = {
+  applyBoard, loadTemplate, loadComponents,
+  doPlaceAndRoute, doRouteOnly, doOptimizeFootprint, goBack, clearWires, doExport, fullReset,
+  setTool, adjZoom, fitView, selectComp, setHovNet,
+  openCompEditor, closeCompEditor, saveComponentEdit,
+  addNewComponent, addNewPin, updatePinProperties, deletePin, deselectPin,
+};
