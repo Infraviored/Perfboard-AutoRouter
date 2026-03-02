@@ -24,8 +24,10 @@ function mstEdges(pins) {
 export function getAllNets(components) {
   const m = {};
   components.forEach(c => c.pins.forEach(p => {
-    if (!m[p.net]) m[p.net] = [];
-    m[p.net].push({ col: p.col, row: p.row, net: p.net });
+    if (p.net) {  // Only process pins that have nets
+      if (!m[p.net]) m[p.net] = [];
+      m[p.net].push({ col: p.col, row: p.row, net: p.net });
+    }
   }));
   return m;
 }

@@ -14,6 +14,9 @@ const NET_PAL = {
 const netColorCache = new Map();
 
 function netColor(n) {
+  // Return gray for null/undefined nets
+  if (!n) return '#666';
+  
   // Return predefined palette color if exists
   if (NET_PAL[n]) return NET_PAL[n];
   
@@ -157,14 +160,14 @@ function loadComponents() {
     const maxCol = Math.max(...colValues);
     const maxRow = Math.max(...rowValues);
     
-    // Normalize offsets to start from 0,0 for the component box
+    // Normalize offsets to start from 0,0 for component box
     const normalizedOffsets = offsets.map(off => [off[0] - minCol, off[1] - minRow]);
     
     return {
       id: cd.id || ('C'+(idx+1)), name: cd.name||'?', value: cd.value||'',
       color: cd.color||'#222a22',
       offsets: normalizedOffsets,
-      pinNets: cd.pins.map(p => p.net || ('NET'+idx)),
+      pinNets: cd.pins.map(p => p.net || null),
       pinLbls: cd.pins.map(p => p.label || p.lbl || String(idx+1)),
       w: maxCol - minCol + 1,
       h: maxRow - minRow + 1,

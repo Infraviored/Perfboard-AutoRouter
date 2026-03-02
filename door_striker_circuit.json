@@ -1,7 +1,7 @@
 {
   "board": {
-    "cols": 8,
-    "rows": 6
+    "cols": 30,
+    "rows": 30
   },
   "components": [
     {
@@ -10,8 +10,22 @@
       "value": "SuperMini",
       "color": "#1a3320",
       "pins": [
-        {"offset": [0, 0], "net": "GND", "label": "GND"},
-        {"offset": [0, 1], "net": "ESP_GPIO", "label": "GPIO"}
+        {"offset": [0, 0], "label": "IO0"},
+        {"offset": [1, 0], "label": "IO1"},
+        {"offset": [2, 0], "label": "IO2"},
+        {"offset": [3, 0], "label": "IO3"},
+        {"offset": [4, 0], "label": "IO4"},
+        {"offset": [5, 0], "net": "IO5", "label": "IO5"},
+        {"offset": [6, 0], "label": "IO6"},
+        {"offset": [7, 0], "label": "IO7"},
+        {"offset": [0, 6], "label": "IO8"},
+        {"offset": [1, 6], "label": "IO9"},
+        {"offset": [2, 6], "label": "IO10"},
+        {"offset": [3, 6], "label": "IO11"},
+        {"offset": [4, 6], "label": "IO12"},
+        {"offset": [5, 6], "label": "IO13"},
+        {"offset": [6, 6], "label": "IO14"},
+        {"offset": [7, 6], "net": "3V3", "label": "3V3"}
       ]
     },
     {
@@ -20,8 +34,8 @@
       "value": "220Ω",
       "color": "#2e1a08",
       "pins": [
-        {"offset": [2, 0], "net": "ESP_GPIO", "label": "A"},
-        {"offset": [2, 1], "net": "GATE", "label": "B"}
+        {"offset": [5, 8], "net": "IO5", "label": "A"},
+        {"offset": [5, 9], "net": "GATE", "label": "B"}
       ]
     },
     {
@@ -30,8 +44,8 @@
       "value": "47kΩ",
       "color": "#2e1a08",
       "pins": [
-        {"offset": [2, 3], "net": "GATE", "label": "A"},
-        {"offset": [2, 4], "net": "GND", "label": "B"}
+        {"offset": [7, 8], "net": "GATE", "label": "A"},
+        {"offset": [7, 9], "net": "GND", "label": "B"}
       ]
     },
     {
@@ -40,9 +54,9 @@
       "value": "IRLB8721",
       "color": "#1a3320",
       "pins": [
-        {"offset": [4, 2], "net": "GATE", "label": "G"},
-        {"offset": [5, 2], "net": "DRAIN", "label": "D"},
-        {"offset": [6, 2], "net": "SOURCE", "label": "S"}
+        {"offset": [9, 8], "net": "GATE", "label": "G"},
+        {"offset": [9, 9], "net": "DRAIN", "label": "D"},
+        {"offset": [9, 0], "net": "SOURCE", "label": "S"}
       ]
     },
     {
@@ -51,8 +65,8 @@
       "value": "12V Coil",
       "color": "#1a1a2e",
       "pins": [
-        {"offset": [5, 0], "net": "+12V", "label": "+"},
-        {"offset": [5, 1], "net": "DRAIN", "label": "-"}
+        {"offset": [0, 0], "net": "+12V", "label": "+"},
+        {"offset": [0, 1], "net": "DRAIN", "label": "-"}
       ]
     },
     {
@@ -61,15 +75,15 @@
       "value": "SS54",
       "color": "#2a0a18",
       "pins": [
-        {"offset": [6, 4], "net": "DRAIN", "label": "A"},
-        {"offset": [7, 4], "net": "+12V", "label": "K"}
+        {"offset": [2, 3], "net": "DRAIN", "label": "A"},
+        {"offset": [2, 4], "net": "+12V", "label": "K"}
       ]
     }
   ],
   "connections": [
     {"net": "+12V", "comment": "Power supply to door strike and flyback diode"},
+    {"net": "3V3", "comment": "3.3V power to ESP32"},
     {"net": "GND", "comment": "Common ground for ESP, pull-down, and MOSFET source"},
-    {"net": "ESP_GPIO", "comment": "ESP GPIO to gate resistor"},
     {"net": "GATE", "comment": "MOSFET gate from resistor and pull-down"},
     {"net": "DRAIN", "comment": "MOSFET drain to door strike and flyback diode"},
     {"net": "SOURCE", "comment": "MOSFET source to ground"}
