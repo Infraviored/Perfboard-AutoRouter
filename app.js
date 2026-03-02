@@ -168,6 +168,8 @@ function loadComponents() {
   badge(3);
   toast(`Loaded ${components.length} components`, 'ok');
   setStatus('Components loaded — click Place & Route');
+  
+  saveState(); // <-- ADDED
 }
 
 // ── PLACEMENT ──
@@ -411,7 +413,7 @@ async function doPlaceAndRoute() {
       await doRecursivePushPacking();
     }
     toast(`Perfect routing achieved!`, 'ok');
-    saveState(); 
+    // REMOVED saveState() from here so it saves regardless of success
   } else {
     toast(`No perfect routing found. Best completion: ${Math.round(bestCompletion * 100)}%`, 'warn');
     if (bestComps) { restoreComps(bestComps); wires = bestWires; }
@@ -420,6 +422,8 @@ async function doPlaceAndRoute() {
   showOverlay(false);
   render(); updateStats(); renderNetPanel();
   finishMsg();
+  
+  saveState(); // <-- ADDED (Now saves best attempt even if it wasn't 100% perfect)
 }
 
 async function doRouteOnly() {
@@ -429,9 +433,13 @@ async function doRouteOnly() {
   showOverlay(false);
   render(); updateStats(); renderNetPanel();
   finishMsg();
+  
+  saveState(); // <-- ADDED
 }
 
-function clearWires() { wires = []; render(); updateStats(); toast('Wires cleared', 'inf'); }
+function clearWires() { wires = []; render(); updateStats(); toast('Wires cleared', 'inf'); 
+  saveState(); // <-- ADDED 
+}
 
 function finishMsg() {
   const fail = wires.filter(w => w.failed).length;
@@ -749,16 +757,32 @@ function fullReset() {
 }
 
 document.addEventListener('keydown', e => {
+  // --- ADDED: Standard Undo/Redo Shortcuts ---
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    e.preventDefault();
+    goBackState();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) {
+    e.preventDefault();
+    goForwardState();
+    return;
+  }
+  // -------------------------------------------
+
   if (e.key==='v'||e.key==='V') setTool('sel');
   if (e.key==='F5') { e.preventDefault(); doPlaceAndRoute(); }
   if (e.key==='F6') { e.preventDefault(); doRouteOnly(); }
   if (e.key==='F7') { e.preventDefault(); debugBoard(); }
   if (e.key==='Escape') { selComp = null; selectComp(null); render(); }
+  
   if ((e.key==='Delete'||e.key==='Backspace') && selComp) {
     components = components.filter(c => c !== selComp);
     wires = []; selComp = null;
     selectComp(null); renderCompList(); render(); updateStats();
     toast('Component removed', 'warn');
+    
+    saveState(); // <-- ADDED
   }
 });
 
@@ -1261,7 +1285,6 @@ function goBack() {
   window.lastState = null;
 }
 
-// CHANGED: Added 1-unit padding to prevent elements from touching the absolute borders.
 function cutToBoundingBox() {
   if (!components.length) { 
     toast('No components loaded', 'warn'); 
@@ -1270,8 +1293,8 @@ function cutToBoundingBox() {
   
   const { bounds } = calculateFootprintArea();
   
-  // Create 1-grid-unit padding around the bounding box
-  const pad = 1;
+  // CHANGED: pad from 1 to 0 to remove the empty rim
+  const pad = 0;
   const newCols = (bounds.maxCol - bounds.minCol) + 1 + (pad * 2);
   const newRows = (bounds.maxRow - bounds.minRow) + 1 + (pad * 2);
   
@@ -1303,9 +1326,7 @@ function cutToBoundingBox() {
     }
   });
   
-  // This will cleanly resize the SVG
   applyBoard();
-  
   toast(`Board cut to ${newCols}×${newRows}`, 'ok');
   saveState(); 
 }
