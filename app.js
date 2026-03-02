@@ -490,7 +490,7 @@ async function doPlaceAndRoute() {
     if (autoOptimize) {
       ostep(3);
       setProg(0, 'Optimizing footprint…');
-      await optimizeFootprint();
+      await doRecursivePushPacking();
     }
     
     toast(`Perfect routing achieved!`, 'ok');
@@ -554,18 +554,18 @@ function render() {
   drawWires();
   components.forEach(c => renderComp(c));
   
-  // Draw bounding box around all components and wires
-  if (components.length > 0 && (wires.length > 0 || components.length > 0)) {
+  // DRAW CORRECT BOUNDING BOX
+  if (components.length > 0) {
     const bbox = calculateFootprintArea();
     const { minCol, maxCol, minRow, maxRow } = bbox.bounds;
     
-    // Draw light grey bounding box
-    ctx.strokeStyle = 'rgba(128, 128, 128, 0.6)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([5, 3]);
+    ctx.strokeStyle = 'rgba(0, 255, 128, 0.4)'; // Subtle green for "safe" box
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 4]);
+    // The box must cover the full diameter of the outer pads (inclusive)
     ctx.strokeRect(
-      minCol * SP - SP/2, 
-      minRow * SP - SP/2, 
+      minCol * SP, 
+      minRow * SP, 
       (maxCol - minCol + 1) * SP, 
       (maxRow - minRow + 1) * SP
     );
@@ -877,6 +877,7 @@ document.addEventListener('keydown', e => {
   if (e.key==='v'||e.key==='V') setTool('sel');
   if (e.key==='F5') { e.preventDefault(); doPlaceAndRoute(); }
   if (e.key==='F6') { e.preventDefault(); doRouteOnly(); }
+  if (e.key==='F7') { e.preventDefault(); debugBoard(); }
   if (e.key==='Escape') { selComp = null; selectComp(null); render(); }
   if ((e.key==='Delete'||e.key==='Backspace') && selComp) {
     components = components.filter(c => c !== selComp);
@@ -885,6 +886,24 @@ document.addEventListener('keydown', e => {
     toast('Component removed', 'warn');
   }
 });
+
+// Debug function to print board congestion heatmap
+function debugBoard() {
+  console.log("=== DEBUG BOARD CONGESTION ===");
+  const grid = new Grid(COLS, ROWS);
+  components.forEach(c => grid.registerComp(c));
+  wires.forEach(w => {
+    if (!w.failed && w.path) {
+      grid.markWire(w.path);
+    }
+  });
+  grid.debugPrint();
+  
+  // Also show current bounding box anchors
+  const bbox = calculateFootprintArea();
+  console.log("Current Bounding Box:", bbox);
+  toast("Debug info logged to console", "inf");
+}
 
 // ── INIT ──
 applyBoard();
@@ -1247,133 +1266,122 @@ function updateJSONFromComponents() {
   document.getElementById('jsonInput').value = JSON.stringify(data, null, 2);
 }
 
-// Calculate total footprint area including components and wires
+// FIXED: Comprehensive Bounding Box calculation
 function calculateFootprintArea() {
   if (components.length === 0) return { area: 0, bounds: { minCol: 0, maxCol: 0, minRow: 0, maxRow: 0 } };
   
   let minCol = Infinity, maxCol = -Infinity;
   let minRow = Infinity, maxRow = -Infinity;
   
-  // Include component bounds
-  components.forEach(comp => {
-    const compRight = comp.ox + comp.w;
-    const compBottom = comp.oy + comp.h;
-    
-    minCol = Math.min(minCol, comp.ox);
-    maxCol = Math.max(maxCol, compRight);
-    minRow = Math.min(minRow, comp.oy);
-    maxRow = Math.max(maxRow, compBottom);
+  // Account for components
+  components.forEach(c => {
+    minCol = Math.min(minCol, c.ox);
+    maxCol = Math.max(maxCol, c.ox + c.w - 1); // Inclusive grid units
+    minRow = Math.min(minRow, c.oy);
+    maxRow = Math.max(maxRow, c.oy + c.h - 1);
   });
   
-  // Include wire path bounds
-  wires.forEach(wire => {
-    if (wire.path && wire.path.length > 0) {
-      wire.path.forEach(point => {
-        minCol = Math.min(minCol, point.col);
-        maxCol = Math.max(maxCol, point.col);
-        minRow = Math.min(minRow, point.row);
-        maxRow = Math.max(maxRow, point.row);
-      });
-    }
+  // Account for wires (even failed ones for safety)
+  wires.forEach(w => {
+    if (w.path) w.path.forEach(pt => {
+      minCol = Math.min(minCol, pt.col);
+      maxCol = Math.max(maxCol, pt.col);
+      minRow = Math.min(minRow, pt.row);
+      maxRow = Math.max(maxRow, pt.row);
+    });
   });
   
-  const width = maxCol - minCol;
-  const height = maxRow - minRow;
-  const area = width * height;
-  
-  return { area, bounds: { minCol, maxCol, minRow, maxRow } };
+  const width = (maxCol - minCol + 1);
+  const height = (maxRow - minRow + 1);
+  return { area: width * height, bounds: { minCol, maxCol, minRow, maxRow } };
 }
 
-// Try to move components to reduce footprint area using force-directed attraction
-async function optimizeFootprint() {
-  const iterations = 80;
-  const boardCenterX = Math.floor(COLS / 2);
-  const boardCenterY = Math.floor(ROWS / 2);
-  let bestWires = [...wires];
-  let bestComps = saveComps();
-  let bestArea = (components.length > 0 && (wires.length > 0 || components.length > 0)) 
-    ? calculateFootprintArea().area 
-    : Infinity;
-  
-  console.log(`Starting force-directed optimization with initial bounding area: ${bestArea}`);
+// NEW: Recursive Push Logic
+async function doRecursivePushPacking() {
+  const directions = [
+    { name: 'Right', dx: 1, dy: 0, side: 'minCol' },
+    { name: 'Left',  dx: -1, dy: 0, side: 'maxCol' },
+    { name: 'Down',  dx: 0, dy: 1, side: 'minRow' },
+    { name: 'Up',    dx: 0, dy: -1, side: 'maxRow' }
+  ];
 
-  for (let i = 0; i < iterations; i++) {
-    setProg((i / iterations) * 100, `Force-Directed Optimization ${i+1}/${iterations}`);
-    
-    const c = components[Math.floor(Math.random() * components.length)];
-    const oldPos = { ox: c.ox, oy: c.oy };
+  let bestArea = calculateFootprintArea().area;
+  let improved = true;
+  let loops = 0;
 
-    // 1. Calculate ATTRACTION FORCE (Pull toward connected components)
-    let attractX = 0, attractY = 0, connections = 0;
-    const myNets = new Set(c.pins.map(p => p.net));
+  console.log(`Starting Pressure Packing. Initial Area: ${bestArea}`);
 
-    components.forEach(other => {
-      if (other === c) return;
-      if (other.pins.some(p => myNets.has(p.net))) {
-        attractX += (other.ox + other.w/2);
-        attractY += (other.oy + other.h/2);
-        connections++;
-      }
-    });
+  while (improved && loops < 20) {
+    improved = false;
+    loops++;
 
-    // 2. Calculate TARGET VECTOR
-    let targetX, targetY;
-    if (connections > 0) {
-      // Pull toward connections (70%) and board center (30%)
-      targetX = (attractX / connections) * 0.7 + boardCenterX * 0.3;
-      targetY = (attractY / connections) * 0.7 + boardCenterY * 0.3;
-    } else {
-      targetX = boardCenterX;
-      targetY = boardCenterY;
-    }
+    for (const d of directions) {
+      const bbox = calculateFootprintArea().bounds;
+      // 1. Identify "Seed" components on current outermost edge
+      let movingSet = new Set(components.filter(c => {
+        if (d.side === 'minCol') return c.ox === bbox.minCol;
+        if (d.side === 'maxCol') return (c.ox + c.w - 1) === bbox.maxCol;
+        if (d.side === 'minRow') return c.oy === bbox.minRow;
+        if (d.side === 'maxRow') return (c.oy + c.h - 1) === bbox.maxRow;
+      }));
 
-    // 3. APPLY VECTOR MOVE
-    const dx = Math.sign(targetX - (c.ox + c.w/2));
-    const dy = Math.sign(targetY - (c.oy + c.h/2));
-    
-    // Add 15% random noise to prevent local minima "stuck" states
-    const finalDx = Math.random() < 0.15 ? (Math.random() > 0.5 ? 1 : -1) : dx;
-    const finalDy = Math.random() < 0.15 ? (Math.random() > 0.5 ? 1 : -1) : dy;
+      if (movingSet.size === 0) continue;
 
-    const nx = Math.max(0, Math.min(COLS - c.w, c.ox + finalDx));
-    const ny = Math.max(0, Math.min(ROWS - c.h, c.oy + finalDy));
-
-    moveComp(c, nx, ny);
-
-    // 4. ROUTING VALIDATION
-    if (anyOverlap(c, components)) {
-      moveComp(c, oldPos.ox, oldPos.oy);
-    } else {
-      const testWires = await route(components, COLS, ROWS, () => {});
-      const successRate = completion(testWires);
-      const newArea = calculateFootprintArea().area;
-      
-      // Only accept if: perfect routing AND strictly smaller bounding box area
-      if (successRate === 1.0 && newArea < bestArea) {
-        // Accepted move!
-        bestWires = testWires;
-        bestComps = saveComps();
-        bestArea = newArea;
-        console.log(`Improvement: ${bestArea} -> ${newArea} (connections: ${connections})`);
-      } else {
-        // Revert: move broke the routing or didn't reduce area
-        moveComp(c, oldPos.ox, oldPos.oy);
-        if (successRate !== 1.0) {
-          console.log(`Move rejected: routing reduced to ${Math.round(successRate * 100)}%`);
-        } else if (newArea >= bestArea) {
-          console.log(`Move rejected: area not reduced (${newArea} >= ${bestArea})`);
+      // 2. Recursive expansion: find everything these seeds would hit
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const c of movingSet) {
+          const nx = c.ox + d.dx, ny = c.oy + d.dy;
+          // Find overlaps if THIS component moved
+          components.forEach(other => {
+            if (movingSet.has(other)) return;
+            // Check if 'c' moved by (dx, dy) would hit 'other'
+            const overlap = (nx < other.ox + other.w && nx + c.w > other.ox &&
+                             ny < other.oy + other.h && ny + c.h > other.oy);
+            if (overlap) {
+              movingSet.add(other);
+              changed = true;
+            }
+          });
         }
       }
-    }
-    
-    if (i % 4 === 0) { render(); await new Promise(r => setTimeout(r, 10)); }
-  }
 
-  restoreComps(bestComps);
-  wires = bestWires;
-  console.log(`Force-directed optimization complete. Final bounding area: ${bestArea}`);
+      // 3. Try to move the entire cluster
+      const oldStates = saveComps();
+      let validMove = true;
+      for (const c of movingSet) {
+        const nx = c.ox + d.dx, ny = c.oy + d.dy;
+        if (nx < 0 || nx + c.w > COLS || ny < 0 || ny + c.h > ROWS) {
+          validMove = false; break;
+        }
+        moveComp(c, nx, ny);
+      }
+
+      if (validMove) {
+        const testWires = await route(components, COLS, ROWS, () => {});
+        const newArea = calculateFootprintArea().area;
+        // Accept if routing holds AND we didn't grow the box
+        if (completion(testWires) === 1.0 && newArea <= bestArea) {
+          if (newArea < bestArea) {
+            console.log(`- Area Improved: ${bestArea} -> ${newArea} (via Push ${d.name})`);
+            bestArea = newArea;
+            improved = true;
+          }
+          wires = testWires;
+        } else {
+          restoreComps(oldStates);
+        }
+      } else {
+        restoreComps(oldStates);
+      }
+    }
+    render(); await new Promise(r => setTimeout(r, 10));
+  }
+  
+  console.log(`Packing Complete. Final Area: ${bestArea}`);
+  toast(`Layout Packed to ${bestArea} units`, "ok");
   saveState();
-  toast("Layout packed & traces straightened", "ok");
 }
 
 // Manual footprint optimization function
@@ -1381,22 +1389,12 @@ async function doOptimizeFootprint() {
   if (!components.length) { toast('No components loaded', 'warn'); return; }
   if (!wires.length) { toast('Please run Place & Route first', 'warn'); return; }
   
-  // Save current state before optimization
-  const previousComps = saveComps();
-  const previousWires = [...wires];
-  
   showOverlay(true);
   ostep(1);
-  setProg(0, 'Optimizing footprint…');
-  
-  await optimizeFootprint();
-  
+  setProg(50, 'Applying Pressure Packing…');
+  await doRecursivePushPacking();
   showOverlay(false);
-  render(); updateStats(); renderNetPanel();
-  finishMsg();
-  
-  // Store previous state for go back
-  window.lastState = { comps: previousComps, wires: previousWires };
+  updateStats();
 }
 
 // Go back to previous configuration
