@@ -416,6 +416,14 @@ function completion(wires) {
   return successful / wires.length;
 }
 
+function anyOverlap(comp, allComps) {
+  return allComps.some(other => 
+    other !== comp && 
+    comp.ox < other.ox + other.w && comp.ox + comp.w > other.ox &&
+    comp.oy < other.oy + other.h && comp.oy + comp.h > other.oy
+  );
+}
+
 // ── MAIN ACTIONS ──
 async function doPlaceAndRoute() {
   if (!components.length) { toast('No components loaded', 'warn'); return; }
@@ -545,6 +553,24 @@ function render() {
   if (!wires.length) drawRatsnest();
   drawWires();
   components.forEach(c => renderComp(c));
+  
+  // Draw bounding box around all components and wires
+  if (components.length > 0 && (wires.length > 0 || components.length > 0)) {
+    const bbox = calculateFootprintArea();
+    const { minCol, maxCol, minRow, maxRow } = bbox.bounds;
+    
+    // Draw light grey bounding box
+    ctx.strokeStyle = 'rgba(128, 128, 128, 0.6)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 3]);
+    ctx.strokeRect(
+      minCol * SP - SP/2, 
+      minRow * SP - SP/2, 
+      (maxCol - minCol + 1) * SP, 
+      (maxRow - minRow + 1) * SP
+    );
+    ctx.setLineDash([]);
+  }
 
   if (selComp) {
     const s = selComp;
@@ -655,12 +681,18 @@ function updateStats() {
   const tc   = nk.filter(n => nets[n].length >= 2).reduce((s,n) => s + nets[n].length - 1, 0);
   const wl   = wires.filter(w => !w.failed).reduce((s,w) => s + w.path.length - 1, 0);
   const pct  = tc > 0 ? Math.round(ok / tc * 100) : null;
+  
+  // Calculate bounding box area
+  const bboxArea = (components.length > 0 && (wires.length > 0 || components.length > 0)) 
+    ? calculateFootprintArea().area 
+    : 0;
 
   document.getElementById('stC').textContent = components.length;
   document.getElementById('stN').textContent = nk.length;
   document.getElementById('stW').textContent = ok;
   document.getElementById('stF').textContent = fail;
   document.getElementById('stL').textContent = wl || '—';
+  document.getElementById('stA').textContent = bboxArea || '—';
   const pe = document.getElementById('stP');
   if (pct === null)    { pe.textContent = '—';       pe.style.color = 'var(--txt2)'; }
   else if (pct === 100){ pe.textContent = '100% ✓';  pe.style.color = 'var(--grn)';  }
@@ -1252,97 +1284,96 @@ function calculateFootprintArea() {
   return { area, bounds: { minCol, maxCol, minRow, maxRow } };
 }
 
-// Try to move components to reduce footprint area
+// Try to move components to reduce footprint area using force-directed attraction
 async function optimizeFootprint() {
-  const iterations = 50;
-  const originalComps = saveComps();
-  const originalWires = [...wires];
-  let bestArea = calculateFootprintArea().area;
-  let bestComps = originalComps;
-  let bestWires = originalWires;
-  let improvements = 0;
+  const iterations = 80;
+  const boardCenterX = Math.floor(COLS / 2);
+  const boardCenterY = Math.floor(ROWS / 2);
+  let bestWires = [...wires];
+  let bestComps = saveComps();
+  let bestArea = (components.length > 0 && (wires.length > 0 || components.length > 0)) 
+    ? calculateFootprintArea().area 
+    : Infinity;
   
-  console.log(`Starting optimization, initial area: ${bestArea}`);
-  
+  console.log(`Starting force-directed optimization with initial bounding area: ${bestArea}`);
+
   for (let i = 0; i < iterations; i++) {
-    setProg(i / iterations, `Optimization ${i+1}/${iterations} (Improvements: ${improvements})`);
+    setProg((i / iterations) * 100, `Force-Directed Optimization ${i+1}/${iterations}`);
     
-    // Try moving one component
-    const compIndex = Math.floor(Math.random() * components.length);
-    const comp = components[compIndex];
-    const oldOx = comp.ox, oldOy = comp.oy;
-    
-    // Try moving component in random direction with larger steps
-    const stepSize = Math.random() < 0.5 ? 1 : 2;
-    const directions = [[0, -stepSize], [0, stepSize], [-stepSize, 0], [stepSize, 0], 
-                        [-stepSize, -stepSize], [-stepSize, stepSize], [stepSize, -stepSize], [stepSize, stepSize]];
-    const [dx, dy] = directions[Math.floor(Math.random() * directions.length)];
-    
-    const newOx = Math.max(0, Math.min(COLS - comp.w, comp.ox + dx));
-    const newOy = Math.max(0, Math.min(ROWS - comp.h, comp.oy + dy));
-    
-    // Skip if move doesn't actually change position
-    if (newOx === oldOx && newOy === oldOy) continue;
-    
-    // Check for overlaps
-    comp.ox = newOx; comp.oy = newOy;
-    comp.pins.forEach(p => { p.col = newOx + p.dCol; p.row = newOy + p.dRow; });
-    
-    const hasOverlap = components.some(other => 
-      other !== comp && 
-      comp.ox < other.ox + other.w && comp.ox + comp.w > other.ox &&
-      comp.oy < other.oy + other.h && comp.oy + comp.h > other.oy
-    );
-    
-    if (hasOverlap) {
-      // Restore position
-      comp.ox = oldOx; comp.oy = oldOy;
-      comp.pins.forEach(p => { p.col = oldOx + p.dCol; p.row = oldOy + p.dRow; });
-      continue;
-    }
-    
-    // Calculate new footprint area
-    const newArea = calculateFootprintArea().area;
-    
-    // Only consider moves that reduce area
-    if (newArea <= bestArea) {
-      // Try routing with new position to see if we can maintain perfect routing
-      const testWires = await route(components, COLS, ROWS, () => {});
-      const testCompletion = completion(testWires);
-      
-      // Only accept if we can still achieve perfect routing
-      if (testCompletion === 1.0) {
-        if (newArea < bestArea) {
-          improvements++;
-          console.log(`Improvement ${improvements}: ${bestArea} -> ${newArea} (perfect routing maintained)`);
-        }
-        bestArea = newArea;
-        bestComps = saveComps();
-        bestWires = [...testWires];
-        // Keep the new position - don't restore
-      } else {
-        // Restore position - routing would be broken
-        comp.ox = oldOx; comp.oy = oldOy;
-        comp.pins.forEach(p => { p.col = oldOx + p.dCol; p.row = oldOy + p.dRow; });
-        console.log(`Move rejected: would reduce routing to ${Math.round(testCompletion * 100)}%`);
+    const c = components[Math.floor(Math.random() * components.length)];
+    const oldPos = { ox: c.ox, oy: c.oy };
+
+    // 1. Calculate ATTRACTION FORCE (Pull toward connected components)
+    let attractX = 0, attractY = 0, connections = 0;
+    const myNets = new Set(c.pins.map(p => p.net));
+
+    components.forEach(other => {
+      if (other === c) return;
+      if (other.pins.some(p => myNets.has(p.net))) {
+        attractX += (other.ox + other.w/2);
+        attractY += (other.oy + other.h/2);
+        connections++;
       }
+    });
+
+    // 2. Calculate TARGET VECTOR
+    let targetX, targetY;
+    if (connections > 0) {
+      // Pull toward connections (70%) and board center (30%)
+      targetX = (attractX / connections) * 0.7 + boardCenterX * 0.3;
+      targetY = (attractY / connections) * 0.7 + boardCenterY * 0.3;
     } else {
-      // Restore position - area increased
-      comp.ox = oldOx; comp.oy = oldOy;
-      comp.pins.forEach(p => { p.col = oldOx + p.dCol; p.row = oldOy + p.dRow; });
+      targetX = boardCenterX;
+      targetY = boardCenterY;
+    }
+
+    // 3. APPLY VECTOR MOVE
+    const dx = Math.sign(targetX - (c.ox + c.w/2));
+    const dy = Math.sign(targetY - (c.oy + c.h/2));
+    
+    // Add 15% random noise to prevent local minima "stuck" states
+    const finalDx = Math.random() < 0.15 ? (Math.random() > 0.5 ? 1 : -1) : dx;
+    const finalDy = Math.random() < 0.15 ? (Math.random() > 0.5 ? 1 : -1) : dy;
+
+    const nx = Math.max(0, Math.min(COLS - c.w, c.ox + finalDx));
+    const ny = Math.max(0, Math.min(ROWS - c.h, c.oy + finalDy));
+
+    moveComp(c, nx, ny);
+
+    // 4. ROUTING VALIDATION
+    if (anyOverlap(c, components)) {
+      moveComp(c, oldPos.ox, oldPos.oy);
+    } else {
+      const testWires = await route(components, COLS, ROWS, () => {});
+      const successRate = completion(testWires);
+      const newArea = calculateFootprintArea().area;
+      
+      // Only accept if: perfect routing AND strictly smaller bounding box area
+      if (successRate === 1.0 && newArea < bestArea) {
+        // Accepted move!
+        bestWires = testWires;
+        bestComps = saveComps();
+        bestArea = newArea;
+        console.log(`Improvement: ${bestArea} -> ${newArea} (connections: ${connections})`);
+      } else {
+        // Revert: move broke the routing or didn't reduce area
+        moveComp(c, oldPos.ox, oldPos.oy);
+        if (successRate !== 1.0) {
+          console.log(`Move rejected: routing reduced to ${Math.round(successRate * 100)}%`);
+        } else if (newArea >= bestArea) {
+          console.log(`Move rejected: area not reduced (${newArea} >= ${bestArea})`);
+        }
+      }
     }
     
-    render();
-    await new Promise(r => setTimeout(r, 50)); // Slightly longer delay for routing test
+    if (i % 4 === 0) { render(); await new Promise(r => setTimeout(r, 10)); }
   }
-  
-  console.log(`Optimization complete. Best area: ${bestArea}, Total improvements: ${improvements}`);
-  
-  // Restore best configuration
+
   restoreComps(bestComps);
   wires = bestWires;
-  
-  saveState(); // Save state after optimization
+  console.log(`Force-directed optimization complete. Final bounding area: ${bestArea}`);
+  saveState();
+  toast("Layout packed & traces straightened", "ok");
 }
 
 // Manual footprint optimization function

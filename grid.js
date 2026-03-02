@@ -130,4 +130,89 @@ export class Grid {
       this.set(pt.col, pt.row, BLOCKED_WIRE);
     });
   }
+
+  // Multi-source A* for branching routing - starts from any point in the current net tree
+  astarMultiSource(startIndices, ec, er) {
+    const md = (c, r) => Math.abs(c - ec) + Math.abs(r - er);
+    const key = (c, r) => r * this.cols + c;
+    
+    const open = [];
+    const gScore = new Float32Array(this.cols * this.rows).fill(1e6);
+    const parent = new Int32Array(this.cols * this.rows).fill(-1);
+
+    // Initialize: All points currently in the net's "tree" are valid starting points
+    for (const idx of startIndices) {
+      const sc = idx % this.cols;
+      const sr = Math.floor(idx / this.cols);
+      gScore[idx] = 0;
+      open.push({ c: sc, r: sr, f: md(sc, sr) });
+    }
+
+    const maxIters = this.cols * this.rows * 4;
+    let iters = 0;
+
+    while (open.length > 0 && iters++ < maxIters) {
+      let bi = 0;
+      for (let i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
+      const cur = open.splice(bi, 1)[0];
+      const { c, r } = cur;
+
+      if (c === ec && r === er) {
+        const path = [];
+        let k = key(ec, er);
+        while (k !== -1 && !startIndices.has(k)) {
+          path.unshift({ col: k % this.cols, row: Math.floor(k / this.cols) });
+          k = parent[k];
+        }
+        // Add the branching point from the existing tree
+        if (k !== -1) path.unshift({ col: k % this.cols, row: Math.floor(k / this.cols) });
+        return path;
+      }
+
+      for (const [dc, dr] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+        const nc = c + dc, nr = r + dr;
+        if (!this.inBounds(nc, nr)) continue;
+        const nk = key(nc, nr);
+
+        // Passability: Can pass through free space or the target pin
+        const isTarget = (nc === ec && nr === er);
+        if (!isTarget && !this.isFree(nc, nr)) continue; 
+        if (isTarget && !this.canTerminate(nc, nr)) continue;
+
+        // 1. DIRECTION CHANGE PENALTY
+        let moveCost = 1.0;
+        if (parent[key(c,r)] !== -1) {
+          const pk = parent[key(c,r)];
+          const pc = pk % this.cols, pr = Math.floor(pk / this.cols);
+          if ((c - pc) !== dc || (r - pr) !== dr) {
+            moveCost += 1.5; // Turning is "expensive"
+          }
+        }
+
+        // 2. PIN ESCAPE BUFFER
+        // If moving adjacent to a pin that isn't our target, add cost
+        if (!isTarget && this.hasNearbyPin(nc, nr, ec, er)) {
+          moveCost += 2.0; 
+        }
+
+        const ng = gScore[key(c, r)] + moveCost;
+        if (ng < gScore[nk]) {
+          gScore[nk] = ng;
+          parent[nk] = key(c, r);
+          open.push({ c: nc, r: nr, f: ng + md(nc, nr) });
+        }
+      }
+    }
+    return null;
+  }
+
+  // Helper to check if a cell is "squeezing" a pin
+  hasNearbyPin(c, r, targetC, targetR) {
+    for (const [dc, dr] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+      const nc = c+dc, nr = r+dr;
+      if (nc === targetC && nr === targetR) continue; // It's okay to be near our target
+      if (this.has(nc, nr, BLOCKED_PIN)) return true;
+    }
+    return false;
+  }
 }
