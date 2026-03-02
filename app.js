@@ -1482,108 +1482,105 @@ async function tryRotateOptimize() {
   return improved;
 }
 
+// Gravity Packer: Pulls all components toward the center of mass
 async function doRecursivePushPacking() {
-  const directions = [
-    { name: 'Right', dx: 1, dy: 0, side: 'minCol' },
-    { name: 'Left',  dx: -1, dy: 0, side: 'maxCol' },
-    { name: 'Down',  dx: 0, dy: 1, side: 'minRow' },
-    { name: 'Up',    dx: 0, dy: -1, side: 'maxRow' }
-  ];
-
+  let changed = true;
+  let loops = 0;
   let bestComp = completion(wires);
   let bestArea = calculateFootprintArea().area;
-  let improved = true;
-  let loops = 0;
 
-  while (improved && loops < 20) {
-    improved = false;
+  while (changed && loops < 25) {
+    changed = false;
     loops++;
 
-    for (const d of directions) {
-      const bbox = calculateFootprintArea().bounds;
-      let movingSet = new Set(components.filter(c => {
-        if (d.side === 'minCol') return c.ox === bbox.minCol;
-        if (d.side === 'maxCol') return (c.ox + c.w - 1) === bbox.maxCol;
-        if (d.side === 'minRow') return c.oy === bbox.minRow;
-        if (d.side === 'maxRow') return (c.oy + c.h - 1) === bbox.maxRow;
-      }));
+    const { bounds } = calculateFootprintArea();
+    const cx = bounds.minCol + (bounds.maxCol - bounds.minCol) / 2;
+    const cy = bounds.minRow + (bounds.maxRow - bounds.minRow) / 2;
 
-      if (movingSet.size === 0) continue;
+    // Sort components: furthest from center move first
+    const sorted = [...components].sort((a, b) => {
+       const distA = Math.max(Math.abs(a.ox + a.w/2 - cx), Math.abs(a.oy + a.h/2 - cy));
+       const distB = Math.max(Math.abs(b.ox + b.w/2 - cx), Math.abs(b.oy + b.h/2 - cy));
+       return distB - distA;
+    });
 
-      let changed = true;
-      while (changed) {
-        changed = false;
-        for (const c of movingSet) {
-          const nx = c.ox + d.dx, ny = c.oy + d.dy;
-          components.forEach(other => {
-            if (movingSet.has(other)) return;
-            const overlap = (nx < other.ox + other.w && nx + c.w > other.ox &&
-                             ny < other.oy + other.h && ny + c.h > other.oy);
-            if (overlap) { movingSet.add(other); changed = true; }
-          });
-        }
-      }
+    const oldStates = saveComps();
+    let moveOccurred = false;
 
-      const oldStates = saveComps();
-      let validMove = true;
-      for (const c of movingSet) {
-        const nx = c.ox + d.dx, ny = c.oy + d.dy;
-        if (nx < 0 || nx + c.w > COLS || ny < 0 || ny + c.h > ROWS) { validMove = false; break; }
-        moveComp(c, nx, ny);
-      }
+    for (let c of sorted) {
+       let dx = 0, dy = 0;
+       
+       if (c.ox + c.w/2 < cx - 0.5) dx = 1;
+       else if (c.ox + c.w/2 > cx + 0.5) dx = -1;
 
-      if (validMove) {
-        const testWires = await route(components, COLS, ROWS, () => {}, getRouteUnder()); // <--- ADDED
-        const newArea = calculateFootprintArea().area;
-        const testComp = completion(testWires);
+       if (c.oy + c.h/2 < cy - 0.5) dy = 1;
+       else if (c.oy + c.h/2 > cy + 0.5) dy = -1;
 
-        let isBetter = false;
-        if (testComp > bestComp) isBetter = true;
-        else if (testComp === bestComp && newArea < bestArea) isBetter = true;
-        // Allow pure sliding if area is equal to pack tight against edges
-        else if (testComp === bestComp && newArea === bestArea) isBetter = true; 
+       const tryMove = (mx, my) => {
+         if (mx === 0 && my === 0) return false;
+         moveComp(c, c.ox + mx, c.oy + my);
+         if (anyOverlap(c, components)) {
+            moveComp(c, c.ox - mx, c.oy - my); // Revert
+            return false;
+         }
+         return true;
+       };
 
-        if (isBetter) {
-          if (newArea < bestArea || testComp > bestComp) {
-            bestArea = newArea;
-            bestComp = testComp;
-            improved = true;
-          }
-          wires = testWires;
-        } else restoreComps(oldStates);
-      } else restoreComps(oldStates);
+       // Try diagonal, then horizontal, then vertical
+       if (tryMove(dx, dy) || tryMove(dx, 0) || tryMove(0, dy)) {
+         moveOccurred = true;
+       }
     }
-    render(); await new Promise(r => setTimeout(r, 10)); // Yield to UI
+
+    if (moveOccurred) {
+      const testWires = await route(components, COLS, ROWS, () => {}, getRouteUnder());
+      const newArea = calculateFootprintArea().area;
+      const testComp = completion(testWires);
+
+      let isBetter = false;
+      if (testComp > bestComp) isBetter = true;
+      else if (testComp === bestComp && newArea < bestArea) isBetter = true;
+      else if (testComp === bestComp && newArea === bestArea) isBetter = true; // Allow sliding
+
+      if (isBetter) {
+        if (newArea < bestArea || testComp > bestComp) {
+          bestArea = newArea; bestComp = testComp;
+        }
+        wires = testWires;
+        changed = true; 
+      } else {
+        restoreComps(oldStates); 
+      }
+    }
+    
+    if (loops % 5 === 0) { render(); await new Promise(r => setTimeout(r, 0)); }
   }
 }
 
 async function doOptimizeFootprint() {
   if (!components.length) { toast('No components to optimize', 'warn'); return; }
 
-  // 75 configs for a deep search
-  const MAX_CONFIGS = 75; 
+  const MAX_CONFIGS = 100; 
   showOverlay(true);
   ostep(1);
 
-  // --- 1. TIGHTER VIRTUAL BOARD EXPANSION ---
+  // --- 1. EXPAND VIRTUAL BOARD ---
   const { bounds } = calculateFootprintArea();
   
-  // Pad the board by 14 units (gives a 7-hole perimeter).
-  // This is plenty of room for an IC to rotate and slide around the outside, 
-  // but tight enough that pushPacking instantly snaps things back together.
-  const vCols = Math.max(COLS, (bounds.maxCol - bounds.minCol) + 14);
-  const vRows = Math.max(ROWS, (bounds.maxRow - bounds.minRow) + 14);
+  // Pad the board by 24 units (12 holes per side). 
+  // We need this wide berth so the Macro Mutations have room to spawn random seeds.
+  const vCols = Math.max(COLS, (bounds.maxCol - bounds.minCol) + 24);
+  const vRows = Math.max(ROWS, (bounds.maxRow - bounds.minRow) + 24);
   
   COLS = vCols; ROWS = vRows;
   document.getElementById('bCols').value = COLS;
   document.getElementById('bRows').value = ROWS;
 
-  // Shift all components to the exact center of this new virtual space
+  // Center everything initially
   const offsetX = Math.floor(COLS / 2 - (bounds.minCol + (bounds.maxCol - bounds.minCol) / 2));
   const offsetY = Math.floor(ROWS / 2 - (bounds.minRow + (bounds.maxRow - bounds.minRow) / 2));
   components.forEach(c => moveComp(c, c.ox + offsetX, c.oy + offsetY));
 
-  // Reroute to establish the baseline on the virtual board
   setProg(0, `Preparing virtual workspace...`);
   wires = await route(components, COLS, ROWS, () => {}, getRouteUnder());
   
@@ -1593,21 +1590,78 @@ async function doOptimizeFootprint() {
   let globalBestComps = saveComps();
   let globalBestWires = [...wires];
 
-  let configsWithoutImprovement = 0;
+  let frustration = 0;
 
-  // --- 2. AGGRESSIVE (BUT CONSTRAINED) OPTIMIZATION LOOP ---
+  // --- 2. HYBRID MUTATION LOOP ---
   for (let config = 1; config <= MAX_CONFIGS; config++) {
     
     restoreComps(globalBestComps); 
     
-    // Heat rises slightly slower so we don't scramble too early
-    let mutationStrength = 1 + Math.floor(configsWithoutImprovement / 6);
+    // DECISION: Big Bang (Macro) OR Jitter (Micro)?
+    // We trigger a Big Bang every 15 iterations, OR if we've been stuck in a local minimum for 8 rounds.
+    const isMacroMutation = (config % 15 === 0) || (frustration > 8);
 
-    setProg((config / MAX_CONFIGS) * 100, `Config ${config}/${MAX_CONFIGS}: Mutating (Heat: ${mutationStrength})...`);
+    if (isMacroMutation) {
+      // ==========================================
+      // MACRO MUTATION: The "Big Bang" Seed Reset
+      // ==========================================
+      setProg((config / MAX_CONFIGS) * 100, `Config ${config}/${MAX_CONFIGS}: Big Bang (Macro Mutation)...`);
+      
+      // Pick 50% to 80% of components to completely randomize
+      const numToScramble = Math.floor(components.length * (0.5 + Math.random() * 0.3));
+      let compsToMutate = [...components].sort(() => 0.5 - Math.random()).slice(0, numToScramble);
 
-    components.forEach(c => {
-      // Cap the maximum chance of mutation at 60% so the cluster doesn't totally dissolve
-      if (Math.random() < Math.min(0.6, 0.2 + (mutationStrength * 0.05))) {
+      for (let c of compsToMutate) {
+        const oldW = c.w, oldH = c.h, oldOx = c.ox, oldOy = c.oy;
+        const oldPins = c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow }));
+
+        // 50% chance to rotate
+        if (Math.random() > 0.5) {
+          c.w = oldH; c.h = oldW;
+          c.pins.forEach(p => {
+            const r = p.dRow; p.dRow = p.dCol; p.dCol = c.w - 1 - r;
+            p.col = c.ox + p.dCol; p.row = c.oy + p.dRow;
+          });
+        }
+
+        // Try up to 10 times to find a completely random, non-overlapping spot on the padded board
+        let placed = false;
+        for (let attempt = 0; attempt < 10; attempt++) {
+          const nx = Math.floor(Math.random() * (COLS - c.w - 4)) + 2; // Keep slightly off extreme edge
+          const ny = Math.floor(Math.random() * (ROWS - c.h - 4)) + 2;
+          
+          moveComp(c, nx, ny);
+          if (!anyOverlap(c, components)) {
+            placed = true;
+            break;
+          }
+        }
+
+        // If we couldn't find a random spot, revert this specific component
+        if (!placed) {
+          c.w = oldW; c.h = oldH;
+          moveComp(c, oldOx, oldOy);
+          c.pins.forEach((p, idx) => {
+            p.dCol = oldPins[idx].dCol;
+            p.dRow = oldPins[idx].dRow;
+            p.col = c.ox + p.dCol; p.row = c.oy + p.dRow;
+          });
+        }
+      }
+      
+      // Reset frustration so we spend the next several loops micro-tuning this new random seed
+      if (frustration > 8) frustration = 0; 
+
+    } else {
+      // ==========================================
+      // MICRO MUTATION: The "Jitter"
+      // ==========================================
+      const numMutations = Math.max(1, Math.min(3, Math.floor(components.length * 0.2)));
+      setProg((config / MAX_CONFIGS) * 100, `Config ${config}/${MAX_CONFIGS}: Jittering ${numMutations} comps...`);
+
+      let compsToMutate = [...components].sort(() => 0.5 - Math.random()).slice(0, numMutations);
+
+      for (let c of compsToMutate) {
         const oldW = c.w, oldH = c.h, oldOx = c.ox, oldOy = c.oy;
         const oldPins = c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow }));
 
@@ -1619,22 +1673,14 @@ async function doOptimizeFootprint() {
           });
         }
 
-        // Tame the scatter: absolute maximum throw distance is 8 units
-        const scatterDist = Math.min(8, Math.ceil(Math.random() * 2 * mutationStrength));
-        let dx = (Math.random() > 0.5 ? 1 : -1) * scatterDist;
-        let dy = (Math.random() > 0.5 ? 1 : -1) * scatterDist;
-
-        // "Rubber Band" effect: Prevent components from wandering into the extreme edges
-        if (c.ox + dx < 3) dx = Math.abs(dx);
-        if (c.ox + dx > COLS - c.w - 3) dx = -Math.abs(dx);
-        if (c.oy + dy < 3) dy = Math.abs(dy);
-        if (c.oy + dy > ROWS - c.h - 3) dy = -Math.abs(dy);
+        // Jitter 1 or 2 spaces
+        let dx = (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 2) + 1);
+        let dy = (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 2) + 1);
 
         const nx = Math.max(0, Math.min(COLS - c.w, c.ox + dx));
         const ny = Math.max(0, Math.min(ROWS - c.h, c.oy + dy));
 
         moveComp(c, nx, ny);
-
         if (anyOverlap(c, components)) {
           c.w = oldW; c.h = oldH;
           moveComp(c, oldOx, oldOy);
@@ -1645,24 +1691,25 @@ async function doOptimizeFootprint() {
           });
         }
       }
-    });
+    }
 
-    setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Gravity Push Packing...`);
+    // --- APPLY PACKING TO THE CURRENT TOPOLOGY ---
+    setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Gravity Pack...`);
     await doRecursivePushPacking();
 
-    setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Rotating for fit...`);
+    setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Rotating...`);
     await tryRotateOptimize();
 
     setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Final Squeeze...`);
     await doRecursivePushPacking();
 
+    // --- EVALUATE ---
     const testWires = await route(components, COLS, ROWS, () => {}, getRouteUnder());
     const currentCompArea = calculateFootprintArea().area;
     const currentCompWL = testWires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
     const currentCompRate = completion(testWires);
 
     let isBetter = false;
-
     if (currentCompRate > globalBestCompletion) {
       isBetter = true;
     } 
@@ -1681,10 +1728,10 @@ async function doOptimizeFootprint() {
       globalBestWL = currentCompWL;
       globalBestComps = saveComps();
       globalBestWires = [...testWires];
-      configsWithoutImprovement = 0; // Reset frustration
-      console.log(`[Optimizer ${config}] New Leader: Comp ${Math.round(currentCompRate*100)}%, Area ${currentCompArea}, WL ${currentCompWL}`);
+      frustration = 0; 
+      console.log(`[Optimizer ${config}] New Leader! Comp ${Math.round(currentCompRate*100)}%, Area ${currentCompArea}, WL ${currentCompWL}`);
     } else {
-      configsWithoutImprovement++; // Increase frustration (raises mutation heat next round)
+      frustration++; 
     }
   }
 
@@ -1692,6 +1739,7 @@ async function doOptimizeFootprint() {
   restoreComps(globalBestComps);
   wires = globalBestWires;
   
+  // Snip the virtual padding off to leave the final masterpiece
   cutToBoundingBox(); 
   
   showOverlay(false);
