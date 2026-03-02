@@ -1,0 +1,75 @@
+/* Modern Performance & Accessibility Styles */
+
+/* 1. Base Typography & Focus States */
+:root {
+  /* Keep existing colors */
+  --bg0:#0b0c0e;--bg2:#16181a;--bg3:#1c1f22;--bg4:#252a2d;
+  --border:#2a2e33;--border2:#3a3f46;
+  --txt0:#e2e5e9;--txt1:#8f9aaa;--txt2:#4d5563;
+  --grn:#00d97e;--blu:#3b82f6;--org:#f59e0b;--red:#ef4444;
+  --focus-ring: rgba(59, 130, 246, 0.6); /* Blu variant for focus */
+}
+
+/* Establish a sane baseline for rem scaling */
+html { font-size: 14px; } 
+
+/* Add global focus visibility for keyboard navigation */
+*:focus-visible {
+  outline: 2px solid var(--blu);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* 2. Fix Red Button Contrast */
+.tbtn.red { background: #3a1616; border-color: var(--red); color: #fca5a5; }
+.tbtn.red:hover { background: var(--red); color: #fff; }
+
+/* 3. Usable Scrollbars */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; border: 2px solid var(--bg2); }
+::-webkit-scrollbar-thumb:hover { background: var(--txt2); }
+
+/* 4. Resizable Sidebars */
+#lsb {
+  width: 260px; /* Slightly wider default */
+  min-width: 200px;
+  max-width: 400px;
+  resize: horizontal; /* Let user adjust layout! */
+  overflow-x: hidden;
+}
+
+/* 5. Better cursor feedback */
+#ca {
+  touch-action: none; /* Prevent browser touch handling */
+}
+
+/* 6. Modal backdrop interactions */
+.modal-backdrop {
+  cursor: pointer;
+}
+
+/* 7. Improved button hover states */
+.tbtn {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tbtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 8. Component card improvements */
+.comp-card {
+  transition: all 0.15s ease;
+}
+
+.comp-card:hover {
+  transform: translateX(2px);
+}
+
+/* 9. Input focus improvements */
+input:focus, textarea:focus {
+  box-shadow: 0 0 0 3px var(--focus-ring);
+  border-color: var(--blu);
+}

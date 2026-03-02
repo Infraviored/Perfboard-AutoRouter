@@ -453,42 +453,56 @@ function finishMsg() {
 function render() {
   const W = COLS * SP, H = ROWS * SP;
   
-  // 1. Defs + Background Pattern
-  let svg = `
-    <defs>
-      <pattern id="perfPattern" patternUnits="userSpaceOnUse" width="${SP}" height="${SP}">
-        <rect width="${SP}" height="${SP}" fill="#1a1208"/>
-        <circle cx="${SP/2}" cy="${SP/2}" r="${SP*.22}" fill="#b87333"/>
-        <circle cx="${SP/2}" cy="${SP/2}" r="${SP*.09}" fill="#0d0a06"/>
-      </pattern>
-    </defs>
-    <rect width="${W}" height="${H}" fill="url(#perfPattern)"/>
-    <rect x="1" y="1" width="${W-2}" height="${H-2}" fill="none" stroke="#c8a800" stroke-width="2"/>
-  `;
+  // 1. Defs + Background Pattern (Only update if board size actually changes)
+  if (lastRenderedW !== W || lastRenderedH !== H) {
+    lastRenderedW = W;
+    lastRenderedH = H;
+    
+    // Safety check: ensure the SVG container matches the new grid size
+    pcb.setAttribute('width', W);
+    pcb.setAttribute('height', H);
+    pcb.style.width = W + 'px';
+    pcb.style.height = H + 'px';
+    
+    const bgSvg = `
+      <defs>
+        <pattern id="perfPattern" patternUnits="userSpaceOnUse" width="${SP}" height="${SP}">
+          <rect width="${SP}" height="${SP}" fill="#1a1208"/>
+          <circle cx="${SP/2}" cy="${SP/2}" r="${SP*.22}" fill="#b87333"/>
+          <circle cx="${SP/2}" cy="${SP/2}" r="${SP*.09}" fill="#0d0a06"/>
+        </pattern>
+      </defs>
+      <rect width="${W}" height="${H}" fill="url(#perfPattern)"/>
+      <rect x="1" y="1" width="${W-2}" height="${H-2}" fill="none" stroke="#c8a800" stroke-width="2"/>
+    `;
+    document.getElementById('layer-bg').innerHTML = bgSvg;
+  }
 
-  // 2. Wires
-  if (!wires.length) svg += generateRatsnestSVG();
-  svg += generateWiresSVG();
+  // 2. Wires & Ratsnest
+  document.getElementById('layer-ratsnest').innerHTML = wires.length ? '' : generateRatsnestSVG();
+  document.getElementById('layer-wires').innerHTML = generateWiresSVG();
 
   // 3. Components
-  components.forEach(c => { svg += renderCompSVG(c); });
+  let compSvg = '';
+  components.forEach(c => { compSvg += renderCompSVG(c); });
+  document.getElementById('layer-comps').innerHTML = compSvg;
   
-  // 4. Bounding Box Highlight
+  // 4. UI Elements (Bounding Box & Selection)
+  let uiSvg = '';
   if (components.length > 0) {
     const bbox = calculateFootprintArea();
     const { minCol, maxCol, minRow, maxRow } = bbox.bounds;
     const bbW = (maxCol - minCol + 1) * SP;
     const bbH = (maxRow - minRow + 1) * SP;
-    svg += `<rect x="${minCol * SP}" y="${minRow * SP}" width="${bbW}" height="${bbH}" fill="none" stroke="rgba(0, 255, 128, 0.4)" stroke-width="2" stroke-dasharray="8 4"/>`;
+    uiSvg += `<rect x="${minCol * SP}" y="${minRow * SP}" width="${bbW}" height="${bbH}" fill="none" stroke="rgba(0, 255, 128, 0.4)" stroke-width="2" stroke-dasharray="8 4"/>`;
   }
 
-  // 5. Selection Highlight
   if (selComp) {
     const s = selComp;
-    svg += `<rect x="${s.ox*SP - 6}" y="${s.oy*SP - 6}" width="${s.w*SP + 8}" height="${s.h*SP + 8}" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="3 3"/>`;
+    uiSvg += `<rect x="${s.ox*SP - 6}" y="${s.oy*SP - 6}" width="${s.w*SP + 8}" height="${s.h*SP + 8}" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="3 3"/>`;
   }
-
-  pcb.innerHTML = svg;
+  
+  document.getElementById('layer-ui').innerHTML = uiSvg;
 }
 
 function generateWiresSVG() {
@@ -733,46 +747,119 @@ function hitComp(col, row) {
   ) || null;
 }
 
-ca.addEventListener('mousedown', e => {
-  if (e.button === 1 || e.altKey) {
-    panning = true; panStart = { x: e.clientX - panX, y: e.clientY - panY };
-    ca.style.cursor = 'grabbing'; e.preventDefault(); return;
+// --- STATE FOR NEW INPUTS ---
+let isSpaceDown = false;
+let isRightClick = false;
+let lastRenderedW = 0;
+let lastRenderedH = 0;
+
+// Prevent context menu on right-click so we can use it to pan
+ca.addEventListener('contextmenu', e => e.preventDefault());
+
+// Track Spacebar for Panning
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+    e.preventDefault();
+    isSpaceDown = true;
+    ca.style.cursor = 'grab';
   }
+});
+document.addEventListener('keyup', e => {
+  if (e.code === 'Space') {
+    isSpaceDown = false;
+    ca.style.cursor = panning ? 'grabbing' : 'crosshair';
+  }
+});
+
+// --- MODERN POINTER EVENTS (Mouse + Touch + Pen) ---
+ca.addEventListener('pointerdown', e => {
+  if (e.target.closest('#overlay') || e.target.closest('.zbtn')) return; // Ignore clicks on UI overlays
+  
+  ca.setPointerCapture(e.pointerId); // Keep tracking even if cursor leaves element
+  
+  isRightClick = e.button === 2;
+
+  // Middle click, Right click, Spacebar, or Alt-click initiates panning
+  if (e.button === 1 || isRightClick || isSpaceDown || e.altKey) {
+    panning = true; 
+    panStart = { x: e.clientX - panX, y: e.clientY - panY };
+    ca.style.cursor = 'grabbing'; 
+    e.preventDefault(); 
+    return;
+  }
+
   const { gc, gr } = gridPos(e);
   if (tool === 'sel') {
     const hit = hitComp(gc, gr);
     selComp = hit || null;
-    if (hit) { dragging = hit; dragOff = { dc: gc - hit.ox, dr: gr - hit.oy }; }
+    if (hit) { 
+      dragging = hit; 
+      // Calculate exact sub-grid offset to prevent visual "jump"
+      dragOff = { dc: gc - hit.ox, dr: gr - hit.oy }; 
+    }
     selectComp(hit ? hit.id : null);
     render();
   }
 });
 
-ca.addEventListener('mousemove', e => {
+ca.addEventListener('pointermove', e => {
   const { gc, gr } = gridPos(e);
+  
+  // Update UI indicators
   domElements.cCol.textContent = gc;
   domElements.cRow.textContent = gr;
+  
   const pin = components.flatMap(c => c.pins).find(p => p.col === gc && p.row === gr);
   const netEl = domElements.cNet;
   if (pin) { netEl.textContent = pin.net; netEl.style.color = netColor(pin.net); }
   else     { netEl.textContent = '—';     netEl.style.color = 'var(--txt1)'; }
 
+  // Handle Panning
   if (panning && panStart) {
-    panX = e.clientX - panStart.x; panY = e.clientY - panStart.y; applyT(); return;
+    panX = e.clientX - panStart.x; 
+    panY = e.clientY - panStart.y; 
+    applyT(); 
+    return;
   }
+
+  // Handle Dragging
   if (dragging) {
     const nox = Math.max(0, Math.min(COLS - dragging.w, gc - dragOff.dc));
     const noy = Math.max(0, Math.min(ROWS - dragging.h, gr - dragOff.dr));
+    
     if (nox !== dragging.ox || noy !== dragging.oy) {
       moveComp(dragging, nox, noy);
-      wires = []; render(); updateStats();
+      // Wait to re-route until pointerup for better performance, 
+      // just clear wires and render the move for now.
+      wires = []; 
+      render(); 
     }
   }
 });
 
-ca.addEventListener('mouseup', () => {
-  if (panning) { panning = false; ca.style.cursor = 'crosshair'; }
-  if (dragging) { dragging = null; dragOff = null; selectComp(selComp?.id||null); renderNetPanel(); saveState(); }
+ca.addEventListener('pointerup', e => {
+  ca.releasePointerCapture(e.pointerId);
+  if (panning) { 
+    panning = false; 
+    isRightClick = false;
+    ca.style.cursor = isSpaceDown ? 'grab' : 'crosshair'; 
+  }
+  if (dragging) { 
+    dragging = null; 
+    dragOff = null; 
+    selectComp(selComp?.id || null); 
+    renderNetPanel(); 
+    updateStats(); // Update stats here instead of every frame of movement
+    saveState(); 
+  }
+});
+
+// Dismiss modals when clicking dark backdrop
+document.getElementById('compEditorOverlay').addEventListener('mousedown', e => {
+  if (e.target === e.currentTarget) closeCompEditor();
+});
+document.getElementById('libraryOverlay').addEventListener('mousedown', e => {
+  if (e.target === e.currentTarget) closeLibrary();
 });
 
 ca.addEventListener('wheel', e => {
@@ -856,32 +943,45 @@ function fullReset() {
 }
 
 document.addEventListener('keydown', e => {
-  // --- ADDED: Standard Undo/Redo Shortcuts ---
-  if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-    e.preventDefault();
-    goBackState();
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) {
-    e.preventDefault();
-    goForwardState();
-    return;
-  }
-  // -------------------------------------------
+  // Ignore shortcuts if user is typing in an input/textarea
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
-  if (e.key==='v'||e.key==='V') setTool('sel');
-  if (e.key==='F5') { e.preventDefault(); doPlaceAndRoute(); }
-  if (e.key==='F6') { e.preventDefault(); doRouteOnly(); }
-  if (e.key==='F7') { e.preventDefault(); debugBoard(); }
-  if (e.key==='Escape') { selComp = null; selectComp(null); render(); }
+  // Standard Undo/Redo Shortcuts
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); goBackState(); return; }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); goForwardState(); return; }
+
+  // Safe Tool & Routing Shortcuts
+  if (e.key === 'v' || e.key === 'V') setTool('sel');
+  if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); doPlaceAndRoute(); } // Was F5
+  if (e.shiftKey && (e.key === 'R' || e.key === 'r')) { e.preventDefault(); doRouteOnly(); } // Was F6
+  if (e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd')) { e.preventDefault(); debugBoard(); } // Was F7
   
-  if ((e.key==='Delete'||e.key==='Backspace') && selComp) {
-    components = components.filter(c => c !== selComp);
-    wires = []; selComp = null;
-    selectComp(null); renderCompList(); render(); updateStats();
-    toast('Component removed', 'warn');
+  // Escape closes modals and clears selection
+  if (e.key === 'Escape') { 
+    selComp = null; 
+    selectComp(null); 
+    closeCompEditor();
+    closeLibrary();
+    render(); 
+  }
+  
+  // --- SAFE DELETION LOGIC ---
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selComp) {
+    e.preventDefault();
     
-    saveState(); // <-- ADDED
+    // Instead of wiping ALL wires, only delete wires attached to this component
+    const compNets = new Set(selComp.pins.map(p => p.net).filter(Boolean));
+    wires = wires.filter(w => !compNets.has(w.net));
+    
+    components = components.filter(c => c !== selComp);
+    selComp = null;
+    selectComp(null); 
+    renderCompList(); 
+    render(); 
+    updateStats();
+    
+    toast('Component & attached nets removed', 'warn');
+    saveState();
   }
 });
 

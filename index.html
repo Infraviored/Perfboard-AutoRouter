@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Perfboard Designer</title>
+<link rel="stylesheet" href="styles.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -134,7 +135,7 @@ text { user-select: none; }
   <div class="sep"></div>
   <button class="tbtn act" id="btnSel" onclick="app.setTool('sel')">↖ Select <kbd>V</kbd></button>
   <div class="sep"></div>
-  <button class="tbtn grn" onclick="app.doPlaceAndRoute()">⚡ Place &amp; Route <kbd>F5</kbd></button>
+  <button class="tbtn grn" onclick="app.doPlaceAndRoute()">⚡ Place &amp; Route <kbd>Ctrl+↵</kbd></button>
   <button class="tbtn" onclick="app.doOptimizeFootprint()">🔧 Optimize Footprint</button>
   <button class="tbtn" onclick="app.goBackState()">↶</button>
   <button class="tbtn" onclick="app.goForwardState()">↷</button>
@@ -143,7 +144,7 @@ text { user-select: none; }
     <input type="checkbox" id="autoOptimize" checked style="margin:0">
     Auto-optimize
   </label>
-  <button class="tbtn" onclick="app.doRouteOnly()">〰 Route Only <kbd>F6</kbd></button>
+  <button class="tbtn" onclick="app.doRouteOnly()">〰 Route Only <kbd>Shift+R</kbd></button>
   <button class="tbtn" onclick="app.clearWires()">⊘ Clear Wires</button>
   <div class="sep"></div>
   <button class="tbtn org" onclick="app.doExport()">⬇ Export SVG</button>
@@ -199,8 +200,14 @@ text { user-select: none; }
     </div>
   </div>
 
-  <div id="ca">
-    <svg id="pcb" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div id="ca" style="touch-action: none;">
+    <svg id="pcb" xmlns="http://www.w3.org/2000/svg">
+      <g id="layer-bg"></g>
+      <g id="layer-wires"></g>
+      <g id="layer-ratsnest"></g>
+      <g id="layer-comps"></g>
+      <g id="layer-ui"></g>
+    </svg>
 
     <div id="overlay">
       <div class="ot" id="ot">Processing…</div>
