@@ -586,6 +586,90 @@ function updateStats() {
   else                 { pe.textContent = pct + '%'; pe.style.color = 'var(--org)';  }
 }
 
+// --- COMPONENT LIBRARY SYSTEM ---
+let componentDatabase = [];
+
+// Fetch DB on startup
+fetch('./component_database.json')
+  .then(r => r.json())
+  .then(data => { componentDatabase = data; })
+  .catch(err => console.warn('Could not load component_database.json', err));
+
+function openLibrary() {
+  document.getElementById('libraryOverlay').style.display = 'flex';
+  document.getElementById('libSearch').value = '';
+  filterLibrary(); // Render all initially
+}
+
+function closeLibrary() {
+  document.getElementById('libraryOverlay').style.display = 'none';
+}
+
+function filterLibrary() {
+  const q = document.getElementById('libSearch').value.toLowerCase();
+  const list = document.getElementById('libList');
+  
+  if (!componentDatabase.length) {
+    list.innerHTML = '<div style="color:var(--org);font-size:.8em;">Database not loaded. Ensure component_database.json is in the directory.</div>';
+    return;
+  }
+
+  const filtered = componentDatabase.filter(c => 
+    c.name.toLowerCase().includes(q) || c.value.toLowerCase().includes(q)
+  );
+
+  list.innerHTML = filtered.map((c, idx) => `
+    <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:10px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-weight:bold;color:${c.color || 'var(--txt0)'}">${c.name}</div>
+        <div style="font-size:.8em;color:var(--txt2)">${c.value} • ${c.pins.length} pins</div>
+      </div>
+      <button onclick="app.addFromLibrary(${componentDatabase.indexOf(c)})" style="background:var(--grn);border:none;color:#000;padding:5px 10px;border-radius:4px;cursor:pointer;font-weight:bold;font-size:.8em">
+        Add to Board
+      </button>
+    </div>
+  `).join('');
+}
+
+function addFromLibrary(dbIndex) {
+  const tpl = componentDatabase[dbIndex];
+  if (!tpl) return;
+
+  // Generate a unique ID (e.g., U1, U2 if it's an IC, or just auto-increment)
+  let prefix = tpl.name.toLowerCase().includes('esp') || tpl.name.toLowerCase().includes('ic') ? 'U' : 'Cmp';
+  let counter = 1;
+  while (compDefs.some(c => c.id === `${prefix}${counter}`)) { counter++; }
+  const newId = `${prefix}${counter}`;
+
+  // Deep clone pins and assign blank nets
+  const newPins = tpl.pins.map(p => ({
+    offset: [...p.offset],
+    net: '', // Must be hooked up by the user later
+    label: p.label
+  }));
+
+  const newCompDef = {
+    id: newId,
+    name: tpl.name,
+    value: tpl.value,
+    color: tpl.color || '#333333',
+    offsets: newPins.map(p => p.offset),
+    pinNets: newPins.map(p => p.net),
+    pinLbls: newPins.map(p => p.label),
+    w: Math.max(...newPins.map(p => p.offset[0])) + 1,
+    h: Math.max(...newPins.map(p => p.offset[1])) + 1,
+    boardOffset: [1, 1] // Drop it near the top left
+  };
+
+  compDefs.push(newCompDef);
+  updateJSONFromComponents(); // Sync the text area
+  loadComponents(); // Re-render everything
+  
+  toast(`${tpl.name} added as ${newId}`, 'ok');
+  closeLibrary();
+  saveState();
+}
+
 // --- Fix 1: Component List Colors ---
 function renderCompList() {
   const el = document.getElementById('compList');
@@ -1485,7 +1569,7 @@ window.app = {
   setTool, adjZoom, fitView, selectComp, setHovNet,
   openCompEditor, closeCompEditor, saveComponentEdit,
   addNewComponent, addNewPin, updatePinProperties, deletePin, deselectPin,
-  copyLLMPrompt,
+  copyLLMPrompt, openLibrary, closeLibrary, filterLibrary, addFromLibrary
 };
 
 initializeState();

@@ -189,7 +189,10 @@ text { user-select: none; }
 
     <div class="ph">
       <span><span class="sbadge" id="s3b">3</span>Components</span>
-      <button onclick="app.addNewComponent()" style="padding:3px 7px;border-radius:4px;cursor:pointer;font-size:.7em;background:var(--grn);border:1px solid var(--grn);color:#000">+ New Component</button>
+      <div style="display:flex; gap:4px;">
+        <button onclick="app.openLibrary()" style="padding:3px 7px;border-radius:4px;cursor:pointer;font-size:.7em;background:var(--blu);border:1px solid var(--blu);color:#fff">📚 Library</button>
+        <button onclick="app.addNewComponent()" style="padding:3px 7px;border-radius:4px;cursor:pointer;font-size:.7em;background:var(--grn);border:1px solid var(--grn);color:#000">+ New</button>
+      </div>
     </div>
     <div class="lbody grow" id="compList" style="gap:4px">
       <div style="font-size:.7em;color:var(--txt2)">Load components first.</div>
@@ -207,6 +210,18 @@ text { user-select: none; }
       </div>
       <div class="otrack"><div class="ofill" id="ofill"></div></div>
       <div class="osub" id="osub">…</div>
+    </div>
+
+    <div id="libraryOverlay" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.9);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:15px">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px;max-width:600px;width:90%;max-height:80vh;display:flex;flex-direction:column">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px">
+          <h3 style="color:var(--txt0);margin:0">Component Library</h3>
+          <button onclick="app.closeLibrary()" style="background:none;border:none;color:var(--txt1);font-size:1.2em;cursor:pointer">✕</button>
+        </div>
+        <input type="text" id="libSearch" placeholder="Search components (e.g., 'ESP32')..." onkeyup="app.filterLibrary()" style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--txt0);padding:8px;border-radius:4px;margin-bottom:15px">
+        <div id="libList" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:5px">
+          </div>
+      </div>
     </div>
 
     <div id="compEditorOverlay" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.9);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:15px">
