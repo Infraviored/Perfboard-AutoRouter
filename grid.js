@@ -131,6 +131,15 @@ export class Grid {
       open.push(idx, 0);
     }
 
+    // Pre-calculate target coordinates for fast heuristic
+    const targets = [];
+    for (let i = 0; i < targetIndices.length; i++) {
+      targets.push({
+        c: targetIndices[i] % this.cols,
+        r: Math.floor(targetIndices[i] / this.cols)
+      });
+    }
+
     let iters = 0;
 
     while (open.length > 0 && iters++ < size * 4) {
@@ -175,7 +184,13 @@ export class Grid {
         if (ng < gScore[nk]) {
           gScore[nk] = ng;
           parent[nk] = currKey;
-          open.push(nk, ng); // Can add heuristic (Manhattan to nearest target) if needed
+
+          let h = 10000;
+          for (let ti = 0; ti < targets.length; ti++) {
+            const dt = Math.abs(nc - targets[ti].c) + Math.abs(nr - targets[ti].r);
+            if (dt < h) h = dt;
+          }
+          open.push(nk, ng + h * 1.0); // Exact Manhattan A*
         }
       }
     }
