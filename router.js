@@ -22,7 +22,7 @@ function getHPWLEstimate(pins) {
   return (maxC - minC) + (maxR - minR);
 }
 
-export async function route(components, cols, rows, onProgress, allowRouteUnder = false) {
+export async function route(components, cols, rows, onProgress, allowRouteUnder = false, shouldCancel = null) {
   const wires = [];
   const grid = new Grid(cols, rows);
   components.forEach(c => grid.registerComp(c));
@@ -39,12 +39,14 @@ export async function route(components, cols, rows, onProgress, allowRouteUnder 
   for (const netName of netKeys) {
     let pins = [...nets[netName]];
     const routedIndices = new Set();
-    
+
     // Start with the first pin
     const first = pins.shift();
     routedIndices.add(grid.idx(first.col, first.row));
 
     while (pins.length > 0) {
+      if (shouldCancel && shouldCancel()) return wires;
+
       // Create an array of target indices for the remaining unrouted pins
       const targetIndices = pins.map(p => grid.idx(p.col, p.row));
 
@@ -55,7 +57,7 @@ export async function route(components, cols, rows, onProgress, allowRouteUnder 
         wires.push({ path: result.path, net: netName, failed: false });
         grid.markWire(result.path);
         result.path.forEach(pt => routedIndices.add(grid.idx(pt.col, pt.row)));
-        
+
         // Remove the pin we successfully hit from the unrouted pool
         pins = pins.filter(p => grid.idx(p.col, p.row) !== result.hitTargetIdx);
       } else {
@@ -63,7 +65,7 @@ export async function route(components, cols, rows, onProgress, allowRouteUnder 
         const failPin = pins.shift();
         wires.push({ path: [first, failPin], net: netName, failed: true });
       }
-      
+
       done++;
       onProgress(done / totalConns, `Routing ${netName}...`);
       if (done % 5 === 0) await new Promise(r => setTimeout(r, 0)); // Yield occasionally

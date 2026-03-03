@@ -1780,7 +1780,7 @@ async function enumeratePlateauNeighbors(baseBox, baseScore, cols, rows, maxPerC
         if (onProgress) onProgress(totalEvals, maxTotalEvals, `${cId} rot${rot}`);
         if (totalEvals > maxTotalEvals) break;
 
-        const testWires = await route(components, cols, rows, () => { }, false);
+        const testWires = await route(components, cols, rows, () => { }, false, () => cancelRequested);
         const testScore = scoreState(testWires);
         if (testScore.comp < baseScore.comp) continue;
 
@@ -1952,7 +1952,7 @@ async function tryShrinkAlongWires(bestScore, cols, rows) {
       if (!ok) continue;
       if (anyOverlap(c, components)) continue;
 
-      const testWires = await route(components, cols, rows, () => { }, false);
+      const testWires = await route(components, cols, rows, () => { }, false, () => cancelRequested);
       const testScore = scoreState(testWires);
 
       // Only allow moves that keep routing completion and improve score.
@@ -2010,6 +2010,7 @@ async function explorePlateauStates(bestScore, cols, rows) {
 
       for (let ox = minOx; ox <= maxOx; ox++) {
         for (let oy = minOy; oy <= maxOy; oy++) {
+          if (cancelRequested) return { improved: false, score: bestLocalScore };
           if (rot === 0 && ox === cOrig.ox && oy === cOrig.oy) continue;
 
           moveComp(cc, ox, oy);
@@ -2023,7 +2024,7 @@ async function explorePlateauStates(bestScore, cols, rows) {
           if (area2 > baseArea) continue;
           if (area2 === baseArea && per2 > basePerim) continue;
 
-          const testWires = await route(components, cols, rows, () => { }, false);
+          const testWires = await route(components, cols, rows, () => { }, false, () => cancelRequested);
           const testScore = scoreState(testWires);
 
           if (testScore.comp < bestScore.comp) continue;
@@ -2083,7 +2084,7 @@ async function tryRotateOptimize() {
 
       if (anyOverlap(c, components)) continue;
 
-      const testWires = await route(components, COLS, ROWS, () => { }, false);
+      const testWires = await route(components, COLS, ROWS, () => { }, false, () => cancelRequested);
       const testScore = scoreState(testWires);
 
       if (isScoreBetter(testScore, bestScore)) {
@@ -2113,6 +2114,7 @@ async function doRecursivePushPacking() {
   let bestScore = scoreState(wires);
 
   while (changed && loops < 25) {
+    if (cancelRequested) break;
     changed = false;
     loops++;
 
@@ -2187,7 +2189,7 @@ async function doRecursivePushPacking() {
     }
 
     if (moveOccurred) {
-      const testWires = await route(components, COLS, ROWS, () => { }, false);
+      const testWires = await route(components, COLS, ROWS, () => { }, false, () => cancelRequested);
       const testScore = scoreState(testWires);
 
       if (isScoreBetter(testScore, bestScore) || (
@@ -2231,7 +2233,7 @@ async function tryGlobalNudge(bestScore, cols, rows) {
     // Apply the translation atomically.
     for (const c of components) moveComp(c, c.ox + d.dx, c.oy + d.dy);
 
-    const testWires = await route(components, cols, rows, () => { }, false);
+    const testWires = await route(components, cols, rows, () => { }, false, () => cancelRequested);
     const testScore = scoreState(testWires);
     if (isScoreBetter(testScore, bestScore)) {
       wires = testWires;
@@ -2257,7 +2259,7 @@ async function doOptimizeFootprint() {
 
   // Keep optimization transactional: if nothing improves, restore exactly.
   const startSnapshot = snapshotBoardState();
-  const startWires = await route(components, COLS, ROWS, () => { }, false);
+  const startWires = await route(components, COLS, ROWS, () => { }, false, () => cancelRequested);
   const startScore = scoreState(startWires);
   wires = startWires;
 
@@ -2281,7 +2283,7 @@ async function doOptimizeFootprint() {
 
   setProg(0, `Preparing virtual workspace...`);
   // Route only for internal initialization; evaluation later is done on the original board.
-  wires = await route(components, vCols, vRows, () => { }, false);
+  wires = await route(components, vCols, vRows, () => { }, false, () => cancelRequested);
 
   // Track Absolute Best
   let globalBestScore = scoreState(wires);
@@ -2447,7 +2449,7 @@ async function doOptimizeFootprint() {
       continue;
     }
 
-    const testWires = await route(components, uiCols, uiRows, () => { }, false);
+    const testWires = await route(components, uiCols, uiRows, () => { }, false, () => cancelRequested);
     const testScore = scoreState(testWires);
 
     // 1. Is it a new GLOBAL Best?
@@ -2548,7 +2550,7 @@ async function doPlateauExplore() {
   showOverlay(true);
   ostep(2);
 
-  let bestWires = await route(components, COLS, ROWS, () => { }, false);
+  let bestWires = await route(components, COLS, ROWS, () => { }, false, () => cancelRequested);
   let bestScore = scoreState(bestWires);
   const startScore = bestScore;
   wires = bestWires;
