@@ -537,7 +537,8 @@ function generateRatsnestSVG() {
         if (d < bD) { bD=d; bI=i; bJ=j; }
       }));
       if (bJ === -1) break;
-      out += `<line x1="${pins[bI].col*SP+SP/2}" y1="${pins[bI].row*SP+SP/2}" x2="${pins[bJ].col*SP+SP/2}" y2="${pins[bJ].row*SP+SP/2}" stroke="${netColor(net)}55" stroke-width="0.8" stroke-dasharray="2 5"/>`;
+      // FIX: Use opacity attribute instead of concatenating '55' to the color string!
+      out += `<line x1="${pins[bI].col*SP+SP/2}" y1="${pins[bI].row*SP+SP/2}" x2="${pins[bJ].col*SP+SP/2}" y2="${pins[bJ].row*SP+SP/2}" stroke="${netColor(net)}" opacity="0.35" stroke-width="0.8" stroke-dasharray="2 5"/>`;
       conn.add(bJ);
     }
   }
@@ -1480,7 +1481,7 @@ async function tryRotateOptimize() {
   return improved;
 }
 
-// Gravity Packer: Pulls components tightly toward the center of mass
+// Topological Gravity Packer: Pulls components toward their connected peers!
 async function doRecursivePushPacking() {
   let changed = true;
   let loops = 0;
@@ -1492,13 +1493,42 @@ async function doRecursivePushPacking() {
     loops++;
 
     const { bounds } = calculateFootprintArea();
-    const cx = bounds.minCol + (bounds.maxCol - bounds.minCol) / 2;
-    const cy = bounds.minRow + (bounds.maxRow - bounds.minRow) / 2;
+    const globalCx = bounds.minCol + (bounds.maxCol - bounds.minCol) / 2;
+    const globalCy = bounds.minRow + (bounds.maxRow - bounds.minRow) / 2;
 
-    // Sort components: furthest from center move first
+    const nets = getAllNets(components);
+
+    // Calculate a specific target "Center of Mass" for EACH component based on its wires
+    const compTargets = new Map();
+    components.forEach(c => {
+      let sumX = 0, sumY = 0, count = 0;
+      
+      c.pins.forEach(p => {
+        if (p.net && nets[p.net]) {
+          nets[p.net].forEach(op => {
+            // Don't count pins that are on THIS component
+            if (op.col >= c.ox && op.col < c.ox + c.w && op.row >= c.oy && op.row < c.oy + c.h) return;
+            sumX += op.col;
+            sumY += op.row;
+            count++;
+          });
+        }
+      });
+      
+      // If connected to things, target their average location. If unconnected, drift to global center.
+      if (count > 0) {
+        compTargets.set(c, { x: sumX / count, y: sumY / count });
+      } else {
+        compTargets.set(c, { x: globalCx, y: globalCy });
+      }
+    });
+
+    // Sort components: furthest from their personal target move first
     const sorted = [...components].sort((a, b) => {
-       const distA = Math.max(Math.abs(a.ox + a.w/2 - cx), Math.abs(a.oy + a.h/2 - cy));
-       const distB = Math.max(Math.abs(b.ox + b.w/2 - cx), Math.abs(b.oy + b.h/2 - cy));
+       const tA = compTargets.get(a);
+       const tB = compTargets.get(b);
+       const distA = Math.max(Math.abs(a.ox + a.w/2 - tA.x), Math.abs(a.oy + a.h/2 - tA.y));
+       const distB = Math.max(Math.abs(b.ox + b.w/2 - tB.x), Math.abs(b.oy + b.h/2 - tB.y));
        return distB - distA;
     });
 
@@ -1506,24 +1536,27 @@ async function doRecursivePushPacking() {
     let moveOccurred = false;
 
     for (let c of sorted) {
+       const target = compTargets.get(c);
        let dx = 0, dy = 0;
        
-       if (c.ox + c.w/2 < cx - 0.5) dx = 1;
-       else if (c.ox + c.w/2 > cx + 0.5) dx = -1;
+       // Move toward personal target
+       if (c.ox + c.w/2 < target.x - 0.5) dx = 1;
+       else if (c.ox + c.w/2 > target.x + 0.5) dx = -1;
 
-       if (c.oy + c.h/2 < cy - 0.5) dy = 1;
-       else if (c.oy + c.h/2 > cy + 0.5) dy = -1;
+       if (c.oy + c.h/2 < target.y - 0.5) dy = 1;
+       else if (c.oy + c.h/2 > target.y + 0.5) dy = -1;
 
        const tryMove = (mx, my) => {
          if (mx === 0 && my === 0) return false;
          moveComp(c, c.ox + mx, c.oy + my);
          if (anyOverlap(c, components)) {
-            moveComp(c, c.ox - mx, c.oy - my); // Revert overlap
+            moveComp(c, c.ox - mx, c.oy - my); // Revert physical collision
             return false;
          }
          return true;
        };
 
+       // Try moving diagonally first, then slide horizontally or vertically
        if (tryMove(dx, dy) || tryMove(dx, 0) || tryMove(0, dy)) {
          moveOccurred = true;
        }
@@ -1537,7 +1570,7 @@ async function doRecursivePushPacking() {
       let isBetter = false;
       if (testComp > bestComp) isBetter = true;
       else if (testComp === bestComp && newArea < bestArea) isBetter = true;
-      else if (testComp === bestComp && newArea === bestArea) isBetter = true; // Allow sideways sliding
+      else if (testComp === bestComp && newArea === bestArea) isBetter = true; // Allow sliding into better positions
 
       if (isBetter) {
         if (newArea < bestArea || testComp > bestComp) {
@@ -1546,13 +1579,12 @@ async function doRecursivePushPacking() {
         wires = testWires;
         changed = true; 
       } else {
-        restoreComps(oldStates); 
+        restoreComps(oldStates); // Revert if topological move broke a wire
       }
     }
   }
 }
 
-// Iterated Local Search with Simulated Annealing Restarts
 async function doOptimizeFootprint() {
   if (!components.length) { toast('No components to optimize', 'warn'); return; }
 
