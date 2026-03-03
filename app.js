@@ -425,6 +425,12 @@ async function doPlaceAndRoute() {
   let perfectWires = null; let perfectComps = null;
   let bestWires = null; let bestComps = null; let bestCompletion = 0;
 
+  // Clear old wires immediately so rerunning Place & Route doesn't show stale routes during placement.
+  wires = [];
+  render();
+  updateStats();
+  renderNetPanel();
+
   showOverlay(true);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -639,16 +645,25 @@ function updateStats() {
   const wl   = wires.filter(w => !w.failed).reduce((s,w) => s + w.path.length - 1, 0);
   const pct  = tc > 0 ? Math.round(ok / tc * 100) : null;
   
-  const bboxArea = (components.length > 0 && (wires.length > 0 || components.length > 0)) 
-    ? calculateFootprintArea().area 
-    : 0;
+  const fb = components.length > 0 ? footprintBoxMetrics(wires) : null;
 
   document.getElementById('stC').textContent = components.length;
   document.getElementById('stN').textContent = nk.length;
   document.getElementById('stW').textContent = ok;
   document.getElementById('stF').textContent = fail;
   document.getElementById('stL').textContent = wl || '—';
-  document.getElementById('stA').textContent = bboxArea || '—';
+  const elB = document.getElementById('stB');
+  const elA = document.getElementById('stA');
+  const elR = document.getElementById('stR');
+  if (fb) {
+    if (elB) elB.textContent = `${fb.width}×${fb.height}`;
+    if (elA) elA.textContent = fb.area;
+    if (elR) elR.textContent = fb.perim;
+  } else {
+    if (elB) elB.textContent = '—';
+    if (elA) elA.textContent = '—';
+    if (elR) elR.textContent = '—';
+  }
   const pe = document.getElementById('stP');
   if (pct === null)    { pe.textContent = '—';       pe.style.color = 'var(--txt2)'; }
   else if (pct === 100){ pe.textContent = '100% ✓';  pe.style.color = 'var(--grn)';  }
@@ -968,6 +983,18 @@ function ostep(n) {
 function setProg(p, s) {
   document.getElementById('ofill').style.width = p + '%';
   document.getElementById('osub').textContent = s;
+}
+
+function setBestLine(s) {
+  const el = document.getElementById('obest');
+  if (!el) return;
+  if (!s) {
+    el.style.display = 'none';
+    el.textContent = '';
+    return;
+  }
+  el.style.display = 'block';
+  el.textContent = s;
 }
 function toast(msg, type) {
   const el = document.getElementById('toast');
@@ -1493,13 +1520,22 @@ function calculateComponentBounds() {
   return { minCol, maxCol, minRow, maxRow };
 }
 
-function componentBoxMetrics() {
-  const b = calculateComponentBounds();
-  const w = (b.maxCol - b.minCol + 1);
-  const h = (b.maxRow - b.minRow + 1);
-  const area = w * h;
-  const perim = (w + h) * 2;
-  return { area, perim, bounds: b };
+function footprintBoxMetrics(ws) {
+  const b0 = calculateComponentBounds();
+  let minCol = b0.minCol, maxCol = b0.maxCol, minRow = b0.minRow, maxRow = b0.maxRow;
+  (ws || []).forEach(w => {
+    if (w?.path) w.path.forEach(pt => {
+      minCol = Math.min(minCol, pt.col);
+      maxCol = Math.max(maxCol, pt.col);
+      minRow = Math.min(minRow, pt.row);
+      maxRow = Math.max(maxRow, pt.row);
+    });
+  });
+  const width = (maxCol - minCol + 1);
+  const height = (maxRow - minRow + 1);
+  const area = width * height;
+  const perim = (width + height) * 2;
+  return { area, perim, width, height, bounds: { minCol, maxCol, minRow, maxRow } };
 }
 
 function wireLengthMetric(ws) {
@@ -1508,14 +1544,14 @@ function wireLengthMetric(ws) {
 
 function scoreState(ws) {
   const comp = completion(ws || []);
-  const { area, perim } = componentBoxMetrics();
+  const { area, perim, width, height, bounds } = footprintBoxMetrics(ws || []);
   const wl = wireLengthMetric(ws || []);
-  return { comp, area, perim, wl };
+  return { comp, area, perim, wl, width, height, bounds };
 }
 
 function formatScore(s) {
   if (!s) return '';
-  return `Comp ${Math.round((s.comp || 0) * 100)}%, Box ${s.area}/${s.perim}, WL ${s.wl}`;
+  return `Comp ${Math.round((s.comp || 0) * 100)}%, Board ${s.width}×${s.height}, area ${s.area} holes², perimeter ${s.perim} holes, WL ${s.wl}`;
 }
 
 function isScoreBetter(a, b) {
@@ -1688,7 +1724,7 @@ async function postOptimizePlateauTree(startBestScore, cols, rows) {
   let bestComps = startComps;
   let bestWires = startWires;
 
-  const startBox = componentBoxMetrics();
+  const startBox = footprintBoxMetrics(wires);
   const baseBox = { area: startBox.area, perim: startBox.perim, bounds: startBox.bounds };
 
   const visited = new Set();
@@ -1715,7 +1751,7 @@ async function postOptimizePlateauTree(startBestScore, cols, rows) {
       bestScore = shrinkRes.score;
       bestComps = saveComps();
       bestWires = wires;
-      const nb = componentBoxMetrics();
+      const nb = footprintBoxMetrics(wires);
       const newBox = { area: nb.area, perim: nb.perim, bounds: nb.bounds };
       visited.clear();
       q.length = 0;
@@ -2121,6 +2157,7 @@ async function doOptimizeFootprint() {
   const MAX_ITERS = 100; 
   showOverlay(true);
   ostep(1);
+  setBestLine('');
 
   // Keep optimization transactional: if nothing improves, restore exactly.
   const startSnapshot = snapshotBoardState();
@@ -2156,6 +2193,7 @@ async function doOptimizeFootprint() {
   let globalBestWires = [...wires];
 
   let bestUiMsg = `Best: ${formatScore(globalBestScore)}`;
+  setBestLine(bestUiMsg);
 
   // Track Progress of Current Search Branch
   let localBestScore = globalBestScore;
@@ -2204,7 +2242,7 @@ async function doOptimizeFootprint() {
       }
       
       await anneal(components, vCols, vRows, (p, s) => {
-        setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: SA Routing ${macroCount} — ${Math.round(p*100)}% | ${bestUiMsg}`);
+        setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: SA Routing ${macroCount} — ${Math.round(p*100)}%`);
         // We skip rendering during SA to keep it lightning fast
       });
       
@@ -2214,7 +2252,7 @@ async function doOptimizeFootprint() {
       // ==========================================
       // MICRO MUTATION (Jitter)
       // ==========================================
-      setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: Micro Search (Stagnation: ${stagnation}/5)... | ${bestUiMsg}`);
+      setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: Micro Search (Stagnation: ${stagnation}/5)...`);
       
       // Branch off the current local working set
       restoreComps(localBestComps); 
@@ -2317,7 +2355,8 @@ async function doOptimizeFootprint() {
       const msg = `Iter ${iter}: New global best — ${formatScore(testScore)}`;
       console.log(`[Iter ${iter}] NEW GLOBAL BEST! ${formatScore(testScore)}`);
       bestUiMsg = `Best: ${formatScore(testScore)}`;
-      setProg((iter / MAX_ITERS) * 100, `${msg} | ${bestUiMsg}`);
+      setBestLine(bestUiMsg);
+      setProg((iter / MAX_ITERS) * 100, msg);
 
       // UPDATE UI: Only preview if we actually improved over the original pre-opt.
       if (isScoreBetter(testScore, startScore)) {
@@ -2336,7 +2375,7 @@ async function doOptimizeFootprint() {
       stagnation = 0;
       const msg = `Iter ${iter}: Local improvement — ${formatScore(testScore)}`;
       console.log(`[Iter ${iter}] Local improvement. ${formatScore(testScore)}`);
-      setProg((iter / MAX_ITERS) * 100, `${msg} | ${bestUiMsg}`);
+      setProg((iter / MAX_ITERS) * 100, msg);
     } 
     else {
       // Dead end. Increase frustration.
@@ -2362,8 +2401,6 @@ async function doOptimizeFootprint() {
   document.getElementById('bRows').value = ROWS;
   applyBoard();
 
-  await postOptimizePlateauTree(scoreState(wires), COLS, ROWS);
-
   // Commit only if strictly improved vs start.
   const finalScore = scoreState(wires);
   if (!isScoreBetter(finalScore, startScore)) {
@@ -2374,8 +2411,84 @@ async function doOptimizeFootprint() {
   }
 
   showOverlay(false);
+  setBestLine('');
   render(); updateStats(); saveState();
   toast(`Optimization complete!`, "ok");
+}
+
+async function doPlateauExplore() {
+  if (!components.length) { toast('No components loaded', 'warn'); return; }
+
+  const startSnapshot = snapshotBoardState();
+  showOverlay(true);
+  ostep(2);
+
+  let bestWires = await route(components, COLS, ROWS, () => {}, false);
+  let bestScore = scoreState(bestWires);
+  const startScore = bestScore;
+  wires = bestWires;
+  render();
+  updateStats();
+
+  let bestMsg = `Best: ${formatScore(bestScore)}`;
+  setBestLine(bestMsg);
+
+  const MAX_STEPS = 45;
+  const MAX_NEIGHBORS_PER_COMP = 12;
+
+  for (let step = 1; step <= MAX_STEPS; step++) {
+    setProg((step / MAX_STEPS) * 100, `Step ${step} / ${MAX_STEPS}`);
+
+    const shrinkRes = await tryShrinkAlongWires(bestScore, COLS, ROWS);
+    if (shrinkRes.improved) {
+      bestScore = shrinkRes.score;
+      bestWires = wires;
+      bestMsg = `Best: ${formatScore(bestScore)}`;
+      setBestLine(bestMsg);
+      render();
+      updateStats();
+      await new Promise(r => setTimeout(r, 0));
+      continue;
+    }
+
+    const box = footprintBoxMetrics(wires);
+    const baseBox = { area: box.area, perim: box.perim, bounds: box.bounds };
+
+    const neighbors = await enumeratePlateauNeighbors(baseBox, bestScore, COLS, ROWS, MAX_NEIGHBORS_PER_COMP);
+    let pick = null;
+    for (const n of neighbors) {
+      if (n.score.comp < bestScore.comp) continue;
+      if (n.score.area > baseBox.area) continue;
+      if (n.score.area === baseBox.area && n.score.perim > baseBox.perim) continue;
+      if (!pick) pick = n;
+      else {
+        const a = n.score;
+        const b = pick.score;
+        if (a.wl < b.wl) pick = n;
+      }
+    }
+
+    if (!pick) break;
+    restoreComps(pick.comps);
+    wires = pick.wires;
+    bestWires = wires;
+    bestScore = pick.score;
+    bestMsg = `Best: ${formatScore(bestScore)}`;
+    setBestLine(bestMsg);
+    render();
+    updateStats();
+    await new Promise(r => setTimeout(r, 0));
+  }
+
+  const finalScore = scoreState(wires);
+  if (!isScoreBetter(finalScore, startScore)) {
+    restoreBoardState(startSnapshot);
+  } else {
+    saveState();
+  }
+
+  showOverlay(false);
+  setBestLine('');
 }
 
 function goBack() {
@@ -2438,6 +2551,7 @@ function cutToBoundingBox() {
 window.app = {
   applyBoard, loadTemplate, loadComponents,
   doPlaceAndRoute, doRouteOnly, doOptimizeFootprint, goBackState, goForwardState, exportCompleteState, cutToBoundingBox, clearWires, doExport, fullReset,
+  doPlateauExplore,
   setTool, adjZoom, fitView, selectComp, setHovNet,
   openCompEditor, closeCompEditor, saveComponentEdit,
   addNewComponent, addNewPin, updatePinProperties, deletePin, deselectPin,
