@@ -1,0 +1,42 @@
+[
+    {
+        "name": "Default",
+        "maxIters": 150,
+        "saTrigger": 5,
+        "plateauTrigger": 8,
+        "deepStagnation": 12,
+        "maxTimeMs": 25000
+    },
+    {
+        "name": "Aggressive SA",
+        "maxIters": 150,
+        "saTrigger": 3,
+        "plateauTrigger": 8,
+        "deepStagnation": 15,
+        "maxTimeMs": 25000
+    },
+    {
+        "name": "Early Plateau",
+        "maxIters": 150,
+        "saTrigger": 6,
+        "plateauTrigger": 4,
+        "deepStagnation": 10,
+        "maxTimeMs": 25000
+    },
+    {
+        "name": "Panic Mode",
+        "maxIters": 150,
+        "saTrigger": 4,
+        "plateauTrigger": 6,
+        "deepStagnation": 8,
+        "maxTimeMs": 25000
+    },
+    {
+        "name": "Deep Search",
+        "maxIters": 300,
+        "saTrigger": 10,
+        "plateauTrigger": 15,
+        "deepStagnation": 25,
+        "maxTimeMs": 60000
+    }
+]
