@@ -1,6 +1,7 @@
 [
     {
         "name": "Default",
+        "maxEpochs": 3,
         "maxIters": 150,
         "saTrigger": 5,
         "plateauTrigger": 8,
@@ -9,6 +10,7 @@
     },
     {
         "name": "Aggressive SA",
+        "maxEpochs": 3,
         "maxIters": 150,
         "saTrigger": 3,
         "plateauTrigger": 8,
@@ -17,6 +19,7 @@
     },
     {
         "name": "Early Plateau",
+        "maxEpochs": 3,
         "maxIters": 150,
         "saTrigger": 6,
         "plateauTrigger": 4,
@@ -25,6 +28,7 @@
     },
     {
         "name": "Panic Mode",
+        "maxEpochs": 3,
         "maxIters": 150,
         "saTrigger": 4,
         "plateauTrigger": 6,
@@ -33,6 +37,7 @@
     },
     {
         "name": "Deep Search",
+        "maxEpochs": 4,
         "maxIters": 300,
         "saTrigger": 10,
         "plateauTrigger": 15,

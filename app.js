@@ -183,9 +183,23 @@ function loadComponents() {
 function placeInitial() {
   components = [];
   compDefs.forEach(cd => {
-    const ox = cd.boardOffset ? cd.boardOffset[0] : 1;
-    const oy = cd.boardOffset ? cd.boardOffset[1] : 1;
-    components.push(makeComp(cd, ox, oy));
+    // 1. Random Initial Position
+    const ox = Math.floor(Math.random() * (COLS - cd.w - 1)) + 1;
+    const oy = Math.floor(Math.random() * (ROWS - cd.h - 1)) + 1;
+
+    let c = makeComp(cd, ox, oy);
+
+    // 2. Random Initial Rotation (0 to 3 times 90 degrees)
+    const rotations = Math.floor(Math.random() * 4);
+    for (let i = 0; i < rotations; i++) {
+      rotateComp90InPlace(c);
+    }
+
+    // Safety clamp to ensure rotation didn't push us out of bounds
+    if (c.ox + c.w >= COLS) moveComp(c, COLS - c.w - 1, c.oy);
+    if (c.oy + c.h >= ROWS) moveComp(c, c.ox, ROWS - c.h - 1);
+
+    components.push(c);
   });
 }
 

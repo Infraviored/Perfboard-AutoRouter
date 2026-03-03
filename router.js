@@ -1,5 +1,5 @@
 
-function getAllNets(components) {
+window.getAllNets = function (components) {
   const m = {};
   components.forEach(c => c.pins.forEach(p => {
     if (p.net) {
@@ -9,26 +9,10 @@ function getAllNets(components) {
   }));
   return Object.entries(m).map(([net, pins]) => ({ net, pins }));
 }
-
-async function route(components, cols, rows, onProg, debug = false, shouldCancel = null) {
+window.route = async function (components, cols, rows, onProg, debug = false, shouldCancel = null) {
   const nets = getAllNets(components);
   const grid = new Grid(cols, rows);
-
-  // Block holes occupied by any component's body (not pins)
-  components.forEach(c => {
-    for (let dr = 0; dr < c.h; dr++) {
-      for (let dc = 0; dc < c.w; dc++) {
-        // If the component allows routing under it, only block pins
-        if (c.routeUnder) continue;
-        grid.set(c.ox + dc, c.oy + dr, BLOCKED_COMP);
-      }
-    }
-  });
-
-  // Re-ensure pins of the components themselves are NOT blocked (since they are routing targets/sources)
-  components.forEach(c => {
-    c.pins.forEach(p => grid.clear(p.col, p.row, BLOCKED_COMP));
-  });
+  components.forEach(c => grid.registerComp(c));
 
   const wires = [];
   for (let netIdx = 0; netIdx < nets.length; netIdx++) {

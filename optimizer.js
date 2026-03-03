@@ -5,7 +5,14 @@ window.doOptimizeFootprint = async function () {
     gCancelRequested = false;
     gCancelOp = 'Optimize';
 
-    const MAX_ITERS = window.packerConfig.maxIters || 100;
+    const MAX_EPOCHS = window.packerConfig.maxEpochs || 1;
+    let MAX_ITERS = window.packerConfig.maxIters || 100;
+
+    // Distribute iterations across epochs
+    if (MAX_EPOCHS > 1 && MAX_ITERS > 10) {
+        MAX_ITERS = Math.max(10, Math.floor(MAX_ITERS / MAX_EPOCHS));
+    }
+
     const saThresh = window.packerConfig.saTrigger || 5;
     const platThresh = window.packerConfig.plateauTrigger || 8;
     const deepThresh = window.packerConfig.deepStagnation || 12;
@@ -58,8 +65,6 @@ window.doOptimizeFootprint = async function () {
     let stagnation = 0;
     let macroCount = 0;
 
-    // IMPORTANT: do not render here; keep showing the pre-opt PCB until we have an actual improvement.
-
     const translateToFitUI = () => {
         const b = calculateComponentBounds();
         const w = (b.maxCol - b.minCol + 1);
@@ -85,187 +90,218 @@ window.doOptimizeFootprint = async function () {
         }
     };
 
-    // --- 2. SEARCH LOOP ---
     const startTime = performance.now();
-    for (let iter = 1; iter <= MAX_ITERS; iter++) {
+
+    for (let currentEpoch = 1; currentEpoch <= MAX_EPOCHS; currentEpoch++) {
         if (gCancelRequested || (performance.now() - startTime) > maxTimeMs) break;
-        document.getElementById('ot').textContent = `Optimize ${iter} / ${MAX_ITERS}`;
 
-        if (iter % 10 === 0 || stagnation >= platThresh) {
-            if (stagnation >= saThresh && stagnation < platThresh) {
-                // Skip SA, let stagnation hit platThresh to trigger plateau explore
-            } else {
-                // ==========================================
-                // MACRO MUTATION (Simulated Annealing)
-                // ==========================================
-                macroCount++;
-                if (stagnation >= deepThresh) {
-                    const b = calculateComponentBounds();
-                    const spanX = Math.max(1, (b.maxCol - b.minCol + 1));
-                    const spanY = Math.max(1, (b.maxRow - b.minRow + 1));
-                    const cx = Math.floor(vCols / 2 - spanX / 2);
-                    const cy = Math.floor(vRows / 2 - spanY / 2);
-                    for (const c of components) {
-                        const nx = Math.max(0, Math.min(vCols - c.w, cx + Math.floor(Math.random() * 7) - 3));
-                        const ny = Math.max(0, Math.min(vRows - c.h, cy + Math.floor(Math.random() * 7) - 3));
-                        moveComp(c, nx, ny);
-                    }
-                    stagnation = 6;
-                }
+        if (currentEpoch > 1) {
+            // =====================================
+            // EPOCH RESTART: FULL RANDOM SCATTER
+            // =====================================
+            console.log(`[Epoch ${currentEpoch}] Triggering full random scramble...`);
+            setProg(0, `Epoch ${currentEpoch} / ${MAX_EPOCHS} (Randomizing...)`);
+            for (let c of components) {
+                const nx = Math.max(0, Math.min(vCols - c.w, Math.floor(Math.random() * (vCols - c.w))));
+                const ny = Math.max(0, Math.min(vRows - c.h, Math.floor(Math.random() * (vRows - c.h))));
 
-                await anneal(components, vCols, vRows, (p, s) => {
-                    setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: SA Routing ${macroCount} — ${Math.round(p * 100)}%`);
-                }, () => gCancelRequested);
-
-                if (stagnation >= deepThresh) stagnation = 0; // Reset deep frustration, but let edge stay near plateau
-            }
-        }
-
-        if (iter % 10 !== 0 && stagnation < platThresh) {
-            // ==========================================
-            // MICRO MUTATION (Jitter)
-            // ==========================================
-            setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: Micro Search (Stagnation: ${stagnation}/${platThresh})...`);
-
-            // Branch off the current local working set
-            restoreComps(localBestComps);
-
-            // Tweak 1 or 2 components slightly
-            const numMutations = Math.max(1, Math.floor(components.length * 0.15));
-            let compsToMutate = [...components].sort(() => 0.5 - Math.random()).slice(0, numMutations);
-
-            for (let c of compsToMutate) {
-                const oldW = c.w, oldH = c.h, oldOx = c.ox, oldOy = c.oy;
-                const oldPins = c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow }));
-
-                if (Math.random() < 0.2) {
-                    c.w = oldH; c.h = oldW;
-                    c.pins.forEach(p => {
-                        const r = p.dRow; p.dRow = p.dCol; p.dCol = c.w - 1 - r;
-                        p.col = c.ox + p.dCol; p.row = c.oy + p.dRow;
-                    });
-                }
-
-                let dx = (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 2) + 1);
-                let dy = (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 2) + 1);
-
-                const nx = Math.max(0, Math.min(vCols - c.w, c.ox + dx));
-                const ny = Math.max(0, Math.min(vRows - c.h, c.oy + dy));
+                const rotations = Math.floor(Math.random() * 4);
+                for (let i = 0; i < rotations; i++) rotateComp90InPlace(c);
+                if (c.ox + c.w >= vCols) c.ox = vCols - c.w - 1;
+                if (c.oy + c.h >= vRows) c.oy = vRows - c.h - 1;
 
                 moveComp(c, nx, ny);
-                if (anyOverlap(c, components)) {
-                    c.w = oldW; c.h = oldH;
-                    moveComp(c, oldOx, oldOy);
-                    c.pins.forEach((p, idx) => Object.assign(p, oldPins[idx]));
-                }
             }
-        }
-
-        // --- APPLY PACKING (The Squeeze) ---
-        if (gCancelRequested) break;
-        await doRecursivePushPacking();
-        await tryRotateOptimize();
-        await doRecursivePushPacking();
-
-        if (gCancelRequested) break;
-        const nudgeRes = await tryGlobalNudge(localBestScore, vCols, vRows);
-        if (nudgeRes.improved) {
-            localBestScore = nudgeRes.score;
-        }
-
-        if (gCancelRequested) break;
-        const shrinkRes = await tryShrinkAlongWires(localBestScore, vCols, vRows);
-        if (shrinkRes.improved) {
-            localBestScore = shrinkRes.score;
+            wires = await route(components, vCols, vRows, () => { }, false, () => gCancelRequested);
+            localBestScore = scoreState(wires);
             localBestComps = saveComps();
             stagnation = 0;
+            macroCount = 0;
         }
 
-        if (!gCancelRequested && stagnation >= platThresh) {
-            const plateauRes = await explorePlateauStates(localBestScore, vCols, vRows);
-            if (plateauRes.improved) {
-                localBestScore = plateauRes.score;
+        // IMPORTANT: do not render here; keep showing the pre-opt PCB until we have an actual improvement.
+
+        // --- 2. SEARCH LOOP ---
+        for (let iter = 1; iter <= MAX_ITERS; iter++) {
+            if (gCancelRequested || (performance.now() - startTime) > maxTimeMs) break;
+            document.getElementById('ot').textContent = `Optimize (E${currentEpoch}) ${iter} / ${MAX_ITERS}`;
+
+            if (iter % 10 === 0 || stagnation >= platThresh) {
+                if (stagnation >= saThresh && stagnation < platThresh) {
+                    // Skip SA, let stagnation hit platThresh to trigger plateau explore
+                } else {
+                    // ==========================================
+                    // MACRO MUTATION (Simulated Annealing)
+                    // ==========================================
+                    macroCount++;
+                    if (stagnation >= deepThresh) {
+                        const b = calculateComponentBounds();
+                        const spanX = Math.max(1, (b.maxCol - b.minCol + 1));
+                        const spanY = Math.max(1, (b.maxRow - b.minRow + 1));
+                        const cx = Math.floor(vCols / 2 - spanX / 2);
+                        const cy = Math.floor(vRows / 2 - spanY / 2);
+                        for (const c of components) {
+                            const nx = Math.max(0, Math.min(vCols - c.w, cx + Math.floor(Math.random() * 7) - 3));
+                            const ny = Math.max(0, Math.min(vRows - c.h, cy + Math.floor(Math.random() * 7) - 3));
+                            moveComp(c, nx, ny);
+                        }
+                        stagnation = 6;
+                    }
+
+                    await anneal(components, vCols, vRows, (p, s) => {
+                        setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: SA Routing ${macroCount} — ${Math.round(p * 100)}%`);
+                    }, () => gCancelRequested);
+
+                    if (stagnation >= deepThresh) stagnation = 0; // Reset deep frustration, but let edge stay near plateau
+                }
+            }
+
+            if (iter % 10 !== 0 && stagnation < platThresh) {
+                // ==========================================
+                // MICRO MUTATION (Jitter)
+                // ==========================================
+                setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: Micro Search (Stagnation: ${stagnation}/${platThresh})...`);
+
+                // Branch off the current local working set
+                restoreComps(localBestComps);
+
+                // Tweak 1 or 2 components slightly
+                const numMutations = Math.max(1, Math.floor(components.length * 0.15));
+                let compsToMutate = [...components].sort(() => 0.5 - Math.random()).slice(0, numMutations);
+
+                for (let c of compsToMutate) {
+                    const oldW = c.w, oldH = c.h, oldOx = c.ox, oldOy = c.oy;
+                    const oldPins = c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow }));
+
+                    if (Math.random() < 0.2) {
+                        c.w = oldH; c.h = oldW;
+                        c.pins.forEach(p => {
+                            const r = p.dRow; p.dRow = p.dCol; p.dCol = c.w - 1 - r;
+                            p.col = c.ox + p.dCol; p.row = c.oy + p.dRow;
+                        });
+                    }
+
+                    let dx = (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 2) + 1);
+                    let dy = (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 2) + 1);
+
+                    const nx = Math.max(0, Math.min(vCols - c.w, c.ox + dx));
+                    const ny = Math.max(0, Math.min(vRows - c.h, c.oy + dy));
+
+                    moveComp(c, nx, ny);
+                    if (anyOverlap(c, components)) {
+                        c.w = oldW; c.h = oldH;
+                        moveComp(c, oldOx, oldOy);
+                        c.pins.forEach((p, idx) => Object.assign(p, oldPins[idx]));
+                    }
+                }
+            }
+
+            // --- APPLY PACKING (The Squeeze) ---
+            if (gCancelRequested) break;
+            await doRecursivePushPacking();
+            await tryRotateOptimize();
+            await doRecursivePushPacking();
+
+            if (gCancelRequested) break;
+            const nudgeRes = await tryGlobalNudge(localBestScore, vCols, vRows);
+            if (nudgeRes.improved) {
+                localBestScore = nudgeRes.score;
+            }
+
+            if (gCancelRequested) break;
+            const shrinkRes = await tryShrinkAlongWires(localBestScore, vCols, vRows);
+            if (shrinkRes.improved) {
+                localBestScore = shrinkRes.score;
                 localBestComps = saveComps();
                 stagnation = 0;
+            }
 
-                const shrink2 = await tryShrinkAlongWires(localBestScore, vCols, vRows);
-                if (shrink2.improved) {
-                    localBestScore = shrink2.score;
+            if (!gCancelRequested && stagnation >= platThresh) {
+                const plateauRes = await explorePlateauStates(localBestScore, vCols, vRows);
+                if (plateauRes.improved) {
+                    localBestScore = plateauRes.score;
                     localBestComps = saveComps();
+                    stagnation = 0;
+
+                    const shrink2 = await tryShrinkAlongWires(localBestScore, vCols, vRows);
+                    if (shrink2.improved) {
+                        localBestScore = shrink2.score;
+                        localBestComps = saveComps();
+                    }
                 }
             }
-        }
 
-        // --- EVALUATE METRICS ---
-        // Translate the current virtual placement into the UI board window for evaluation.
-        if (gCancelRequested) break;
-        const preEval = saveComps();
-        const preEvalWires = wires;
-        if (!translateToFitUI()) {
-            restoreComps(preEval);
-            stagnation++;
-            await new Promise(r => setTimeout(r, 0));
-            continue;
-        }
-
-        const testWires = await route(components, uiCols, uiRows, () => { }, false, () => gCancelRequested);
-        const testScore = scoreState(testWires);
-
-        // 1. Is it a new GLOBAL Best?
-        let isGlobalBest = false;
-        if (isScoreBetter(testScore, globalBestScore)) isGlobalBest = true;
-
-        // 2. Is it a new LOCAL Best?
-        let isLocalBest = false;
-        if (isScoreBetter(testScore, localBestScore)) isLocalBest = true;
-
-        if (isGlobalBest) {
-            // Save global records
-            globalBestScore = testScore;
-            globalBestComps = saveComps(); globalBestWires = [...testWires];
-
-            // Sync local records to the new global high score
-            localBestScore = testScore;
-            localBestComps = saveComps();
-
-            stagnation = 0;
-            const msg = `Iter ${iter}: New global best — ${formatScore(testScore)}`;
-            console.log(`[Iter ${iter}] NEW GLOBAL BEST! ${formatScore(testScore)}`);
-            bestUiMsg = `Best: ${formatScore(testScore)}`;
-            setBestLine(bestUiMsg);
-            setProg((iter / MAX_ITERS) * 100, msg);
-
-            // UPDATE UI: Only preview if we actually improved over the original pre-opt.
-            if (isScoreBetter(testScore, startScore)) {
-                wires = globalBestWires;
-                render();
-                updateStats();
-                await new Promise(r => setTimeout(r, 0)); // Let browser paint
-            } else {
-                restoreBoardState(startPreviewSnapshot);
+            // --- EVALUATE METRICS ---
+            // Translate the current virtual placement into the UI board window for evaluation.
+            if (gCancelRequested) break;
+            const preEval = saveComps();
+            const preEvalWires = wires;
+            if (!translateToFitUI()) {
+                restoreComps(preEval);
+                stagnation++;
+                await new Promise(r => setTimeout(r, 0));
+                continue;
             }
-        }
-        else if (isLocalBest) {
-            // Made progress, but didn't beat the absolute high score
-            localBestScore = testScore;
-            localBestComps = saveComps();
-            stagnation = 0;
-            const msg = `Iter ${iter}: Local improvement — ${formatScore(testScore)}`;
-            console.log(`[Iter ${iter}] Local improvement. ${formatScore(testScore)}`);
-            setProg((iter / MAX_ITERS) * 100, msg);
-        }
-        else {
-            // Dead end. Increase frustration.
-            stagnation++;
-        }
 
-        // Always yield event loop to keep the browser responsive
-        await new Promise(r => setTimeout(r, 0));
+            const testWires = await route(components, uiCols, uiRows, () => { }, false, () => gCancelRequested);
+            const testScore = scoreState(testWires);
 
-        // Restore the virtual search state after UI-space evaluation/preview.
-        restoreComps(preEval);
-        wires = preEvalWires;
-    }
+            // 1. Is it a new GLOBAL Best?
+            let isGlobalBest = false;
+            if (isScoreBetter(testScore, globalBestScore)) isGlobalBest = true;
+
+            // 2. Is it a new LOCAL Best?
+            let isLocalBest = false;
+            if (isScoreBetter(testScore, localBestScore)) isLocalBest = true;
+
+            if (isGlobalBest) {
+                // Save global records
+                globalBestScore = testScore;
+                globalBestComps = saveComps(); globalBestWires = [...testWires];
+
+                // Sync local records to the new global high score
+                localBestScore = testScore;
+                localBestComps = saveComps();
+
+                stagnation = 0;
+                const msg = `Iter ${iter}: New global best — ${formatScore(testScore)}`;
+                console.log(`[Iter ${iter}] NEW GLOBAL BEST! ${formatScore(testScore)}`);
+                bestUiMsg = `Best: ${formatScore(testScore)}`;
+                setBestLine(bestUiMsg);
+                setProg((iter / MAX_ITERS) * 100, msg);
+
+                // UPDATE UI: Only preview if we actually improved over the original pre-opt.
+                if (isScoreBetter(testScore, startScore)) {
+                    wires = globalBestWires;
+                    render();
+                    updateStats();
+                    await new Promise(r => setTimeout(r, 0)); // Let browser paint
+                } else {
+                    restoreBoardState(startPreviewSnapshot);
+                }
+            }
+            else if (isLocalBest) {
+                // Made progress, but didn't beat the absolute high score
+                localBestScore = testScore;
+                localBestComps = saveComps();
+                stagnation = 0;
+                const msg = `Iter ${iter}: Local improvement — ${formatScore(testScore)}`;
+                console.log(`[Iter ${iter}] Local improvement. ${formatScore(testScore)}`);
+                setProg((iter / MAX_ITERS) * 100, msg);
+            }
+            else {
+                // Dead end. Increase frustration.
+                stagnation++;
+            }
+
+            // Always yield event loop to keep the browser responsive
+            await new Promise(r => setTimeout(r, 0));
+
+            // Restore the virtual search state after UI-space evaluation/preview.
+            restoreComps(preEval);
+            wires = preEvalWires;
+        } // End Iter Loop
+    } // End Epoch Loop
 
     // --- 3. CLEANUP & RESTORE ---
     restoreComps(globalBestComps);
