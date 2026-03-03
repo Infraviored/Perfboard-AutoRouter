@@ -1778,7 +1778,7 @@ async function enumeratePlateauNeighbors(baseBox, baseScore, cols, rows, maxPerC
 
         totalEvals++;
         if (onProgress) onProgress(totalEvals, maxTotalEvals, `${cId} rot${rot}`);
-        if (totalEvals > maxTotalEvals) break;
+        if (totalEvals > maxTotalEvals || cancelRequested) break;
 
         const testWires = await route(components, cols, rows, () => { }, false, () => cancelRequested);
         const testScore = scoreState(testWires);
