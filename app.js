@@ -642,13 +642,44 @@ function hitComp(col, row) {
 
 // --- STATE FOR NEW INPUTS ---
 let isSpaceDown = false;
-let isRightClick = false;
 let lastRenderedW = 0;
 let lastRenderedH = 0;
 
 
-// Prevent context menu on right-click so we can use it to pan
+// Prevent context menu on right-click so we can use it to pan/rotate
 ca.addEventListener('contextmenu', e => e.preventDefault());
+
+function handleRightClickRotation(e) {
+  const { gc, gr } = gridPos(e);
+  // Case 1: Currently dragging with left mouse
+  if (dragging) {
+    rotateComp90InPlace(dragging);
+    // Update dragOff based on current mouse position and fixed origin to avoid jumps
+    dragOff = { dc: gc - dragging.ox, dr: gr - dragging.oy };
+    wires = [];
+    queueRender();
+    return true;
+  }
+  // Case 2: Right clicking on the already selected component
+  const hit = hitComp(gc, gr);
+  if (hit && hit === selComp) {
+    rotateComp90InPlace(hit);
+    wires = [];
+    queueRender();
+    return true;
+  }
+  return false;
+}
+
+// Use mousedown as well for multi-button reliability during capture
+ca.addEventListener('mousedown', e => {
+  if (e.button === 2) {
+    if (handleRightClickRotation(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }
+});
 
 // Track Spacebar for Panning
 document.addEventListener('keydown', e => {
@@ -667,14 +698,20 @@ document.addEventListener('keyup', e => {
 
 // --- MODERN POINTER EVENTS (Mouse + Touch + Pen) ---
 ca.addEventListener('pointerdown', e => {
-  if (e.target.closest('#overlay') || e.target.closest('.zbtn')) return; // Ignore clicks on UI overlays
+  if (e.target.closest('#overlay') || e.target.closest('.zbtn')) return;
+  ca.setPointerCapture(e.pointerId);
 
-  ca.setPointerCapture(e.pointerId); // Keep tracking even if cursor leaves element
+  const { gc, gr } = gridPos(e);
+  const isRight = (e.button === 2);
+  if (isRight) {
+    const hit = hitComp(gc, gr);
+    // If we're dragging or over the selected component, don't pan (mousedown handles rotation)
+    if (dragging || (hit && hit === selComp)) {
+      e.preventDefault();
+      return;
+    }
 
-  isRightClick = e.button === 2;
-
-  // Middle click, Right click, Spacebar, or Alt-click initiates panning
-  if (e.button === 1 || isRightClick || isSpaceDown || e.altKey) {
+    // Otherwise, right click pans
     panning = true;
     panStart = { x: e.clientX - panX, y: e.clientY - panY };
     ca.style.cursor = 'grabbing';
@@ -682,13 +719,21 @@ ca.addEventListener('pointerdown', e => {
     return;
   }
 
-  const { gc, gr } = gridPos(e);
-  if (tool === 'sel') {
+  // Middle click, Spacebar, or Alt-click initiates panning
+  if (e.button === 1 || isSpaceDown || e.altKey) {
+    panning = true;
+    panStart = { x: e.clientX - panX, y: e.clientY - panY };
+    ca.style.cursor = 'grabbing';
+    e.preventDefault();
+    return;
+  }
+
+  // Left click selection and dragging
+  if (e.button === 0 && tool === 'sel') {
     const hit = hitComp(gc, gr);
     selComp = hit || null;
     if (hit) {
       dragging = hit;
-      // Calculate exact sub-grid offset to prevent visual "jump"
       dragOff = { dc: gc - hit.ox, dr: gr - hit.oy };
     }
     selectComp(hit ? hit.id : null);
@@ -733,8 +778,6 @@ ca.addEventListener('pointermove', e => {
 
     if (nox !== dragging.ox || noy !== dragging.oy) {
       moveComp(dragging, nox, noy);
-      // Wait to re-route until pointerup for better performance, 
-      // just clear wires and render the move for now.
       wires = [];
       queueRender();
     }
@@ -745,15 +788,15 @@ ca.addEventListener('pointerup', e => {
   ca.releasePointerCapture(e.pointerId);
   if (panning) {
     panning = false;
-    isRightClick = false;
     ca.style.cursor = isSpaceDown ? 'grab' : 'crosshair';
   }
-  if (dragging) {
+  // Only end dragging if the left button is released
+  if (dragging && e.button === 0) {
     dragging = null;
     dragOff = null;
     selectComp(selComp?.id || null);
     renderNetPanel();
-    updateStats(); // Update stats here instead of every frame of movement
+    updateStats();
     saveState();
   }
 });
