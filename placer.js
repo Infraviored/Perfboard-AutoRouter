@@ -61,7 +61,7 @@ function rotateCompInPlace(c) {
   });
 }
 
-export async function anneal(components, cols, rows, onProgress) {
+export async function anneal(components, cols, rows, onProgress, shouldCancel) {
   if (components.length === 0) return;
 
   function yld() { return new Promise(r => setTimeout(r, 0)); }
@@ -74,6 +74,7 @@ export async function anneal(components, cols, rows, onProgress) {
   while (T > Tmin) {
     const MOVES_PER_STEP = 8;
     for (let m = 0; m < MOVES_PER_STEP; m++) {
+      if (shouldCancel && shouldCancel()) return;
       const c = components[Math.floor(Math.random() * components.length)];
       const oldOx = c.ox, oldOy = c.oy;
       const oldPins = c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow, col: p.col, row: p.row }));
@@ -115,6 +116,7 @@ export async function anneal(components, cols, rows, onProgress) {
       }
     }
     T *= alpha; step++;
+    if (shouldCancel && shouldCancel()) return;
     onProgress(step / totalSteps, `SA T=${T.toFixed(1)} WL=${cur}`);
     if (step % 5 === 0) await yld();
   }

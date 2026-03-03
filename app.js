@@ -441,7 +441,7 @@ async function doPlaceAndRoute() {
     placeInitial();
     await anneal(components, COLS, ROWS, (p, s) => {
       setProg(p * 100, `[${attempt}/${maxAttempts}] SA — ${s}`); render();
-    });
+    }, () => cancelRequested);
 
     ostep(2);
     setProg(0, 'Routing…');
@@ -824,6 +824,9 @@ let isRightClick = false;
 let lastRenderedW = 0;
 let lastRenderedH = 0;
 
+let cancelRequested = false;
+let cancelOp = null;
+
 // Prevent context menu on right-click so we can use it to pan
 ca.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -1039,13 +1042,19 @@ document.addEventListener('keydown', e => {
   if (e.shiftKey && (e.key === 'R' || e.key === 'r')) { e.preventDefault(); doRouteOnly(); } // Was F6
   if (e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd')) { e.preventDefault(); debugBoard(); } // Was F7
   
-  // Escape closes modals and clears selection
-  if (e.key === 'Escape') { 
-    selComp = null; 
-    selectComp(null); 
+  if (e.key === 'Escape') {
+    if (cancelOp && document.getElementById('overlay').classList.contains('on')) {
+      e.preventDefault();
+      cancelRequested = true;
+      setProg(parseFloat(document.getElementById('ofill').style.width) || 0, `${cancelOp}: cancelling…`);
+      return;
+    }
+
+    selComp = null;
+    selectComp(null);
     closeCompEditor();
     closeLibrary();
-    render(); 
+    render();
   }
   
   // --- SAFE DELETION LOGIC ---
@@ -2211,6 +2220,9 @@ async function tryGlobalNudge(bestScore, cols, rows) {
 async function doOptimizeFootprint() {
   if (!components.length) { toast('No components to optimize', 'warn'); return; }
 
+  cancelRequested = false;
+  cancelOp = 'Optimize';
+
   const MAX_ITERS = 100; 
   showOverlay(true);
   ostep(1);
@@ -2265,15 +2277,30 @@ async function doOptimizeFootprint() {
     const b = calculateComponentBounds();
     const w = (b.maxCol - b.minCol + 1);
     const h = (b.maxRow - b.minRow + 1);
-    if (w > uiCols || h > uiRows) return false;
-    const dx = -b.minCol;
-    const dy = -b.minRow;
+    const margin = 2;
+    if (w + margin * 2 > uiCols || h + margin * 2 > uiRows) return false;
+
+    const dx = Math.floor((uiCols - w) / 2) - b.minCol;
+    const dy = Math.floor((uiRows - h) / 2) - b.minRow;
     for (const c of components) moveComp(c, c.ox + dx, c.oy + dy);
     return true;
   };
 
+  const translateFootprintToTopLeftUI = () => {
+    const fb = footprintBoxMetrics(wires);
+    const dx = -fb.bounds.minCol;
+    const dy = -fb.bounds.minRow;
+    for (const c of components) moveComp(c, c.ox + dx, c.oy + dy);
+    if (wires) {
+      wires.forEach(w => {
+        if (w?.path) w.path.forEach(pt => { pt.col += dx; pt.row += dy; });
+      });
+    }
+  };
+
   // --- 2. SEARCH LOOP ---
   for (let iter = 1; iter <= MAX_ITERS; iter++) {
+    if (cancelRequested) break;
     document.getElementById('ot').textContent = `Optimize ${iter} / ${MAX_ITERS}`;
     
     if (iter % 10 === 0 || stagnation >= 5) {
@@ -2301,7 +2328,7 @@ async function doOptimizeFootprint() {
       await anneal(components, vCols, vRows, (p, s) => {
         setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: SA Routing ${macroCount} — ${Math.round(p*100)}%`);
         // We skip rendering during SA to keep it lightning fast
-      });
+      }, () => cancelRequested);
       
       stagnation = 0; // Reset frustration
       
@@ -2346,15 +2373,18 @@ async function doOptimizeFootprint() {
     }
 
     // --- APPLY PACKING (The Squeeze) ---
+    if (cancelRequested) break;
     await doRecursivePushPacking();
     await tryRotateOptimize();
     await doRecursivePushPacking();
 
+    if (cancelRequested) break;
     const nudgeRes = await tryGlobalNudge(localBestScore, vCols, vRows);
     if (nudgeRes.improved) {
       localBestScore = nudgeRes.score;
     }
 
+    if (cancelRequested) break;
     const shrinkRes = await tryShrinkAlongWires(localBestScore, vCols, vRows);
     if (shrinkRes.improved) {
       localBestScore = shrinkRes.score;
@@ -2362,7 +2392,7 @@ async function doOptimizeFootprint() {
       stagnation = 0;
     }
 
-    if (stagnation >= 8) {
+    if (!cancelRequested && stagnation >= 8) {
       const plateauRes = await explorePlateauStates(localBestScore, vCols, vRows);
       if (plateauRes.improved) {
         localBestScore = plateauRes.score;
@@ -2379,6 +2409,7 @@ async function doOptimizeFootprint() {
 
     // --- EVALUATE METRICS ---
     // Translate the current virtual placement into the UI board window for evaluation.
+    if (cancelRequested) break;
     const preEval = saveComps();
     const preEvalWires = wires;
     if (!translateToFitUI()) {
@@ -2458,11 +2489,15 @@ async function doOptimizeFootprint() {
   document.getElementById('bRows').value = ROWS;
   applyBoard();
 
+  // Only translate to the UI corner after we're done searching.
+  translateFootprintToTopLeftUI();
+
   // Commit only if strictly improved vs start.
   const finalScore = scoreState(wires);
   if (!isScoreBetter(finalScore, startScore)) {
     restoreBoardState(startSnapshot);
     showOverlay(false);
+    cancelOp = null;
     toast('Optimization found no improvement', 'inf');
     return;
   }
@@ -2470,11 +2505,16 @@ async function doOptimizeFootprint() {
   showOverlay(false);
   setBestLine('');
   render(); updateStats(); saveState();
-  toast(`Optimization complete!`, "ok");
+  cancelOp = null;
+  if (cancelRequested) toast('Optimization cancelled — kept best so far', 'inf');
+  else toast(`Optimization complete!`, "ok");
 }
 
 async function doPlateauExplore() {
   if (!components.length) { toast('No components loaded', 'warn'); return; }
+
+  cancelRequested = false;
+  cancelOp = 'Plateau';
 
   const startSnapshot = snapshotBoardState();
   showOverlay(true);
@@ -2499,6 +2539,7 @@ async function doPlateauExplore() {
   const MAX_ROUTINGS_PER_STEP = 35;
 
   for (let step = 1; step <= MAX_STEPS; step++) {
+    if (cancelRequested) break;
     setProg((step / MAX_STEPS) * 100, `Plateau explore: step ${step} / ${MAX_STEPS}`);
 
     const shrinkRes = await tryShrinkAlongWires(bestScore, COLS, ROWS);
@@ -2525,6 +2566,7 @@ async function doPlateauExplore() {
       step,
       visited,
       (done, total, tag) => {
+        if (cancelRequested) return;
         setProg((step / MAX_STEPS) * 100, `Plateau explore: step ${step}/${MAX_STEPS} — eval ${Math.min(done, total)}/${total} (${tag})`);
       },
       MAX_ROUTINGS_PER_STEP
@@ -2575,6 +2617,8 @@ async function doPlateauExplore() {
 
   showOverlay(false);
   setBestLine('');
+  cancelOp = null;
+  if (cancelRequested) toast('Plateau explore cancelled — kept best so far', 'inf');
 }
 
 function goBack() {
