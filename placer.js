@@ -1,8 +1,6 @@
 // placer.js
-import { Grid } from './grid.js';
-
-let bboxCache = null;
-let numNetsCache = 0;
+var bboxCache = null;
+var numNetsCache = 0;
 
 function setupHpwl(numNets) {
   numNetsCache = numNets;
@@ -111,7 +109,7 @@ function unrotateCompInPlace(c) {
   }
 }
 
-export async function anneal(components, cols, rows, onProgress, shouldCancel) {
+async function anneal(components, cols, rows, onProgress, shouldCancel) {
   if (components.length === 0) return;
 
   function yld() { return new Promise(r => setTimeout(r, 0)); }

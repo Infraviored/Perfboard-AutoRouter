@@ -1,7 +1,4 @@
 // app.js — UI orchestration, rendering, drag/drop
-import { anneal } from './placer.js';
-import { route, getAllNets } from './router.js';
-
 // ── NET COLORS ──
 const NET_PAL = {
   VCC: '#ff5252', GND: '#40c4ff', GATE: '#00e676',
@@ -38,17 +35,7 @@ window.packerConfig = {
   deepStagnation: 12
 };
 
-let COLS = 22, ROWS = 16, SP = 28;
-let zoom = 1, panX = 0, panY = 0;
-let panning = false, panStart = null;
-let tool = 'sel';
-let components = [];
-let compDefs = [];
-let wires = [];
-let selComp = null;
-let dragging = null, dragOff = null;
-let hovNet = null;
-let toastTid = null;
+// All other state variables (COLS, ROWS, components, etc.) are now in globals.js
 
 // Cache DOM elements
 const domElements = {
@@ -57,7 +44,6 @@ const domElements = {
   cNet: document.getElementById('cNet')
 };
 
-let editingComp = null;
 let editingCompIndex = -1;
 let pinGridSize = 30;
 let draggedPin = null;
@@ -221,209 +207,6 @@ function moveComp(c, ox, oy) {
   c.pins.forEach(p => { p.col = ox + p.dCol; p.row = oy + p.dRow; });
 }
 
-// ── STATE MANAGEMENT ──
-let stateHistory = [];
-let currentStateIndex = -1;
-
-function initializeState() {
-  const savedState = localStorage.getItem('autorouterState');
-  if (savedState) {
-    try {
-      const state = JSON.parse(savedState);
-      stateHistory = state.history || [];
-      currentStateIndex = state.index || -1;
-
-      if (currentStateIndex >= 0 && stateHistory[currentStateIndex]) {
-        restoreState(stateHistory[currentStateIndex]);
-      }
-    } catch (e) {
-      console.error('Failed to load saved state:', e);
-      resetState();
-    }
-  } else {
-    resetState();
-  }
-}
-
-function resetState() {
-  stateHistory = [];
-  currentStateIndex = -1;
-  COLS = 40;
-  ROWS = 30;
-  document.getElementById('bCols').value = COLS;
-  document.getElementById('bRows').value = ROWS;
-  components = []; wires = []; compDefs = [];
-  saveState();
-}
-
-function saveState() {
-  const state = {
-    boardSize: { cols: COLS, rows: ROWS },
-    components: components.map(c => ({
-      id: c.id,
-      name: c.name,
-      value: c.value,
-      color: c.color,
-      ox: c.ox, oy: c.oy, w: c.w, h: c.h, routeUnder: !!c.routeUnder,
-      pins: c.pins.map(p => ({
-        dCol: p.dCol, dRow: p.dRow, col: p.col, row: p.row, net: p.net, lbl: p.lbl
-      }))
-    })),
-    wires: wires.map(w => ({
-      net: w.net, failed: w.failed, path: w.path || []
-    })),
-    compDefs: structuredClone(compDefs),
-    timestamp: Date.now()
-  };
-
-  stateHistory = stateHistory.slice(0, currentStateIndex + 1);
-  stateHistory.push(state);
-  currentStateIndex++;
-
-  if (stateHistory.length > 50) {
-    stateHistory.shift();
-    currentStateIndex--;
-  }
-
-  localStorage.setItem('autorouterState', JSON.stringify({
-    history: stateHistory, index: currentStateIndex
-  }));
-}
-
-function restoreState(state) {
-  COLS = state.boardSize.cols;
-  ROWS = state.boardSize.rows;
-  document.getElementById('bCols').value = COLS;
-  document.getElementById('bRows').value = ROWS;
-
-  const defsById = new Map((state.compDefs || compDefs || []).map(cd => [cd.id, cd]));
-  components = state.components.map(c => {
-    const def = defsById.get(c.id);
-    const out = {
-      ...c,
-      name: c.name ?? def?.name ?? '?',
-      value: c.value ?? def?.value ?? '',
-      color: c.color ?? def?.color ?? '#222a22',
-      routeUnder: !!(c.routeUnder ?? def?.routeUnder),
-      pins: (c.pins || []).map(p => {
-        const pp = { ...p };
-        if (pp.lbl === undefined) pp.lbl = pp.label;
-        if (pp.lbl === undefined) pp.lbl = '';
-        if (pp.net === undefined) pp.net = null;
-        return pp;
-      })
-    };
-    return out;
-  });
-
-  wires = state.wires.map(w => ({
-    ...w, path: w.path || []
-  }));
-
-  compDefs = state.compDefs ? structuredClone(state.compDefs) : [];
-
-  applyBoard(); // CHANGED: Must call this so SVG actually resizes!
-  render();
-  updateStats();
-  renderNetPanel();
-  renderCompList();
-}
-
-function goBackState() {
-  if (currentStateIndex > 0) {
-    currentStateIndex--;
-    restoreState(stateHistory[currentStateIndex]);
-    localStorage.setItem('autorouterState', JSON.stringify({ history: stateHistory, index: currentStateIndex }));
-    toast('Reverted to previous state', 'ok');
-  } else toast('No previous state', 'warn');
-}
-
-function goForwardState() {
-  if (currentStateIndex < stateHistory.length - 1) {
-    currentStateIndex++;
-    restoreState(stateHistory[currentStateIndex]);
-    localStorage.setItem('autorouterState', JSON.stringify({ history: stateHistory, index: currentStateIndex }));
-    toast('Advanced to next state', 'ok');
-  } else toast('No next state', 'warn');
-}
-
-function exportCompleteState() {
-  const state = {
-    boardSize: { cols: COLS, rows: ROWS },
-    components: components.map(c => ({
-      id: c.id,
-      name: c.name,
-      value: c.value,
-      color: c.color,
-      ox: c.ox, oy: c.oy, w: c.w, h: c.h, routeUnder: !!c.routeUnder,
-      pins: c.pins.map(p => ({
-        dCol: p.dCol, dRow: p.dRow, col: p.col, row: p.row, net: p.net, lbl: p.lbl
-      }))
-    })),
-    wires: wires.map(w => ({ net: w.net, failed: w.failed, path: w.path || [] })),
-    compDefs: structuredClone(compDefs),
-    timestamp: Date.now(),
-    version: '1.0'
-  };
-
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `autorouter-complete-state-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  toast('Complete state exported', 'ok');
-}
-
-function saveComps() {
-  return components.map(c => ({
-    id: c.id, ox: c.ox, oy: c.oy, w: c.w, h: c.h,
-    pins: c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow }))
-  }));
-}
-
-function restoreComps(saved) {
-  saved.forEach(s => {
-    const comp = components.find(c => c.id === s.id);
-    if (comp) {
-      comp.ox = s.ox; comp.oy = s.oy;
-      comp.w = s.w; comp.h = s.h;
-
-      comp.pins.forEach((p, idx) => {
-        p.dCol = s.pins[idx].dCol;
-        p.dRow = s.pins[idx].dRow;
-        p.col = comp.ox + p.dCol;
-        p.row = comp.oy + p.dRow;
-      });
-    }
-  });
-}
-
-function snapshotBoardState() {
-  return {
-    boardSize: { cols: COLS, rows: ROWS },
-    components: structuredClone(components),
-    wires: structuredClone(wires),
-    compDefs: structuredClone(compDefs)
-  };
-}
-
-function restoreBoardState(s) {
-  COLS = s.boardSize.cols;
-  ROWS = s.boardSize.rows;
-  document.getElementById('bCols').value = COLS;
-  document.getElementById('bRows').value = ROWS;
-  components = structuredClone(s.components);
-  wires = structuredClone(s.wires);
-  compDefs = structuredClone(s.compDefs);
-  applyBoard();
-  render();
-  updateStats();
-  renderNetPanel();
-  renderCompList();
-}
-
 function completion(wires) {
   if (!wires.length) return 0;
   const successful = wires.filter(w => !w.failed).length;
@@ -461,7 +244,7 @@ async function doPlaceAndRoute() {
     placeInitial();
     await anneal(components, COLS, ROWS, (p, s) => {
       setProg(p * 100, `[${attempt}/${maxAttempts}] SA — ${s}`); render();
-    }, () => cancelRequested);
+    }, () => gCancelRequested);
 
     ostep(2);
     setProg(0, 'Routing…');
@@ -849,8 +632,6 @@ let isRightClick = false;
 let lastRenderedW = 0;
 let lastRenderedH = 0;
 
-let cancelRequested = false;
-let cancelOp = null;
 
 // Prevent context menu on right-click so we can use it to pan
 ca.addEventListener('contextmenu', e => e.preventDefault());
@@ -1078,10 +859,10 @@ document.addEventListener('keydown', e => {
   if (e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd')) { e.preventDefault(); debugBoard(); } // Was F7
 
   if (e.key === 'Escape') {
-    if (cancelOp && document.getElementById('overlay').classList.contains('on')) {
+    if (gCancelOp && document.getElementById('overlay').classList.contains('on')) {
       e.preventDefault();
-      cancelRequested = true;
-      setProg(parseFloat(document.getElementById('ofill').style.width) || 0, `${cancelOp}: cancelling…`);
+      gCancelRequested = true;
+      setProg(parseFloat(document.getElementById('ofill').style.width) || 0, `${gCancelOp}: cancelling…`);
       return;
     }
 
@@ -1786,7 +1567,7 @@ async function enumeratePlateauNeighbors(baseBox, baseScore, cols, rows, maxPerC
 
         totalEvals++;
         if (onProgress) onProgress(totalEvals, maxTotalEvals, `${cId} rot${rot}`);
-        if (totalEvals > maxTotalEvals || cancelRequested) break;
+        if (totalEvals > maxTotalEvals || gCancelRequested) break;
 
         // IMPORTANT FIX: DO NOT run a full `await route` A* for every single candidate. 
         // We defer full routing to `doPlateauExplore`.
@@ -1868,7 +1649,7 @@ async function postOptimizePlateauTree(startBestScore, cols, rows) {
 
       // Compute actual routing metrics before adopting
       restoreComps(n.comps);
-      const testWires = await route(components, cols, rows, () => { }, false, () => cancelRequested);
+      const testWires = await route(components, cols, rows, () => { }, false, () => gCancelRequested);
       n.wires = testWires;
       n.score = scoreState(testWires);
 
@@ -1967,7 +1748,7 @@ async function tryShrinkAlongWires(bestScore, cols, rows) {
       if (!ok) continue;
       if (anyOverlap(c, components)) continue;
 
-      const testWires = await route(components, cols, rows, () => { }, false, () => cancelRequested);
+      const testWires = await route(components, cols, rows, () => { }, false, () => gCancelRequested);
       const testScore = scoreState(testWires);
 
       // Only allow moves that keep routing completion and improve score.
@@ -2025,7 +1806,7 @@ async function explorePlateauStates(bestScore, cols, rows) {
 
       for (let ox = minOx; ox <= maxOx; ox++) {
         for (let oy = minOy; oy <= maxOy; oy++) {
-          if (cancelRequested) return { improved: false, score: bestLocalScore };
+          if (gCancelRequested) return { improved: false, score: bestLocalScore };
           if (rot === 0 && ox === cOrig.ox && oy === cOrig.oy) continue;
 
           moveComp(cc, ox, oy);
@@ -2048,7 +1829,7 @@ async function explorePlateauStates(bestScore, cols, rows) {
             testScore.wl < bestLocalScore.wl
           )) {
             // Need actual routing if we pretend we improved
-            const testWires = await route(components, cols, rows, () => { }, false, () => cancelRequested);
+            const testWires = await route(components, cols, rows, () => { }, false, () => gCancelRequested);
             const realScore = scoreState(testWires);
             if (realScore.comp < bestScore.comp) continue;
 
@@ -2108,7 +1889,7 @@ async function tryRotateOptimize() {
 
       if (anyOverlap(c, components)) continue;
 
-      const testWires = await route(components, COLS, ROWS, () => { }, false, () => cancelRequested);
+      const testWires = await route(components, COLS, ROWS, () => { }, false, () => gCancelRequested);
       const testScore = scoreState(testWires);
 
       if (isScoreBetter(testScore, bestScore)) {
@@ -2138,7 +1919,7 @@ async function doRecursivePushPacking() {
   let bestScore = scoreState(wires);
 
   while (changed && loops < 25) {
-    if (cancelRequested) break;
+    if (gCancelRequested) break;
     changed = false;
     loops++;
 
@@ -2213,7 +1994,7 @@ async function doRecursivePushPacking() {
     }
 
     if (moveOccurred) {
-      const testWires = await route(components, COLS, ROWS, () => { }, false, () => cancelRequested);
+      const testWires = await route(components, COLS, ROWS, () => { }, false, () => gCancelRequested);
       const testScore = scoreState(testWires);
 
       if (isScoreBetter(testScore, bestScore) || (
@@ -2257,7 +2038,7 @@ async function tryGlobalNudge(bestScore, cols, rows) {
     // Apply the translation atomically.
     for (const c of components) moveComp(c, c.ox + d.dx, c.oy + d.dy);
 
-    const testWires = await route(components, cols, rows, () => { }, false, () => cancelRequested);
+    const testWires = await route(components, cols, rows, () => { }, false, () => gCancelRequested);
     const testScore = scoreState(testWires);
     if (isScoreBetter(testScore, bestScore)) {
       wires = testWires;
@@ -2270,423 +2051,6 @@ async function tryGlobalNudge(bestScore, cols, rows) {
   return { improved: false, score: bestScore };
 }
 
-async function doOptimizeFootprint() {
-  if (!components.length) { toast('No components to optimize', 'warn'); return; }
-
-  cancelRequested = false;
-  cancelOp = 'Optimize';
-
-  const MAX_ITERS = window.packerConfig.maxIters || 100;
-  const saThresh = window.packerConfig.saTrigger || 5;
-  const platThresh = window.packerConfig.plateauTrigger || 8;
-  const deepThresh = window.packerConfig.deepStagnation || 12;
-  const maxTimeMs = window.packerConfig.maxTimeMs || 25000;
-
-  showOverlay(true);
-  ostep(1);
-  setBestLine('');
-
-  // Keep optimization transactional: if nothing improves, restore exactly.
-  const startSnapshot = snapshotBoardState();
-  const startWires = await route(components, COLS, ROWS, () => { }, false, () => cancelRequested);
-  const startScore = scoreState(startWires);
-  wires = startWires;
-
-  // Keep showing pre-opt PCB until we actually beat startScore.
-  const startPreviewSnapshot = snapshotBoardState();
-
-  const uiCols = COLS;
-  const uiRows = ROWS;
-  document.getElementById('ot').textContent = `Optimize 0 / ${MAX_ITERS}`;
-
-  // --- 1. EXPAND VIRTUAL BOARD ---
-  const { bounds } = calculateFootprintArea();
-  // Pad by 20 units so the Simulated Annealer has room to breathe
-  const vCols = Math.max(uiCols, (bounds.maxCol - bounds.minCol) + 20);
-  const vRows = Math.max(uiRows, (bounds.maxRow - bounds.minRow) + 20);
-
-  // Center everything initially
-  const offsetX = Math.floor(vCols / 2 - (bounds.minCol + (bounds.maxCol - bounds.minCol) / 2));
-  const offsetY = Math.floor(vRows / 2 - (bounds.minRow + (bounds.maxRow - bounds.minRow) / 2));
-  components.forEach(c => moveComp(c, c.ox + offsetX, c.oy + offsetY));
-
-  setProg(0, `Preparing virtual workspace...`);
-  // Route only for internal initialization; evaluation later is done on the original board.
-  wires = await route(components, vCols, vRows, () => { }, false, () => cancelRequested);
-
-  // Track Absolute Best
-  let globalBestScore = scoreState(wires);
-  let globalBestComps = saveComps();
-  let globalBestWires = [...wires];
-
-  let bestUiMsg = `Best: ${formatScore(globalBestScore)}`;
-  setBestLine(bestUiMsg);
-
-  // Track Progress of Current Search Branch
-  let localBestScore = globalBestScore;
-  let localBestComps = saveComps();
-
-  let stagnation = 0;
-  let macroCount = 0;
-
-  // IMPORTANT: do not render here; keep showing the pre-opt PCB until we have an actual improvement.
-
-  const translateToFitUI = () => {
-    const b = calculateComponentBounds();
-    const w = (b.maxCol - b.minCol + 1);
-    const h = (b.maxRow - b.minRow + 1);
-    const margin = 2;
-    if (w + margin * 2 > uiCols || h + margin * 2 > uiRows) return false;
-
-    const dx = Math.floor((uiCols - w) / 2) - b.minCol;
-    const dy = Math.floor((uiRows - h) / 2) - b.minRow;
-    for (const c of components) moveComp(c, c.ox + dx, c.oy + dy);
-    return true;
-  };
-
-  const translateFootprintToTopLeftUI = () => {
-    const fb = footprintBoxMetrics(wires);
-    const dx = -fb.bounds.minCol;
-    const dy = -fb.bounds.minRow;
-    for (const c of components) moveComp(c, c.ox + dx, c.oy + dy);
-    if (wires) {
-      wires.forEach(w => {
-        if (w?.path) w.path.forEach(pt => { pt.col += dx; pt.row += dy; });
-      });
-    }
-  };
-
-  // --- 2. SEARCH LOOP ---
-  const startTime = performance.now();
-  for (let iter = 1; iter <= MAX_ITERS; iter++) {
-    if (cancelRequested || (performance.now() - startTime) > maxTimeMs) break;
-    document.getElementById('ot').textContent = `Optimize ${iter} / ${MAX_ITERS}`;
-
-    if (iter % 10 === 0 || stagnation >= platThresh) {
-      if (stagnation >= saThresh && stagnation < platThresh) {
-        // Skip SA, let stagnation hit platThresh to trigger plateau explore
-      } else {
-        // ==========================================
-        // MACRO MUTATION (Simulated Annealing)
-        // ==========================================
-        macroCount++;
-        if (stagnation >= deepThresh) {
-          const b = calculateComponentBounds();
-          const spanX = Math.max(1, (b.maxCol - b.minCol + 1));
-          const spanY = Math.max(1, (b.maxRow - b.minRow + 1));
-          const cx = Math.floor(vCols / 2 - spanX / 2);
-          const cy = Math.floor(vRows / 2 - spanY / 2);
-          for (const c of components) {
-            const nx = Math.max(0, Math.min(vCols - c.w, cx + Math.floor(Math.random() * 7) - 3));
-            const ny = Math.max(0, Math.min(vRows - c.h, cy + Math.floor(Math.random() * 7) - 3));
-            moveComp(c, nx, ny);
-          }
-          stagnation = 6;
-        }
-
-        await anneal(components, vCols, vRows, (p, s) => {
-          setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: SA Routing ${macroCount} — ${Math.round(p * 100)}%`);
-        }, () => cancelRequested);
-
-        if (stagnation >= deepThresh) stagnation = 0; // Reset deep frustration, but let edge stay near plateau
-      }
-    }
-
-    if (iter % 10 !== 0 && stagnation < platThresh) {
-      // ==========================================
-      // MICRO MUTATION (Jitter)
-      // ==========================================
-      setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: Micro Search (Stagnation: ${stagnation}/${platThresh})...`);
-
-      // Branch off the current local working set
-      restoreComps(localBestComps);
-
-      // Tweak 1 or 2 components slightly
-      const numMutations = Math.max(1, Math.floor(components.length * 0.15));
-      let compsToMutate = [...components].sort(() => 0.5 - Math.random()).slice(0, numMutations);
-
-      for (let c of compsToMutate) {
-        const oldW = c.w, oldH = c.h, oldOx = c.ox, oldOy = c.oy;
-        const oldPins = c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow }));
-
-        if (Math.random() < 0.2) {
-          c.w = oldH; c.h = oldW;
-          c.pins.forEach(p => {
-            const r = p.dRow; p.dRow = p.dCol; p.dCol = c.w - 1 - r;
-            p.col = c.ox + p.dCol; p.row = c.oy + p.dRow;
-          });
-        }
-
-        let dx = (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 2) + 1);
-        let dy = (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 2) + 1);
-
-        const nx = Math.max(0, Math.min(vCols - c.w, c.ox + dx));
-        const ny = Math.max(0, Math.min(vRows - c.h, c.oy + dy));
-
-        moveComp(c, nx, ny);
-        if (anyOverlap(c, components)) {
-          c.w = oldW; c.h = oldH;
-          moveComp(c, oldOx, oldOy);
-          c.pins.forEach((p, idx) => Object.assign(p, oldPins[idx]));
-        }
-      }
-    }
-
-    // --- APPLY PACKING (The Squeeze) ---
-    if (cancelRequested) break;
-    await doRecursivePushPacking();
-    await tryRotateOptimize();
-    await doRecursivePushPacking();
-
-    if (cancelRequested) break;
-    const nudgeRes = await tryGlobalNudge(localBestScore, vCols, vRows);
-    if (nudgeRes.improved) {
-      localBestScore = nudgeRes.score;
-    }
-
-    if (cancelRequested) break;
-    const shrinkRes = await tryShrinkAlongWires(localBestScore, vCols, vRows);
-    if (shrinkRes.improved) {
-      localBestScore = shrinkRes.score;
-      localBestComps = saveComps();
-      stagnation = 0;
-    }
-
-    if (!cancelRequested && stagnation >= platThresh) {
-      const plateauRes = await explorePlateauStates(localBestScore, vCols, vRows);
-      if (plateauRes.improved) {
-        localBestScore = plateauRes.score;
-        localBestComps = saveComps();
-        stagnation = 0;
-
-        const shrink2 = await tryShrinkAlongWires(localBestScore, vCols, vRows);
-        if (shrink2.improved) {
-          localBestScore = shrink2.score;
-          localBestComps = saveComps();
-        }
-      }
-    }
-
-    // --- EVALUATE METRICS ---
-    // Translate the current virtual placement into the UI board window for evaluation.
-    if (cancelRequested) break;
-    const preEval = saveComps();
-    const preEvalWires = wires;
-    if (!translateToFitUI()) {
-      restoreComps(preEval);
-      stagnation++;
-      await new Promise(r => setTimeout(r, 0));
-      continue;
-    }
-
-    const testWires = await route(components, uiCols, uiRows, () => { }, false, () => cancelRequested);
-    const testScore = scoreState(testWires);
-
-    // 1. Is it a new GLOBAL Best?
-    let isGlobalBest = false;
-    if (isScoreBetter(testScore, globalBestScore)) isGlobalBest = true;
-
-    // 2. Is it a new LOCAL Best?
-    let isLocalBest = false;
-    if (isScoreBetter(testScore, localBestScore)) isLocalBest = true;
-
-    if (isGlobalBest) {
-      // Save global records
-      globalBestScore = testScore;
-      globalBestComps = saveComps(); globalBestWires = [...testWires];
-
-      // Sync local records to the new global high score
-      localBestScore = testScore;
-      localBestComps = saveComps();
-
-      stagnation = 0;
-      const msg = `Iter ${iter}: New global best — ${formatScore(testScore)}`;
-      console.log(`[Iter ${iter}] NEW GLOBAL BEST! ${formatScore(testScore)}`);
-      bestUiMsg = `Best: ${formatScore(testScore)}`;
-      setBestLine(bestUiMsg);
-      setProg((iter / MAX_ITERS) * 100, msg);
-
-      // UPDATE UI: Only preview if we actually improved over the original pre-opt.
-      if (isScoreBetter(testScore, startScore)) {
-        wires = globalBestWires;
-        render();
-        updateStats();
-        await new Promise(r => setTimeout(r, 0)); // Let browser paint
-      } else {
-        restoreBoardState(startPreviewSnapshot);
-      }
-    }
-    else if (isLocalBest) {
-      // Made progress, but didn't beat the absolute high score
-      localBestScore = testScore;
-      localBestComps = saveComps();
-      stagnation = 0;
-      const msg = `Iter ${iter}: Local improvement — ${formatScore(testScore)}`;
-      console.log(`[Iter ${iter}] Local improvement. ${formatScore(testScore)}`);
-      setProg((iter / MAX_ITERS) * 100, msg);
-    }
-    else {
-      // Dead end. Increase frustration.
-      stagnation++;
-    }
-
-    // Always yield event loop to keep the browser responsive
-    await new Promise(r => setTimeout(r, 0));
-
-    // Restore the virtual search state after UI-space evaluation/preview.
-    restoreComps(preEval);
-    wires = preEvalWires;
-  }
-
-  // --- 3. CLEANUP & RESTORE ---
-  restoreComps(globalBestComps);
-  wires = globalBestWires;
-
-  // Always end in UI board dimensions.
-  COLS = uiCols;
-  ROWS = uiRows;
-  document.getElementById('bCols').value = COLS;
-  document.getElementById('bRows').value = ROWS;
-  applyBoard();
-
-  // Only translate to the UI corner after we're done searching.
-  translateFootprintToTopLeftUI();
-
-  // Commit only if strictly improved vs start.
-  const finalScore = scoreState(wires);
-  if (!isScoreBetter(finalScore, startScore)) {
-    restoreBoardState(startSnapshot);
-    showOverlay(false);
-    cancelOp = null;
-    toast('Optimization found no improvement', 'inf');
-    return;
-  }
-
-  showOverlay(false);
-  setBestLine('');
-  render(); updateStats(); saveState();
-  cancelOp = null;
-  if (cancelRequested) toast('Optimization cancelled — kept best so far', 'inf');
-  else toast(`Optimization complete!`, "ok");
-}
-
-async function doPlateauExplore() {
-  if (!components.length) { toast('No components loaded', 'warn'); return; }
-
-  cancelRequested = false;
-  cancelOp = 'Plateau';
-
-  const startSnapshot = snapshotBoardState();
-  showOverlay(true);
-  ostep(2);
-
-  let bestWires = await route(components, COLS, ROWS, () => { }, false, () => cancelRequested);
-  let bestScore = scoreState(bestWires);
-  const startScore = bestScore;
-  wires = bestWires;
-  render();
-  updateStats();
-
-  let bestMsg = `Best: ${formatScore(bestScore)}`;
-  setBestLine(bestMsg);
-
-  const visited = new Set();
-  visited.add(stateKeyForPlateau());
-  let lastPickedCompId = null;
-
-  const MAX_STEPS = 10;
-  const MAX_NEIGHBORS_PER_COMP = 12;
-  const MAX_ROUTINGS_PER_STEP = 35;
-
-  for (let step = 1; step <= MAX_STEPS; step++) {
-    if (cancelRequested) break;
-    setProg((step / MAX_STEPS) * 100, `Plateau explore: step ${step} / ${MAX_STEPS}`);
-
-    const shrinkRes = await tryShrinkAlongWires(bestScore, COLS, ROWS);
-    if (shrinkRes.improved) {
-      bestScore = shrinkRes.score;
-      bestWires = wires;
-      bestMsg = `Best: ${formatScore(bestScore)}`;
-      setBestLine(bestMsg);
-      render();
-      updateStats();
-      await new Promise(r => setTimeout(r, 0));
-      continue;
-    }
-
-    const box = footprintBoxMetrics(wires);
-    const baseBox = { area: box.area, perim: box.perim, bounds: box.bounds };
-
-    const neighborsAll = await enumeratePlateauNeighbors(
-      baseBox,
-      bestScore,
-      COLS,
-      ROWS,
-      MAX_NEIGHBORS_PER_COMP,
-      step,
-      visited,
-      (done, total, tag) => {
-        if (cancelRequested) return;
-        setProg((step / MAX_STEPS) * 100, `Plateau explore: step ${step}/${MAX_STEPS} — eval ${Math.min(done, total)}/${total} (${tag})`);
-      },
-      MAX_ROUTINGS_PER_STEP
-    );
-    const neighbors = neighborsAll.filter(n => !visited.has(n.key));
-    let pick = null;
-    for (const n of neighbors) {
-      if (cancelRequested) break;
-
-      restoreComps(n.comps);
-      const testWires = await route(components, COLS, ROWS, () => { }, false, () => cancelRequested);
-      n.wires = testWires;
-      n.score = scoreState(testWires);
-
-      if (n.score.comp < bestScore.comp) continue;
-      if (n.score.area > baseBox.area) continue;
-      if (n.score.area === baseBox.area && n.score.perim > baseBox.perim) continue;
-      if (!pick) pick = n;
-      else {
-        const a = n.score;
-        const b = pick.score;
-        // Greedy: try potentially space-shrinking moves first.
-        if (a.area !== b.area) { if (a.area < b.area) pick = n; continue; }
-        if (a.perim !== b.perim) { if (a.perim < b.perim) pick = n; continue; }
-
-        // Diversify: if tied on space, prefer changing a different component than last time.
-        const aSame = lastPickedCompId !== null && String(n.compId) === String(lastPickedCompId);
-        const bSame = lastPickedCompId !== null && String(pick.compId) === String(lastPickedCompId);
-        if (aSame !== bSame) { if (!aSame) pick = n; continue; }
-
-        if (a.wl < b.wl) pick = n;
-      }
-    }
-
-    if (!pick) break;
-    restoreComps(pick.comps);
-    wires = pick.wires;
-    visited.add(pick.key);
-    lastPickedCompId = pick.compId;
-    bestWires = wires;
-    bestScore = pick.score;
-    bestMsg = `Best: ${formatScore(bestScore)}`;
-    setBestLine(bestMsg);
-    render();
-    updateStats();
-    await new Promise(r => setTimeout(r, 0));
-  }
-
-  const finalScore = scoreState(wires);
-  if (!isScoreBetter(finalScore, startScore)) {
-    restoreBoardState(startSnapshot);
-  } else {
-    saveState();
-  }
-
-  showOverlay(false);
-  setBestLine('');
-  cancelOp = null;
-  if (cancelRequested) toast('Plateau explore cancelled — kept best so far', 'inf');
-}
 
 function goBack() {
   if (!window.lastState) { toast('No previous state to go back to', 'warn'); return; }
@@ -2744,159 +2108,6 @@ function cutToBoundingBox() {
   toast(`Board cut to ${newCols}×${newRows}`, 'ok');
   saveState();
 }
-
-window.runBenchmarkStrategy = async function (runs = 3, overrideConfig = {}) {
-  const raw = document.getElementById('jsonInput').value.trim();
-  if (!raw) { console.error("Load a circuit JSON first!"); return; }
-
-  if (overrideConfig) {
-    Object.assign(window.packerConfig, overrideConfig);
-  }
-
-  console.log(`============= BENCHMARK START =============`);
-  console.log(`Config:`, window.packerConfig);
-  console.log(`Runs: ${runs}`);
-
-  let bestScore = null;
-  let bestRun = -1;
-  let bestComps = null;
-  let bestWires = null;
-  let totalPrTime = 0, totalOptTime = 0;
-
-  for (let i = 1; i <= runs; i++) {
-    console.log(`\n--- Run ${i} / ${runs} ---`);
-    loadComponents(); // Load fresh positions
-    await new Promise(r => setTimeout(r, 100)); // allow DOM refresh
-
-    const t0 = performance.now();
-    await doPlaceAndRoute();
-    const t1 = performance.now();
-    const prTime = t1 - t0;
-
-    await new Promise(r => setTimeout(r, 100));
-
-    const t2 = performance.now();
-    await doOptimizeFootprint();
-    const t3 = performance.now();
-    const optTime = t3 - t2;
-
-    const score = scoreState(wires);
-    console.log(`Run ${i} Result: P&R ${Math.round(prTime)}ms, Opt ${Math.round(optTime)}ms => ${formatScore(score)}`);
-
-    totalPrTime += prTime;
-    totalOptTime += optTime;
-
-    if (!bestScore || isScoreBetter(score, bestScore)) {
-      bestScore = score;
-      bestRun = i;
-      bestComps = saveComps();
-      bestWires = wires;
-    }
-  }
-
-  console.log(`\n============= BENCHMARK END =============`);
-  console.log(`Average P&R time: ${Math.round(totalPrTime / runs)}ms`);
-  console.log(`Average Optimization time: ${Math.round(totalOptTime / runs)}ms`);
-  console.log(`Best Run: #${bestRun} => ${formatScore(bestScore)}`);
-
-  // Restore the best result visually
-  restoreComps(bestComps);
-  wires = bestWires;
-  render(); updateStats();
-};
-
-window.runStrategyMatrix = async function () {
-  let configs = [];
-  try {
-    const resp = await fetch('benchmark_strategies.json');
-    configs = await resp.json();
-  } catch (e) {
-    console.warn("Could not load benchmark_strategies.json, using defaults", e);
-    configs = [
-      { name: "Default", maxIters: 150, saTrigger: 5, plateauTrigger: 8, deepStagnation: 12, maxTimeMs: 25000 }
-    ];
-  }
-
-  const runsPerConfig = 3;
-  const raw = document.getElementById('jsonInput').value.trim();
-  if (!raw) { console.error("Load a circuit JSON first!"); return; }
-
-  const logToLocal = async (line) => {
-    try {
-      await fetch('http://127.0.0.1:3001', {
-        method: 'POST',
-        mode: 'cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: typeof line === 'string' ? line : JSON.stringify(line)
-      });
-    } catch (e) {
-      console.warn("Failed to log to local server (is logger.js running?):", e);
-    }
-  };
-
-  let summary = [];
-  const startMsg = "Starting Strategy Matrix...";
-  console.log(`%c${startMsg}`, "color: #00e676; font-size: 16px; font-weight: bold;");
-  await logToLocal(`=== BENCHMARK START: ${new Date().toLocaleString()} ===`);
-
-  for (let c of configs) {
-    if (cancelRequested) break;
-    console.log(`\n%c--- Testing Strategy: ${c.name} ---`, "color: #40c4ff; font-weight: bold;");
-    await logToLocal(`Strategy: ${c.name} | Parameters: ${JSON.stringify(c)}`);
-
-    // Override globals
-    window.packerConfig = c;
-
-    let bestScore = null;
-    let totalOptTime = 0;
-
-    for (let i = 1; i <= runsPerConfig; i++) {
-      if (cancelRequested) break;
-
-      // Reset to initial JSON state
-      loadComponents();
-      await new Promise(r => setTimeout(r, 100));
-
-      // Initial Placement
-      await doPlaceAndRoute();
-      await new Promise(r => setTimeout(r, 100));
-
-      // Optimization
-      const t0 = performance.now();
-      await doOptimizeFootprint();
-      const t1 = performance.now();
-
-      const score = scoreState(wires);
-      const elapsed = t1 - t0;
-      totalOptTime += elapsed;
-
-      const resLine = `Run ${i}: ${Math.round(elapsed / 1000)}s => ${formatScore(score)}`;
-      console.log(`   ${resLine}`);
-      await logToLocal(`   [${c.name}] ${resLine}`);
-
-      if (!bestScore || isScoreBetter(score, bestScore)) {
-        bestScore = score;
-      }
-    }
-    if (cancelRequested) break;
-
-    summary.push({
-      "Strategy": c.name,
-      "Avg Time(s)": (totalOptTime / runsPerConfig / 1000).toFixed(1),
-      "Area": bestScore.area,
-      "Perim": bestScore.perim,
-      "WL": bestScore.wl
-    });
-  }
-
-  console.log(`\n%c============= MATRIX RESULTS =============`, "color: #ff9800; font-weight: bold; font-size: 14px;");
-  console.table(summary);
-  await logToLocal("SUMMARY RESULTS:");
-  await logToLocal(summary);
-  await logToLocal("=== BENCHMARK END ===");
-
-  return "Testing Complete. Check the summary table and benchmark_results.log!";
-};
 
 window.app = {
   applyBoard, loadTemplate, loadComponents,

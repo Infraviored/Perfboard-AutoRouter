@@ -1,7 +1,7 @@
 // grid.js
-export const BLOCKED_COMP = 1;
-export const BLOCKED_PIN = 2;
-export const BLOCKED_WIRE = 4;
+const BLOCKED_COMP = 1;
+const BLOCKED_PIN = 2;
+const BLOCKED_WIRE = 4;
 
 // High-performance Binary Min-Heap for A*
 class MinHeap {
@@ -64,7 +64,7 @@ class MinHeap {
 const DCS = new Int32Array([0, 0, 1, -1]);
 const DRS = new Int32Array([1, -1, 0, 0]);
 
-export class Grid {
+class Grid {
   constructor(cols, rows) {
     this.cols = cols;
     this.rows = rows;
