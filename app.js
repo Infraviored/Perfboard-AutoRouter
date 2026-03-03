@@ -30,6 +30,14 @@ function netColor(n) {
 }
 
 // ── STATE ──
+window.packerConfig = {
+  maxIters: 100,
+  maxTimeMs: 25000, // 25s timeout for full optimization
+  saTrigger: 5,
+  plateauTrigger: 8,
+  deepStagnation: 12
+};
+
 let COLS = 22, ROWS = 16, SP = 28;
 let zoom = 1, panX = 0, panY = 0;
 let panning = false, panStart = null;
@@ -2268,7 +2276,12 @@ async function doOptimizeFootprint() {
   cancelRequested = false;
   cancelOp = 'Optimize';
 
-  const MAX_ITERS = 100;
+  const MAX_ITERS = window.packerConfig.maxIters || 100;
+  const saThresh = window.packerConfig.saTrigger || 5;
+  const platThresh = window.packerConfig.plateauTrigger || 8;
+  const deepThresh = window.packerConfig.deepStagnation || 12;
+  const maxTimeMs = window.packerConfig.maxTimeMs || 25000;
+
   showOverlay(true);
   ostep(1);
   setBestLine('');
@@ -2344,19 +2357,20 @@ async function doOptimizeFootprint() {
   };
 
   // --- 2. SEARCH LOOP ---
+  const startTime = performance.now();
   for (let iter = 1; iter <= MAX_ITERS; iter++) {
-    if (cancelRequested) break;
+    if (cancelRequested || (performance.now() - startTime) > maxTimeMs) break;
     document.getElementById('ot').textContent = `Optimize ${iter} / ${MAX_ITERS}`;
 
-    if (iter % 10 === 0 || stagnation >= 8) {
-      if (stagnation >= 5 && stagnation < 8) {
-        // Skip SA, let stagnation hit 8 to trigger plateau explore
+    if (iter % 10 === 0 || stagnation >= platThresh) {
+      if (stagnation >= saThresh && stagnation < platThresh) {
+        // Skip SA, let stagnation hit platThresh to trigger plateau explore
       } else {
         // ==========================================
         // MACRO MUTATION (Simulated Annealing)
         // ==========================================
         macroCount++;
-        if (stagnation >= 12) {
+        if (stagnation >= deepThresh) {
           const b = calculateComponentBounds();
           const spanX = Math.max(1, (b.maxCol - b.minCol + 1));
           const spanY = Math.max(1, (b.maxRow - b.minRow + 1));
@@ -2374,15 +2388,15 @@ async function doOptimizeFootprint() {
           setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: SA Routing ${macroCount} — ${Math.round(p * 100)}%`);
         }, () => cancelRequested);
 
-        if (stagnation >= 12) stagnation = 0; // Reset deep frustration, but let edge stay near plateau
+        if (stagnation >= deepThresh) stagnation = 0; // Reset deep frustration, but let edge stay near plateau
       }
     }
 
-    if (iter % 10 !== 0 && stagnation < 8) {
+    if (iter % 10 !== 0 && stagnation < platThresh) {
       // ==========================================
       // MICRO MUTATION (Jitter)
       // ==========================================
-      setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: Micro Search (Stagnation: ${stagnation}/8)...`);
+      setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: Micro Search (Stagnation: ${stagnation}/${platThresh})...`);
 
       // Branch off the current local working set
       restoreComps(localBestComps);
@@ -2438,7 +2452,7 @@ async function doOptimizeFootprint() {
       stagnation = 0;
     }
 
-    if (!cancelRequested && stagnation >= 8) {
+    if (!cancelRequested && stagnation >= platThresh) {
       const plateauRes = await explorePlateauStates(localBestScore, vCols, vRows);
       if (plateauRes.improved) {
         localBestScore = plateauRes.score;
@@ -2731,9 +2745,133 @@ function cutToBoundingBox() {
   saveState();
 }
 
+window.runBenchmarkStrategy = async function (runs = 3, overrideConfig = {}) {
+  const raw = document.getElementById('jsonInput').value.trim();
+  if (!raw) { console.error("Load a circuit JSON first!"); return; }
+
+  if (overrideConfig) {
+    Object.assign(window.packerConfig, overrideConfig);
+  }
+
+  console.log(`============= BENCHMARK START =============`);
+  console.log(`Config:`, window.packerConfig);
+  console.log(`Runs: ${runs}`);
+
+  let bestScore = null;
+  let bestRun = -1;
+  let bestComps = null;
+  let bestWires = null;
+  let totalPrTime = 0, totalOptTime = 0;
+
+  for (let i = 1; i <= runs; i++) {
+    console.log(`\n--- Run ${i} / ${runs} ---`);
+    loadComponents(); // Load fresh positions
+    await new Promise(r => setTimeout(r, 100)); // allow DOM refresh
+
+    const t0 = performance.now();
+    await doPlaceAndRoute();
+    const t1 = performance.now();
+    const prTime = t1 - t0;
+
+    await new Promise(r => setTimeout(r, 100));
+
+    const t2 = performance.now();
+    await doOptimizeFootprint();
+    const t3 = performance.now();
+    const optTime = t3 - t2;
+
+    const score = scoreState(wires);
+    console.log(`Run ${i} Result: P&R ${Math.round(prTime)}ms, Opt ${Math.round(optTime)}ms => ${formatScore(score)}`);
+
+    totalPrTime += prTime;
+    totalOptTime += optTime;
+
+    if (!bestScore || isScoreBetter(score, bestScore)) {
+      bestScore = score;
+      bestRun = i;
+      bestComps = saveComps();
+      bestWires = wires;
+    }
+  }
+
+  console.log(`\n============= BENCHMARK END =============`);
+  console.log(`Average P&R time: ${Math.round(totalPrTime / runs)}ms`);
+  console.log(`Average Optimization time: ${Math.round(totalOptTime / runs)}ms`);
+  console.log(`Best Run: #${bestRun} => ${formatScore(bestScore)}`);
+
+  // Restore the best result visually
+  restoreComps(bestComps);
+  wires = bestWires;
+  render(); updateStats();
+};
+
+window.runStrategyMatrix = async function () {
+  const configs = [
+    { name: "Default (5 SA, 8 Plat, 12 Deep)", maxIters: 150, saTrigger: 5, plateauTrigger: 8, deepStagnation: 12, maxTimeMs: 25000 },
+    { name: "Aggressive SA (3 SA, 8 Plat, 15 Deep)", maxIters: 150, saTrigger: 3, plateauTrigger: 8, deepStagnation: 15, maxTimeMs: 25000 },
+    { name: "Early Plateau (6 SA, 4 Plat, 10 Deep)", maxIters: 150, saTrigger: 6, plateauTrigger: 4, deepStagnation: 10, maxTimeMs: 25000 },
+    { name: "Panic Mode (4 SA, 6 Plat, 8 Deep)", maxIters: 150, saTrigger: 4, plateauTrigger: 6, deepStagnation: 8, maxTimeMs: 25000 }
+  ];
+  const runsPerConfig = 3;
+
+  const raw = document.getElementById('jsonInput').value.trim();
+  if (!raw) { console.error("Load a circuit JSON first!"); return; }
+
+  let summary = [];
+
+  console.log("%cStarting Strategy Matrix...", "color: #00e676; font-size: 16px; font-weight: bold;");
+
+  for (let c of configs) {
+    console.log(`\n%c--- Testing Strategy: ${c.name} ---`, "color: #40c4ff; font-weight: bold;");
+
+    // Override globals
+    window.packerConfig = c;
+
+    let bestScore = null;
+    let totalOptTime = 0;
+
+    for (let i = 1; i <= runsPerConfig; i++) {
+      // Reset to initial JSON state
+      loadComponents();
+      await new Promise(r => setTimeout(r, 100));
+
+      // Initial Placement
+      await doPlaceAndRoute();
+      await new Promise(r => setTimeout(r, 100));
+
+      // Optimization
+      const t0 = performance.now();
+      await doOptimizeFootprint();
+      const t1 = performance.now();
+
+      const score = scoreState(wires);
+      const elapsed = t1 - t0;
+      totalOptTime += elapsed;
+
+      console.log(`   Run ${i}: ${Math.round(elapsed / 1000)}s => ${formatScore(score)}`);
+
+      if (!bestScore || isScoreBetter(score, bestScore)) {
+        bestScore = score;
+      }
+    }
+
+    summary.push({
+      "Strategy": c.name,
+      "Avg Time(s)": (totalOptTime / runsPerConfig / 1000).toFixed(1),
+      "Area": bestScore.area,
+      "Perim": bestScore.perim,
+      "WL": bestScore.wl
+    });
+  }
+
+  console.log(`\n%c============= MATRIX RESULTS =============`, "color: #ff9800; font-weight: bold; font-size: 14px;");
+  console.table(summary);
+  return "Testing Complete. Check the summary table above!";
+};
+
 window.app = {
   applyBoard, loadTemplate, loadComponents,
-  doPlaceAndRoute, doRouteOnly, doOptimizeFootprint, goBackState, goForwardState, exportCompleteState, cutToBoundingBox, clearWires, doExport, fullReset,
+  doPlaceAndRoute, doRouteOnly, doOptimizeFootprint, goBackState, goForwardState, exportCompleteState, cutToBoundingBox, clearWires, doExport, fullReset, runBenchmarkStrategy, runStrategyMatrix,
   doPlateauExplore,
   setTool, adjZoom, fitView, selectComp, setHovNet,
   openCompEditor, closeCompEditor, saveComponentEdit,
