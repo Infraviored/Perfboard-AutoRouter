@@ -1,71 +1,95 @@
 // grid.js
-export const BLOCKED_COMP  = 1;
-export const BLOCKED_PIN   = 2;
-export const BLOCKED_WIRE  = 4;
+export const BLOCKED_COMP = 1;
+export const BLOCKED_PIN = 2;
+export const BLOCKED_WIRE = 4;
 
 // High-performance Binary Min-Heap for A*
 class MinHeap {
-  constructor() { this.data = []; }
-  push(val) {
-    this.data.push(val);
-    this.up(this.data.length - 1);
+  constructor(maxSize) {
+    this.keys = new Int32Array(maxSize);
+    this.fs = new Float32Array(maxSize);
+    this.length = 0;
+  }
+  push(key, f) {
+    const i = this.length++;
+    this.keys[i] = key;
+    this.fs[i] = f;
+    this.up(i);
   }
   pop() {
-    if (this.data.length === 0) return null;
-    const top = this.data[0];
-    const bottom = this.data.pop();
-    if (this.data.length > 0) {
-      this.data[0] = bottom;
+    if (this.length === 0) return -1;
+    const topKey = this.keys[0];
+    this.length--;
+    if (this.length > 0) {
+      this.keys[0] = this.keys[this.length];
+      this.fs[0] = this.fs[this.length];
       this.down(0);
     }
-    return top;
+    return topKey;
   }
   up(i) {
+    const k = this.keys[i];
+    const f = this.fs[i];
     while (i > 0) {
       const p = (i - 1) >> 1;
-      if (this.data[i].f >= this.data[p].f) break;
-      const tmp = this.data[i];
-      this.data[i] = this.data[p];
-      this.data[p] = tmp;
+      if (f >= this.fs[p]) break;
+      this.keys[i] = this.keys[p];
+      this.fs[i] = this.fs[p];
       i = p;
     }
+    this.keys[i] = k;
+    this.fs[i] = f;
   }
   down(i) {
-    const len = this.data.length;
+    const len = this.length;
+    const k = this.keys[i];
+    const f = this.fs[i];
     while ((i << 1) + 1 < len) {
       let left = (i << 1) + 1;
       let right = left + 1;
-      let min = (right < len && this.data[right].f < this.data[left].f) ? right : left;
-      if (this.data[i].f <= this.data[min].f) break;
-      const tmp = this.data[i];
-      this.data[i] = this.data[min];
-      this.data[min] = tmp;
+      let min = (right < len && this.fs[right] < this.fs[left]) ? right : left;
+      if (f <= this.fs[min]) break;
+      this.keys[i] = this.keys[min];
+      this.fs[i] = this.fs[min];
       i = min;
     }
+    this.keys[i] = k;
+    this.fs[i] = f;
   }
-  get length() { return this.data.length; }
+  clear() {
+    this.length = 0;
+  }
 }
+
+const DCS = new Int32Array([0, 0, 1, -1]);
+const DRS = new Int32Array([1, -1, 0, 0]);
 
 export class Grid {
   constructor(cols, rows) {
     this.cols = cols;
     this.rows = rows;
-    this.cells = new Uint8Array(cols * rows);
+    const size = cols * rows;
+    this.cells = new Uint8Array(size);
+    this.gScore = new Float32Array(size);
+    this.parent = new Int32Array(size);
+    this.targetMap = new Uint8Array(size);
+    // Heap maximum size 8*size to prevent Out-Of-Bounds
+    this.open = new MinHeap(size * 4);
   }
 
   idx(c, r) { return r * this.cols + c; }
   inBounds(c, r) { return c >= 0 && c < this.cols && r >= 0 && r < this.rows; }
-  set(c, r, flag)   { if (this.inBounds(c,r)) this.cells[this.idx(c,r)] |=  flag; }
-  clear(c, r, flag) { if (this.inBounds(c,r)) this.cells[this.idx(c,r)] &= ~flag; }
-  has(c, r, flag)   { return this.inBounds(c,r) && (this.cells[this.idx(c,r)] & flag) !== 0; }
-  isFree(c, r) { 
-    if (!this.inBounds(c,r)) return false; 
-    return this.cells[this.idx(c,r)] === 0;
+  set(c, r, flag) { if (this.inBounds(c, r)) this.cells[this.idx(c, r)] |= flag; }
+  clear(c, r, flag) { if (this.inBounds(c, r)) this.cells[this.idx(c, r)] &= ~flag; }
+  has(c, r, flag) { return this.inBounds(c, r) && (this.cells[this.idx(c, r)] & flag) !== 0; }
+  isFree(c, r) {
+    if (!this.inBounds(c, r)) return false;
+    return this.cells[this.idx(c, r)] === 0;
   }
 
   canTerminate(c, r) {
-    if (!this.inBounds(c,r)) return false;
-    const v = this.cells[this.idx(c,r)];
+    if (!this.inBounds(c, r)) return false;
+    const v = this.cells[this.idx(c, r)];
     if (v & BLOCKED_WIRE) return false;
     // We can terminate on pins, but not on plain component body.
     return !((v & BLOCKED_COMP) && !(v & BLOCKED_PIN));
@@ -85,29 +109,37 @@ export class Grid {
   // Optimized Multi-Target A*
   astarMultiTarget(startIndices, targetIndices) {
     const key = (c, r) => r * this.cols + c;
-    const open = new MinHeap();
-    const gScore = new Float32Array(this.cols * this.rows).fill(1e6);
-    const parent = new Int32Array(this.cols * this.rows).fill(-1);
-    
-    // Convert targets to a fast lookup Set
-    const targets = new Set(targetIndices);
+    const size = this.cols * this.rows;
+
+    this.gScore.fill(1e6);
+    this.parent.fill(-1);
+    this.targetMap.fill(0);
+    this.open.clear(); // reset heap
+
+    const parent = this.parent;
+    const gScore = this.gScore;
+    const targetMap = this.targetMap;
+    const open = this.open;
+
+    // Convert targets to a fast lookup array
+    for (let i = 0; i < targetIndices.length; i++) {
+      targetMap[targetIndices[i]] = 1;
+    }
 
     for (const idx of startIndices) {
       gScore[idx] = 0;
-      open.push({ c: idx % this.cols, r: Math.floor(idx / this.cols), f: 0 });
+      open.push(idx, 0);
     }
 
-    // Unrolled directional arrays to prevent GC pauses
-    const dcs = [0, 0, 1, -1];
-    const drs = [1, -1, 0, 0];
     let iters = 0;
 
-    while (open.length > 0 && iters++ < this.cols * this.rows * 4) {
-      const { c, r } = open.pop();
-      const currKey = key(c, r);
+    while (open.length > 0 && iters++ < size * 4) {
+      const currKey = open.pop();
+      const c = currKey % this.cols;
+      const r = Math.floor(currKey / this.cols);
 
       // Early exit: First target hit wins!
-      if (targets.has(currKey)) {
+      if (targetMap[currKey] === 1) {
         const path = [];
         let k = currKey;
         while (k !== -1 && !startIndices.has(k)) {
@@ -115,18 +147,18 @@ export class Grid {
           k = parent[k];
         }
         if (k !== -1) path.unshift({ col: k % this.cols, row: Math.floor(k / this.cols) });
-        
+
         // Return path and which target we successfully hit
         return { path, hitTargetIdx: currKey };
       }
 
       for (let i = 0; i < 4; i++) {
-        const nc = c + dcs[i];
-        const nr = r + drs[i];
+        const nc = c + DCS[i];
+        const nr = r + DRS[i];
         if (!this.inBounds(nc, nr)) continue;
-        
+
         const nk = key(nc, nr);
-        const isTarget = targets.has(nk);
+        const isTarget = targetMap[nk] === 1;
 
         if (!isTarget && !this.isFree(nc, nr)) continue;
         if (isTarget && !this.canTerminate(nc, nr)) continue;
@@ -134,7 +166,7 @@ export class Grid {
         let moveCost = 1.0;
         if (parent[currKey] !== -1) {
           const pk = parent[currKey];
-          if ((c - (pk % this.cols)) !== dcs[i] || (r - Math.floor(pk / this.cols)) !== drs[i]) {
+          if ((c - (pk % this.cols)) !== DCS[i] || (r - Math.floor(pk / this.cols)) !== DRS[i]) {
             moveCost += 1.5; // Turn penalty
           }
         }
@@ -143,7 +175,7 @@ export class Grid {
         if (ng < gScore[nk]) {
           gScore[nk] = ng;
           parent[nk] = currKey;
-          open.push({ c: nc, r: nr, f: ng }); // Can add heuristic (Manhattan to nearest target) if needed
+          open.push(nk, ng); // Can add heuristic (Manhattan to nearest target) if needed
         }
       }
     }

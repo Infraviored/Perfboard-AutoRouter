@@ -1,13 +1,13 @@
 // app.js — UI orchestration, rendering, drag/drop
-import { anneal }            from './placer.js';
+import { anneal } from './placer.js';
 import { route, getAllNets } from './router.js';
 
 // ── NET COLORS ──
-const NET_PAL = { 
-  VCC:'#ff5252', GND:'#40c4ff', GATE:'#00e676',
-  DRAIN:'#e040fb', SOURCE:'#ff9800', CLK:'#ffea00',
-  DATA:'#9c27b0', ADDR:'#00bcd4', CTRL:'#4caf50',
-  RESET:'#f44336', CLKEN:'#ff5722', EN:'#795548'
+const NET_PAL = {
+  VCC: '#ff5252', GND: '#40c4ff', GATE: '#00e676',
+  DRAIN: '#e040fb', SOURCE: '#ff9800', CLK: '#ffea00',
+  DATA: '#9c27b0', ADDR: '#00bcd4', CTRL: '#4caf50',
+  RESET: '#f44336', CLKEN: '#ff5722', EN: '#795548'
 };
 
 const netColorCache = new Map();
@@ -16,15 +16,15 @@ function netColor(n) {
   if (!n) return '#666';
   if (NET_PAL[n]) return NET_PAL[n];
   if (netColorCache.has(n)) return netColorCache.get(n);
-  
+
   let h = 5381;
   for (const c of n) h = ((h << 5) + h) + c.charCodeAt(0);
-  
+
   const goldenRatio = 0.618033988749895;
   const hue = (Math.abs(h) / 10000 + goldenRatio) % 1;
   const hueDegrees = Math.floor(hue * 360);
   const color = `hsl(${hueDegrees}, 75%, 55%)`;
-  
+
   netColorCache.set(n, color);
   return color;
 }
@@ -64,27 +64,39 @@ const pcb = document.getElementById('pcb');
 const TEMPLATE = {
   board: { cols: 22, rows: 16 },
   components: [
-    { id:'J1', name:'Power', value:'2-pin', color:'#2a2808',
-      pins:[{offset:[0,0],net:'VCC',label:'+'},{offset:[0,1],net:'GND',label:'-'}]},
-    { id:'R1', name:'Resistor', value:'10k', color:'#2e1a08',
-      pins:[{offset:[0,0],net:'VCC',label:'1'},{offset:[2,0],net:'GATE',label:'2'}]},
-    { id:'Q1', name:'N-MOSFET', value:'IRLZ44N', color:'#1a3320',
-      pins:[{offset:[0,0],net:'GATE',label:'G'},
-            {offset:[1,0],net:'DRAIN',label:'D'},
-            {offset:[2,0],net:'SOURCE',label:'S'}]},
-    { id:'RL1', name:'Relay', value:'5V coil', color:'#1a1a2e',
-      pins:[{offset:[0,0],net:'VCC',label:'A'},{offset:[0,1],net:'DRAIN',label:'B'}]},
-    { id:'C1', name:'Cap', value:'100uF', color:'#0e2222',
-      pins:[{offset:[0,0],net:'VCC',label:'+'},{offset:[1,0],net:'GND',label:'-'}]},
-    { id:'D1', name:'Diode', value:'1N4007', color:'#2a0a18',
-      pins:[{offset:[0,0],net:'SOURCE',label:'K'},{offset:[1,0],net:'GND',label:'A'}]}
+    {
+      id: 'J1', name: 'Power', value: '2-pin', color: '#2a2808',
+      pins: [{ offset: [0, 0], net: 'VCC', label: '+' }, { offset: [0, 1], net: 'GND', label: '-' }]
+    },
+    {
+      id: 'R1', name: 'Resistor', value: '10k', color: '#2e1a08',
+      pins: [{ offset: [0, 0], net: 'VCC', label: '1' }, { offset: [2, 0], net: 'GATE', label: '2' }]
+    },
+    {
+      id: 'Q1', name: 'N-MOSFET', value: 'IRLZ44N', color: '#1a3320',
+      pins: [{ offset: [0, 0], net: 'GATE', label: 'G' },
+      { offset: [1, 0], net: 'DRAIN', label: 'D' },
+      { offset: [2, 0], net: 'SOURCE', label: 'S' }]
+    },
+    {
+      id: 'RL1', name: 'Relay', value: '5V coil', color: '#1a1a2e',
+      pins: [{ offset: [0, 0], net: 'VCC', label: 'A' }, { offset: [0, 1], net: 'DRAIN', label: 'B' }]
+    },
+    {
+      id: 'C1', name: 'Cap', value: '100uF', color: '#0e2222',
+      pins: [{ offset: [0, 0], net: 'VCC', label: '+' }, { offset: [1, 0], net: 'GND', label: '-' }]
+    },
+    {
+      id: 'D1', name: 'Diode', value: '1N4007', color: '#2a0a18',
+      pins: [{ offset: [0, 0], net: 'SOURCE', label: 'K' }, { offset: [1, 0], net: 'GND', label: 'A' }]
+    }
   ],
-  connections:[
-    {net:'VCC',    comment:'J1+ → R1[1], RL1[A], C1+'},
-    {net:'GND',    comment:'J1- → C1-, D1[A]'},
-    {net:'GATE',   comment:'R1[2] → Q1[G]'},
-    {net:'DRAIN',  comment:'Q1[D] → RL1[B]'},
-    {net:'SOURCE', comment:'Q1[S] → D1[K]'}
+  connections: [
+    { net: 'VCC', comment: 'J1+ → R1[1], RL1[A], C1+' },
+    { net: 'GND', comment: 'J1- → C1-, D1[A]' },
+    { net: 'GATE', comment: 'R1[2] → Q1[G]' },
+    { net: 'DRAIN', comment: 'Q1[D] → RL1[B]' },
+    { net: 'SOURCE', comment: 'Q1[S] → D1[K]' }
   ]
 };
 
@@ -92,16 +104,16 @@ const TEMPLATE = {
 function applyBoard() {
   COLS = Math.max(5, parseInt(document.getElementById('bCols').value) || 22);
   ROWS = Math.max(5, parseInt(document.getElementById('bRows').value) || 16);
-  
+
   const W = COLS * SP;
   const H = ROWS * SP;
-  
+
   // Update SVG container dimensions directly
   pcb.setAttribute('width', W);
   pcb.setAttribute('height', H);
   pcb.style.width = W + 'px';
   pcb.style.height = H + 'px';
-  
+
   fitView(); render(); updateStats();
   badge(2);
   toast(`Board: ${COLS}×${ROWS}`, 'ok');
@@ -140,26 +152,26 @@ function loadComponents() {
   compDefs = data.components.map((cd, idx) => {
     if (!cd.pins?.length) return null;
     const offsets = cd.pins.map(p =>
-      Array.isArray(p.offset) ? [...p.offset] : [p.offset?.col||0, p.offset?.row||0]);
-    const colValues = offsets.map(o=>o[0]);
-    const rowValues = offsets.map(o=>o[1]);
+      Array.isArray(p.offset) ? [...p.offset] : [p.offset?.col || 0, p.offset?.row || 0]);
+    const colValues = offsets.map(o => o[0]);
+    const rowValues = offsets.map(o => o[1]);
     const minCol = Math.min(...colValues);
     const minRow = Math.min(...rowValues);
     const maxCol = Math.max(...colValues);
     const maxRow = Math.max(...rowValues);
-    
+
     const normalizedOffsets = offsets.map(off => [off[0] - minCol, off[1] - minRow]);
-    
+
     return {
-      id: cd.id || ('C'+(idx+1)), name: cd.name||'?', value: cd.value||'',
-      color: cd.color||'#222a22',
+      id: cd.id || ('C' + (idx + 1)), name: cd.name || '?', value: cd.value || '',
+      color: cd.color || '#222a22',
       routeUnder: !!cd.routeUnder,
       offsets: normalizedOffsets,
       pinNets: cd.pins.map(p => p.net || null),
-      pinLbls: cd.pins.map(p => p.label || p.lbl || String(idx+1)),
+      pinLbls: cd.pins.map(p => p.label || p.lbl || String(idx + 1)),
       w: maxCol - minCol + 1,
       h: maxRow - minRow + 1,
-      boardOffset: [minCol, minRow], 
+      boardOffset: [minCol, minRow],
     };
   }).filter(Boolean);
 
@@ -169,7 +181,7 @@ function loadComponents() {
   badge(3);
   toast(`Loaded ${components.length} components`, 'ok');
   setStatus('Components loaded — click Place & Route');
-  
+
   saveState(); // <-- ADDED
 }
 
@@ -212,7 +224,7 @@ function initializeState() {
       const state = JSON.parse(savedState);
       stateHistory = state.history || [];
       currentStateIndex = state.index || -1;
-      
+
       if (currentStateIndex >= 0 && stateHistory[currentStateIndex]) {
         restoreState(stateHistory[currentStateIndex]);
       }
@@ -252,19 +264,19 @@ function saveState() {
     wires: wires.map(w => ({
       net: w.net, failed: w.failed, path: w.path || []
     })),
-    compDefs: JSON.parse(JSON.stringify(compDefs)),
+    compDefs: structuredClone(compDefs),
     timestamp: Date.now()
   };
-  
+
   stateHistory = stateHistory.slice(0, currentStateIndex + 1);
   stateHistory.push(state);
   currentStateIndex++;
-  
+
   if (stateHistory.length > 50) {
     stateHistory.shift();
     currentStateIndex--;
   }
-  
+
   localStorage.setItem('autorouterState', JSON.stringify({
     history: stateHistory, index: currentStateIndex
   }));
@@ -275,7 +287,7 @@ function restoreState(state) {
   ROWS = state.boardSize.rows;
   document.getElementById('bCols').value = COLS;
   document.getElementById('bRows').value = ROWS;
-  
+
   const defsById = new Map((state.compDefs || compDefs || []).map(cd => [cd.id, cd]));
   components = state.components.map(c => {
     const def = defsById.get(c.id);
@@ -295,13 +307,13 @@ function restoreState(state) {
     };
     return out;
   });
-  
+
   wires = state.wires.map(w => ({
     ...w, path: w.path || []
   }));
-  
-  compDefs = state.compDefs ? JSON.parse(JSON.stringify(state.compDefs)) : [];
-  
+
+  compDefs = state.compDefs ? structuredClone(state.compDefs) : [];
+
   applyBoard(); // CHANGED: Must call this so SVG actually resizes!
   render();
   updateStats();
@@ -341,11 +353,11 @@ function exportCompleteState() {
       }))
     })),
     wires: wires.map(w => ({ net: w.net, failed: w.failed, path: w.path || [] })),
-    compDefs: JSON.parse(JSON.stringify(compDefs)),
+    compDefs: structuredClone(compDefs),
     timestamp: Date.now(),
     version: '1.0'
   };
-  
+
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -357,7 +369,7 @@ function exportCompleteState() {
 }
 
 function saveComps() {
-  return components.map(c => ({ 
+  return components.map(c => ({
     id: c.id, ox: c.ox, oy: c.oy, w: c.w, h: c.h,
     pins: c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow }))
   }));
@@ -368,13 +380,13 @@ function restoreComps(saved) {
     const comp = components.find(c => c.id === s.id);
     if (comp) {
       comp.ox = s.ox; comp.oy = s.oy;
-      comp.w = s.w; comp.h = s.h; 
-      
-      comp.pins.forEach((p, idx) => { 
-        p.dCol = s.pins[idx].dCol; 
+      comp.w = s.w; comp.h = s.h;
+
+      comp.pins.forEach((p, idx) => {
+        p.dCol = s.pins[idx].dCol;
         p.dRow = s.pins[idx].dRow;
-        p.col = comp.ox + p.dCol; 
-        p.row = comp.oy + p.dRow; 
+        p.col = comp.ox + p.dCol;
+        p.row = comp.oy + p.dRow;
       });
     }
   });
@@ -383,9 +395,9 @@ function restoreComps(saved) {
 function snapshotBoardState() {
   return {
     boardSize: { cols: COLS, rows: ROWS },
-    components: JSON.parse(JSON.stringify(components)),
-    wires: JSON.parse(JSON.stringify(wires)),
-    compDefs: JSON.parse(JSON.stringify(compDefs))
+    components: structuredClone(components),
+    wires: structuredClone(wires),
+    compDefs: structuredClone(compDefs)
   };
 }
 
@@ -394,9 +406,9 @@ function restoreBoardState(s) {
   ROWS = s.boardSize.rows;
   document.getElementById('bCols').value = COLS;
   document.getElementById('bRows').value = ROWS;
-  components = JSON.parse(JSON.stringify(s.components));
-  wires = JSON.parse(JSON.stringify(s.wires));
-  compDefs = JSON.parse(JSON.stringify(s.compDefs));
+  components = structuredClone(s.components);
+  wires = structuredClone(s.wires);
+  compDefs = structuredClone(s.compDefs);
   applyBoard();
   render();
   updateStats();
@@ -411,8 +423,8 @@ function completion(wires) {
 }
 
 function anyOverlap(comp, allComps) {
-  return allComps.some(other => 
-    other !== comp && 
+  return allComps.some(other =>
+    other !== comp &&
     comp.ox < other.ox + other.w && comp.ox + comp.w > other.ox &&
     comp.oy < other.oy + other.h && comp.oy + comp.h > other.oy
   );
@@ -461,7 +473,7 @@ async function doPlaceAndRoute() {
 
     if (c === 1.0) {
       perfectWires = candidateWires; perfectComps = saveComps();
-      break; 
+      break;
     }
   }
 
@@ -482,7 +494,7 @@ async function doPlaceAndRoute() {
   showOverlay(false);
   render(); updateStats(); renderNetPanel();
   finishMsg();
-  
+
   saveState(); // <-- ADDED (Now saves best attempt even if it wasn't 100% perfect)
 }
 
@@ -493,47 +505,48 @@ async function doRouteOnly() {
   showOverlay(false);
   render(); updateStats(); renderNetPanel();
   finishMsg();
-  
+
   saveState(); // <-- ADDED
 }
 
-function clearWires() { wires = []; render(); updateStats(); toast('Wires cleared', 'inf'); 
+function clearWires() {
+  wires = []; render(); updateStats(); toast('Wires cleared', 'inf');
   saveState(); // <-- ADDED 
 }
 
 function finishMsg() {
   const fail = wires.filter(w => w.failed).length;
-  const ok   = wires.filter(w => !w.failed).length;
+  const ok = wires.filter(w => !w.failed).length;
   if (!fail) toast(`✓ Complete — ${ok} segments`, 'ok');
-  else       toast(`⚠ ${fail} unrouted — try Place & Route to reposition`, 'warn');
+  else toast(`⚠ ${fail} unrouted — try Place & Route to reposition`, 'warn');
   setStatus('Done. Drag components then Route Only, or Place & Route again.');
 }
 
 // ── SVG RENDER ENGINE ──
 function render() {
   const W = COLS * SP, H = ROWS * SP;
-  
+
   // 1. Defs + Background Pattern (Only update if board size actually changes)
   if (lastRenderedW !== W || lastRenderedH !== H) {
     lastRenderedW = W;
     lastRenderedH = H;
-    
+
     // Safety check: ensure the SVG container matches the new grid size
     pcb.setAttribute('width', W);
     pcb.setAttribute('height', H);
     pcb.style.width = W + 'px';
     pcb.style.height = H + 'px';
-    
+
     const bgSvg = `
       <defs>
         <pattern id="perfPattern" patternUnits="userSpaceOnUse" width="${SP}" height="${SP}">
           <rect width="${SP}" height="${SP}" fill="#1a1208"/>
-          <circle cx="${SP/2}" cy="${SP/2}" r="${SP*.22}" fill="#b87333"/>
-          <circle cx="${SP/2}" cy="${SP/2}" r="${SP*.09}" fill="#0d0a06"/>
+          <circle cx="${SP / 2}" cy="${SP / 2}" r="${SP * .22}" fill="#b87333"/>
+          <circle cx="${SP / 2}" cy="${SP / 2}" r="${SP * .09}" fill="#0d0a06"/>
         </pattern>
       </defs>
       <rect width="${W}" height="${H}" fill="url(#perfPattern)"/>
-      <rect x="1" y="1" width="${W-2}" height="${H-2}" fill="none" stroke="#c8a800" stroke-width="2"/>
+      <rect x="1" y="1" width="${W - 2}" height="${H - 2}" fill="none" stroke="#c8a800" stroke-width="2"/>
     `;
     document.getElementById('layer-bg').innerHTML = bgSvg;
   }
@@ -546,7 +559,7 @@ function render() {
   let compSvg = '';
   components.forEach(c => { compSvg += renderCompSVG(c); });
   document.getElementById('layer-comps').innerHTML = compSvg;
-  
+
   // 4. UI Elements (Bounding Box & Selection)
   let uiSvg = '';
   if (components.length > 0) {
@@ -559,9 +572,9 @@ function render() {
 
   if (selComp) {
     const s = selComp;
-    uiSvg += `<rect x="${s.ox*SP - 6}" y="${s.oy*SP - 6}" width="${s.w*SP + 8}" height="${s.h*SP + 8}" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="3 3"/>`;
+    uiSvg += `<rect x="${s.ox * SP - 6}" y="${s.oy * SP - 6}" width="${s.w * SP + 8}" height="${s.h * SP + 8}" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="3 3"/>`;
   }
-  
+
   document.getElementById('layer-ui').innerHTML = uiSvg;
 }
 
@@ -569,19 +582,22 @@ function generateWiresSVG() {
   let out = '';
   wires.forEach(w => {
     if (w.failed) {
-      const a = w.path[0], b = w.path[w.path.length-1];
-      out += `<line x1="${a.col*SP+SP/2}" y1="${a.row*SP+SP/2}" x2="${b.col*SP+SP/2}" y2="${b.row*SP+SP/2}" stroke="#ff2222" stroke-width="1" stroke-dasharray="2 5"/>`;
-      return; 
+      const a = w.path[0], b = w.path[w.path.length - 1];
+      out += `<line x1="${a.col * SP + SP / 2}" y1="${a.row * SP + SP / 2}" x2="${b.col * SP + SP / 2}" y2="${b.row * SP + SP / 2}" stroke="#ff2222" stroke-width="1" stroke-dasharray="2 5"/>`;
+      return;
     }
-    
+
     const strokeW = hovNet === w.net ? 4.5 : 2.8;
-    const pts = w.path.map(pt => `${pt.col*SP + SP/2},${pt.row*SP + SP/2}`).join(' ');
+    const pts = w.path.map(pt => `${pt.col * SP + SP / 2},${pt.row * SP + SP / 2}`).join(' ');
     out += `<polyline points="${pts}" fill="none" stroke="${netColor(w.net)}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round"/>`;
   });
   return out;
 }
 
+let cachedRatsnest = '';
 function generateRatsnestSVG() {
+  if (dragging && cachedRatsnest) return cachedRatsnest;
+
   const nets = getAllNets(components);
   let out = '';
   for (const net in nets) {
@@ -590,27 +606,28 @@ function generateRatsnestSVG() {
     const conn = new Set([0]);
     while (conn.size < pins.length) {
       let bD = Infinity, bI = -1, bJ = -1;
-      conn.forEach(i => pins.forEach((p,j) => {
+      conn.forEach(i => pins.forEach((p, j) => {
         if (conn.has(j)) return;
-        const d = Math.abs(pins[i].col-p.col)+Math.abs(pins[i].row-p.row);
-        if (d < bD) { bD=d; bI=i; bJ=j; }
+        const d = Math.abs(pins[i].col - p.col) + Math.abs(pins[i].row - p.row);
+        if (d < bD) { bD = d; bI = i; bJ = j; }
       }));
       if (bJ === -1) break;
       // FIX: Use opacity attribute instead of concatenating '55' to the color string!
-      out += `<line x1="${pins[bI].col*SP+SP/2}" y1="${pins[bI].row*SP+SP/2}" x2="${pins[bJ].col*SP+SP/2}" y2="${pins[bJ].row*SP+SP/2}" stroke="${netColor(net)}" opacity="0.35" stroke-width="0.8" stroke-dasharray="2 5"/>`;
+      out += `<line x1="${pins[bI].col * SP + SP / 2}" y1="${pins[bI].row * SP + SP / 2}" x2="${pins[bJ].col * SP + SP / 2}" y2="${pins[bJ].row * SP + SP / 2}" stroke="${netColor(net)}" opacity="0.35" stroke-width="0.8" stroke-dasharray="2 5"/>`;
       conn.add(bJ);
     }
   }
+  cachedRatsnest = out;
   return out;
 }
 
 // --- Fix 2: SVG Z-Index, Label Placement, and Colored Rim ---
 function renderCompSVG(c) {
-  const bx = c.ox*SP + SP*.08, by = c.oy*SP + SP*.08;
-  const bw = c.w*SP  - SP*.16, bh = c.h*SP  - SP*.16;
-  
+  const bx = c.ox * SP + SP * .08, by = c.oy * SP + SP * .08;
+  const bw = c.w * SP - SP * .16, bh = c.h * SP - SP * .16;
+
   let out = `<g transform="translate(0,0)">`;
-  
+
   // 1. Draw Component Base (Use the exact component color as thick rim, and a darker tinted fill)
   out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="#111" stroke="${c.color}" stroke-width="2.5"/>`;
   // Add a slight colored tint to the background of the component
@@ -618,19 +635,19 @@ function renderCompSVG(c) {
 
   // 2. Draw Pins First (so component labels can render over them if needed)
   c.pins.forEach(p => {
-    const px = p.col*SP + SP/2, py = p.row*SP + SP/2;
-    out += `<circle cx="${px}" cy="${py}" r="${SP*.28}" fill="#b87333"/>`;
-    out += `<circle cx="${px}" cy="${py}" r="${SP*.2}" fill="${netColor(p.net)}"/>`;
-    out += `<circle cx="${px}" cy="${py}" r="${SP*.09}" fill="#0d0a06"/>`;
-    
+    const px = p.col * SP + SP / 2, py = p.row * SP + SP / 2;
+    out += `<circle cx="${px}" cy="${py}" r="${SP * .28}" fill="#b87333"/>`;
+    out += `<circle cx="${px}" cy="${py}" r="${SP * .2}" fill="${netColor(p.net)}"/>`;
+    out += `<circle cx="${px}" cy="${py}" r="${SP * .09}" fill="#0d0a06"/>`;
+
     // Pin Labels moved down slightly to prevent overlapping the center hole
-    out += `<text x="${px}" y="${py + SP*.42}" fill="rgba(230,230,230,.9)" font-family="monospace" font-size="${Math.min(SP*.25,7)}" text-anchor="middle">${p.lbl}</text>`;
+    out += `<text x="${px}" y="${py + SP * .42}" fill="rgba(230,230,230,.9)" font-family="monospace" font-size="${Math.min(SP * .25, 7)}" text-anchor="middle">${p.lbl}</text>`;
   });
 
   // 3. Draw Component Labels Last (On Top)
   // Shifted component name to the TOP of the component box instead of center/bottom
-  out += `<text x="${bx+3}" y="${by+SP*0.35}" fill="#fff" font-family="'Consolas',monospace" font-size="${Math.min(SP*.3,9)}" font-weight="bold" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${c.id}: ${c.value}</text>`;
-  
+  out += `<text x="${bx + 3}" y="${by + SP * 0.35}" fill="#fff" font-family="'Consolas',monospace" font-size="${Math.min(SP * .3, 9)}" font-weight="bold" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${c.id}: ${c.value}</text>`;
+
   out += `</g>`;
   return out;
 }
@@ -638,13 +655,13 @@ function renderCompSVG(c) {
 // ── STATS ──
 function updateStats() {
   const nets = getAllNets(components);
-  const nk   = Object.keys(nets);
-  const ok   = wires.filter(w => !w.failed).length;
-  const fail = wires.filter(w =>  w.failed).length;
-  const tc   = nk.filter(n => nets[n].length >= 2).reduce((s,n) => s + nets[n].length - 1, 0);
-  const wl   = wires.filter(w => !w.failed).reduce((s,w) => s + w.path.length - 1, 0);
-  const pct  = tc > 0 ? Math.round(ok / tc * 100) : null;
-  
+  const nk = Object.keys(nets);
+  const ok = wires.filter(w => !w.failed).length;
+  const fail = wires.filter(w => w.failed).length;
+  const tc = nk.filter(n => nets[n].length >= 2).reduce((s, n) => s + nets[n].length - 1, 0);
+  const wl = wires.filter(w => !w.failed).reduce((s, w) => s + w.path.length - 1, 0);
+  const pct = tc > 0 ? Math.round(ok / tc * 100) : null;
+
   const fb = components.length > 0 ? footprintBoxMetrics(wires) : null;
 
   document.getElementById('stC').textContent = components.length;
@@ -665,9 +682,9 @@ function updateStats() {
     if (elR) elR.textContent = '—';
   }
   const pe = document.getElementById('stP');
-  if (pct === null)    { pe.textContent = '—';       pe.style.color = 'var(--txt2)'; }
-  else if (pct === 100){ pe.textContent = '100% ✓';  pe.style.color = 'var(--grn)';  }
-  else                 { pe.textContent = pct + '%'; pe.style.color = 'var(--org)';  }
+  if (pct === null) { pe.textContent = '—'; pe.style.color = 'var(--txt2)'; }
+  else if (pct === 100) { pe.textContent = '100% ✓'; pe.style.color = 'var(--grn)'; }
+  else { pe.textContent = pct + '%'; pe.style.color = 'var(--org)'; }
 }
 
 // --- COMPONENT LIBRARY SYSTEM ---
@@ -692,13 +709,13 @@ function closeLibrary() {
 function filterLibrary() {
   const q = document.getElementById('libSearch').value.toLowerCase();
   const list = document.getElementById('libList');
-  
+
   if (!componentDatabase.length) {
     list.innerHTML = '<div style="color:var(--org);font-size:.8em;">Database not loaded. Ensure component_database.json is in the directory.</div>';
     return;
   }
 
-  const filtered = componentDatabase.filter(c => 
+  const filtered = componentDatabase.filter(c =>
     c.name.toLowerCase().includes(q) || c.value.toLowerCase().includes(q)
   );
 
@@ -749,7 +766,7 @@ function addFromLibrary(dbIndex) {
   compDefs.push(newCompDef);
   updateJSONFromComponents(); // Sync the text area
   loadComponents(); // Re-render everything
-  
+
   toast(`${tpl.name} added as ${newId}`, 'ok');
   closeLibrary();
   saveState();
@@ -762,7 +779,7 @@ function renderCompList() {
     el.innerHTML = '<div style="font-size:.7em;color:var(--txt2)">No components.</div>'; return;
   }
   el.innerHTML = components.map(c => `
-    <div class="comp-card${selComp===c?' sel':''}" onclick="app.selectComp('${c.id}')" style="border-left: 4px solid ${c.color}">
+    <div class="comp-card${selComp === c ? ' sel' : ''}" onclick="app.selectComp('${c.id}')" style="border-left: 4px solid ${c.color}">
       <span style="font-weight:600">${c.id}</span>
       <span style="color:var(--txt2);font-size:.88em">${c.value}</span>
       <span style="color:var(--txt2);font-size:.78em">${c.pins.length}p</span>
@@ -788,7 +805,7 @@ function selectComp(id) {
     <div class="prop-row"><span class="pk">Value</span><span class="pv">${c.value}</span></div>
     <div class="prop-row"><span class="pk">Pins</span><span class="pv">${c.pins.length}</span></div>
     <div class="prop-row"><span class="pk">Origin</span><span class="pv">(${c.ox}, ${c.oy})</span></div>
-    ${c.pins.map(p=>`
+    ${c.pins.map(p => `
     <div class="prop-row">
       <span class="pk" style="color:${netColor(p.net)}">${p.lbl}</span>
       <span class="pv">${p.net}</span>
@@ -848,17 +865,17 @@ document.addEventListener('keyup', e => {
 // --- MODERN POINTER EVENTS (Mouse + Touch + Pen) ---
 ca.addEventListener('pointerdown', e => {
   if (e.target.closest('#overlay') || e.target.closest('.zbtn')) return; // Ignore clicks on UI overlays
-  
+
   ca.setPointerCapture(e.pointerId); // Keep tracking even if cursor leaves element
-  
+
   isRightClick = e.button === 2;
 
   // Middle click, Right click, Spacebar, or Alt-click initiates panning
   if (e.button === 1 || isRightClick || isSpaceDown || e.altKey) {
-    panning = true; 
+    panning = true;
     panStart = { x: e.clientX - panX, y: e.clientY - panY };
-    ca.style.cursor = 'grabbing'; 
-    e.preventDefault(); 
+    ca.style.cursor = 'grabbing';
+    e.preventDefault();
     return;
   }
 
@@ -866,33 +883,43 @@ ca.addEventListener('pointerdown', e => {
   if (tool === 'sel') {
     const hit = hitComp(gc, gr);
     selComp = hit || null;
-    if (hit) { 
-      dragging = hit; 
+    if (hit) {
+      dragging = hit;
       // Calculate exact sub-grid offset to prevent visual "jump"
-      dragOff = { dc: gc - hit.ox, dr: gr - hit.oy }; 
+      dragOff = { dc: gc - hit.ox, dr: gr - hit.oy };
     }
     selectComp(hit ? hit.id : null);
     render();
   }
 });
+let renderQueued = false;
+function queueRender() {
+  if (!renderQueued) {
+    renderQueued = true;
+    requestAnimationFrame(() => {
+      render();
+      renderQueued = false;
+    });
+  }
+}
 
 ca.addEventListener('pointermove', e => {
   const { gc, gr } = gridPos(e);
-  
+
   // Update UI indicators
   domElements.cCol.textContent = gc;
   domElements.cRow.textContent = gr;
-  
+
   const pin = components.flatMap(c => c.pins).find(p => p.col === gc && p.row === gr);
   const netEl = domElements.cNet;
   if (pin) { netEl.textContent = pin.net; netEl.style.color = netColor(pin.net); }
-  else     { netEl.textContent = '—';     netEl.style.color = 'var(--txt1)'; }
+  else { netEl.textContent = '—'; netEl.style.color = 'var(--txt1)'; }
 
   // Handle Panning
   if (panning && panStart) {
-    panX = e.clientX - panStart.x; 
-    panY = e.clientY - panStart.y; 
-    applyT(); 
+    panX = e.clientX - panStart.x;
+    panY = e.clientY - panStart.y;
+    applyT();
     return;
   }
 
@@ -900,31 +927,31 @@ ca.addEventListener('pointermove', e => {
   if (dragging) {
     const nox = Math.max(0, Math.min(COLS - dragging.w, gc - dragOff.dc));
     const noy = Math.max(0, Math.min(ROWS - dragging.h, gr - dragOff.dr));
-    
+
     if (nox !== dragging.ox || noy !== dragging.oy) {
       moveComp(dragging, nox, noy);
       // Wait to re-route until pointerup for better performance, 
       // just clear wires and render the move for now.
-      wires = []; 
-      render(); 
+      wires = [];
+      queueRender();
     }
   }
 });
 
 ca.addEventListener('pointerup', e => {
   ca.releasePointerCapture(e.pointerId);
-  if (panning) { 
-    panning = false; 
+  if (panning) {
+    panning = false;
     isRightClick = false;
-    ca.style.cursor = isSpaceDown ? 'grab' : 'crosshair'; 
+    ca.style.cursor = isSpaceDown ? 'grab' : 'crosshair';
   }
-  if (dragging) { 
-    dragging = null; 
-    dragOff = null; 
-    selectComp(selComp?.id || null); 
-    renderNetPanel(); 
+  if (dragging) {
+    dragging = null;
+    dragOff = null;
+    selectComp(selComp?.id || null);
+    renderNetPanel();
     updateStats(); // Update stats here instead of every frame of movement
-    saveState(); 
+    saveState();
   }
 });
 
@@ -943,12 +970,12 @@ ca.addEventListener('wheel', e => {
 // ── ZOOM / PAN ──
 function applyT() {
   pcb.style.transform = `translate(${panX}px,${panY}px) scale(${zoom})`;
-  document.getElementById('cZoom').textContent = Math.round(zoom*100) + '%';
+  document.getElementById('cZoom').textContent = Math.round(zoom * 100) + '%';
 }
 function adjZoom(f, cx, cy) {
-  const r  = ca.getBoundingClientRect();
-  const ox = (cx !== undefined ? cx : r.left + r.width/2)  - r.left;
-  const oy = (cy !== undefined ? cy : r.top  + r.height/2) - r.top;
+  const r = ca.getBoundingClientRect();
+  const ox = (cx !== undefined ? cx : r.left + r.width / 2) - r.left;
+  const oy = (cy !== undefined ? cy : r.top + r.height / 2) - r.top;
   const nz = Math.max(.15, Math.min(6, zoom * f));
   panX = ox - (ox - panX) * (nz / zoom);
   panY = oy - (oy - panY) * (nz / zoom);
@@ -958,9 +985,9 @@ function adjZoom(f, cx, cy) {
 function fitView() {
   const r = ca.getBoundingClientRect();
   const padding = 60; // generous padding so nothing hits the extreme edges
-  zoom = Math.min((r.width - padding) / (COLS*SP), (r.height - padding) / (ROWS*SP));
-  panX = (r.width  - COLS*SP*zoom) / 2;
-  panY = (r.height - ROWS*SP*zoom) / 2;
+  zoom = Math.min((r.width - padding) / (COLS * SP), (r.height - padding) / (ROWS * SP));
+  panX = (r.width - COLS * SP * zoom) / 2;
+  panY = (r.height - ROWS * SP * zoom) / 2;
   applyT(); render();
 }
 
@@ -969,7 +996,7 @@ function gridPos(e) {
   const r = ca.getBoundingClientRect();
   return {
     gc: Math.floor((e.clientX - r.left - panX) / zoom / SP),
-    gr: Math.floor((e.clientY - r.top  - panY) / zoom / SP)
+    gr: Math.floor((e.clientY - r.top - panY) / zoom / SP)
   };
 }
 function setTool(t) {
@@ -978,9 +1005,9 @@ function setTool(t) {
 }
 function showOverlay(v) { document.getElementById('overlay').classList.toggle('on', v); }
 function ostep(n) {
-  [1,2].forEach(i => {
-    document.getElementById('os'+i).className =
-      'ostep' + (i===n?' act':i<n?' done':'');
+  [1, 2].forEach(i => {
+    document.getElementById('os' + i).className =
+      'ostep' + (i === n ? ' act' : i < n ? ' done' : '');
   });
 }
 function setProg(p, s) {
@@ -1001,19 +1028,19 @@ function setBestLine(s) {
 }
 function toast(msg, type) {
   const el = document.getElementById('toast');
-  el.textContent = msg; el.className = 'on ' + (type||'inf');
+  el.textContent = msg; el.className = 'on ' + (type || 'inf');
   clearTimeout(toastTid); toastTid = setTimeout(() => el.className = '', 3000);
 }
 function setStatus(m) { document.getElementById('smsg').textContent = m; }
 
 // CHANGED: Exports actual vector SVG instead of PNG!
 function doExport() {
-  const a = document.createElement('a'); 
+  const a = document.createElement('a');
   a.download = 'perfboard.svg';
   const svgData = new XMLSerializer().serializeToString(pcb);
   const blob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
-  a.href = URL.createObjectURL(blob); 
-  a.click(); 
+  a.href = URL.createObjectURL(blob);
+  a.click();
   toast('Exported Vector SVG', 'ok');
 }
 
@@ -1041,7 +1068,7 @@ document.addEventListener('keydown', e => {
   if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); doPlaceAndRoute(); } // Was F5
   if (e.shiftKey && (e.key === 'R' || e.key === 'r')) { e.preventDefault(); doRouteOnly(); } // Was F6
   if (e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd')) { e.preventDefault(); debugBoard(); } // Was F7
-  
+
   if (e.key === 'Escape') {
     if (cancelOp && document.getElementById('overlay').classList.contains('on')) {
       e.preventDefault();
@@ -1056,22 +1083,22 @@ document.addEventListener('keydown', e => {
     closeLibrary();
     render();
   }
-  
+
   // --- SAFE DELETION LOGIC ---
   if ((e.key === 'Delete' || e.key === 'Backspace') && selComp) {
     e.preventDefault();
-    
+
     // Instead of wiping ALL wires, only delete wires attached to this component
     const compNets = new Set(selComp.pins.map(p => p.net).filter(Boolean));
     wires = wires.filter(w => !compNets.has(w.net));
-    
+
     components = components.filter(c => c !== selComp);
     selComp = null;
-    selectComp(null); 
-    renderCompList(); 
-    render(); 
+    selectComp(null);
+    renderCompList();
+    render();
     updateStats();
-    
+
     toast('Component & attached nets removed', 'warn');
     saveState();
   }
@@ -1088,7 +1115,7 @@ function debugBoard() {
     }
   });
   grid.debugPrint();
-  
+
   const bbox = calculateFootprintArea();
   console.log("Current Bounding Box:", bbox);
   toast("Debug info logged to console", "inf");
@@ -1181,11 +1208,11 @@ if (!localStorage.getItem('autorouterState')) {
 function openCompEditor(compId) {
   const compIndex = compDefs.findIndex(cd => cd.id === compId);
   if (compIndex === -1) return;
-  
-  editingComp = JSON.parse(JSON.stringify(compDefs[compIndex]));
+
+  editingComp = structuredClone(compDefs[compIndex]);
   editingCompIndex = compIndex;
   isAddingNewComponent = false;
-  
+
   document.getElementById('editCompId').value = editingComp.id;
   document.getElementById('editCompName').value = editingComp.name;
   document.getElementById('editCompValue').value = editingComp.value;
@@ -1195,12 +1222,12 @@ function openCompEditor(compId) {
   const ru = document.getElementById('editCompRouteUnder');
   if (ru) ru.checked = !!editingComp.routeUnder;
   document.getElementById('compEditorTitle').textContent = `Edit Component: ${editingComp.id}`;
-  
+
   const widthInput = document.getElementById('editCompWidth');
   const heightInput = document.getElementById('editCompHeight');
   widthInput.onchange = () => generatePinGrid();
   heightInput.onchange = () => generatePinGrid();
-  
+
   generatePinGrid();
   document.getElementById('compEditorOverlay').style.display = 'flex';
 }
@@ -1218,7 +1245,7 @@ function addNewComponent() {
     offsets: [[0, 0]], pinNets: ['NET1'], pinLbls: ['1'], w: 1, h: 1, routeUnder: false
   };
   editingCompIndex = -1; isAddingNewComponent = true;
-  
+
   document.getElementById('editCompId').value = editingComp.id;
   document.getElementById('editCompName').value = editingComp.name;
   document.getElementById('editCompValue').value = editingComp.value;
@@ -1228,12 +1255,12 @@ function addNewComponent() {
   const ru = document.getElementById('editCompRouteUnder');
   if (ru) ru.checked = !!editingComp.routeUnder;
   document.getElementById('compEditorTitle').textContent = 'Create New Component';
-  
+
   const widthInput = document.getElementById('editCompWidth');
   const heightInput = document.getElementById('editCompHeight');
   widthInput.onchange = () => generatePinGrid();
   heightInput.onchange = () => generatePinGrid();
-  
+
   generatePinGrid();
   document.getElementById('compEditorOverlay').style.display = 'flex';
 }
@@ -1248,7 +1275,7 @@ function createPinElement(pinIndex, inGrid) {
   pin.style.border = selectedPinIndex === pinIndex ? '3px solid #fff' : '2px solid #b87333';
   pin.style.cursor = 'move';
   // Use relative positioning if it's sitting in the legend flexbox
-  pin.style.position = inGrid ? 'absolute' : 'relative'; 
+  pin.style.position = inGrid ? 'absolute' : 'relative';
   pin.style.display = 'flex';
   pin.style.alignItems = 'center';
   pin.style.justifyContent = 'center';
@@ -1259,14 +1286,14 @@ function createPinElement(pinIndex, inGrid) {
   pin.textContent = editingComp.pinLbls[pinIndex];
   pin.dataset.pinIndex = pinIndex;
   pin.draggable = true;
-  
-  pin.addEventListener('click', (e) => { 
-    e.stopPropagation(); 
-    selectPinForEditing(pinIndex); 
+
+  pin.addEventListener('click', (e) => {
+    e.stopPropagation();
+    selectPinForEditing(pinIndex);
   });
   pin.addEventListener('dragstart', handlePinDragStart);
   pin.addEventListener('dragend', handlePinDragEnd);
-  
+
   return pin;
 }
 
@@ -1274,14 +1301,14 @@ function generatePinGrid() {
   const grid = document.getElementById('pinGridEditor');
   const width = parseInt(document.getElementById('editCompWidth').value) || editingComp.w;
   const height = parseInt(document.getElementById('editCompHeight').value) || editingComp.h;
-  
+
   grid.innerHTML = '';
   grid.style.display = 'grid';
   grid.style.gridTemplateColumns = `repeat(${width}, ${pinGridSize}px)`;
   grid.style.gap = '2px';
   grid.style.justifyContent = 'center';
   grid.style.padding = '10px';
-  
+
   // 1. Setup the Legend Container dynamically if it doesn't exist
   let legendContainer = document.getElementById('pinLegendContainer');
   if (!legendContainer) {
@@ -1292,14 +1319,14 @@ function generatePinGrid() {
     legendContainer.style.background = 'var(--bg3)';
     legendContainer.style.border = '1px dashed var(--border2)';
     legendContainer.style.borderRadius = '4px';
-    
+
     const title = document.createElement('div');
     title.style.fontSize = '0.8em';
     title.style.color = 'var(--txt1)';
     title.style.marginBottom = '8px';
     title.textContent = 'Out-of-bounds Pins (Drag to grid or click to edit/delete)';
     legendContainer.appendChild(title);
-    
+
     const legendGrid = document.createElement('div');
     legendGrid.id = 'pinLegend';
     legendGrid.style.display = 'flex';
@@ -1307,11 +1334,11 @@ function generatePinGrid() {
     legendGrid.style.gap = '8px';
     legendGrid.style.minHeight = '24px';
     legendContainer.appendChild(legendGrid);
-    
+
     // Insert it right after the grid
     grid.parentNode.insertBefore(legendContainer, grid.nextSibling);
   }
-  
+
   const legend = document.getElementById('pinLegend');
   legend.innerHTML = ''; // Clear out the legend on re-render
   const placedPins = new Set(); // Keep track of what fit on the grid
@@ -1332,9 +1359,9 @@ function generatePinGrid() {
       cell.style.cursor = 'pointer';
       cell.dataset.col = col;
       cell.dataset.row = row;
-      
+
       const pinIndex = editingComp.offsets.findIndex(off => off[0] === col && off[1] === row);
-      
+
       if (pinIndex !== -1) {
         placedPins.add(pinIndex);
         cell.appendChild(createPinElement(pinIndex, true));
@@ -1348,13 +1375,13 @@ function generatePinGrid() {
           generatePinGrid();
         });
       }
-      
+
       cell.addEventListener('dragover', handlePinDragOver);
       cell.addEventListener('drop', handlePinDrop);
       grid.appendChild(cell);
     }
   }
-  
+
   // 3. Populate Legend with Orphaned Pins
   let hasOutPins = false;
   editingComp.offsets.forEach((off, pinIndex) => {
@@ -1363,7 +1390,7 @@ function generatePinGrid() {
       legend.appendChild(createPinElement(pinIndex, false));
     }
   });
-  
+
   // Only show the legend if there are actually out-of-bounds pins
   legendContainer.style.display = hasOutPins ? 'block' : 'none';
 }
@@ -1393,11 +1420,11 @@ function updatePinProperties() {
 function deletePin() {
   if (selectedPinIndex === null) return;
   if (editingComp.offsets.length <= 1) { toast('Component must have at least one pin', 'warn'); return; }
-  
+
   editingComp.offsets.splice(selectedPinIndex, 1);
   editingComp.pinNets.splice(selectedPinIndex, 1);
   editingComp.pinLbls.splice(selectedPinIndex, 1);
-  
+
   deselectPin(); generatePinGrid();
   toast('Pin deleted', 'ok');
 }
@@ -1405,7 +1432,7 @@ function deletePin() {
 function addNewPin() {
   const width = parseInt(document.getElementById('editCompWidth').value) || editingComp.w;
   const height = parseInt(document.getElementById('editCompHeight').value) || editingComp.h;
-  
+
   for (let row = 0; row < height; row++) {
     for (let col = 0; col < width; col++) {
       const exists = editingComp.offsets.some(off => off[0] === col && off[1] === row);
@@ -1430,13 +1457,13 @@ function handlePinDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 
 function handlePinDrop(e) {
   e.preventDefault(); e.currentTarget.style.background = '';
   if (draggedPin === null) return;
-  
+
   const newCol = parseInt(e.currentTarget.dataset.col);
   const newRow = parseInt(e.currentTarget.dataset.row);
-  
+
   const existingPin = editingComp.offsets.findIndex(off => off[0] === newCol && off[1] === newRow);
   if (existingPin !== -1 && existingPin !== draggedPin) { toast('Position already occupied', 'warn'); return; }
-  
+
   editingComp.offsets[draggedPin] = [newCol, newRow];
   generatePinGrid();
 }
@@ -1450,9 +1477,9 @@ function saveComponentEdit() {
   editingComp.h = parseInt(document.getElementById('editCompHeight').value);
   const ru = document.getElementById('editCompRouteUnder');
   editingComp.routeUnder = ru ? !!ru.checked : false;
-  
+
   if (!editingComp.id.trim()) { toast('Component ID cannot be empty', 'warn'); return; }
-  
+
   // --- ADDED SAFEGUARD ---
   const outOfBounds = editingComp.offsets.some(off => off[0] < 0 || off[0] >= editingComp.w || off[1] < 0 || off[1] >= editingComp.h);
   if (outOfBounds) {
@@ -1460,15 +1487,15 @@ function saveComponentEdit() {
     return;
   }
   // -----------------------
-  
+
   if (!isAddingNewComponent) {
     const duplicateIndex = compDefs.findIndex((cd, index) => cd.id === editingComp.id && index !== editingCompIndex);
     if (duplicateIndex !== -1) { toast('Component ID already exists', 'warn'); return; }
   }
-  
-  if (isAddingNewComponent) { compDefs.push(editingComp); toast(`Component ${editingComp.id} created`, 'ok'); } 
+
+  if (isAddingNewComponent) { compDefs.push(editingComp); toast(`Component ${editingComp.id} created`, 'ok'); }
   else { compDefs[editingCompIndex] = editingComp; toast(`Component ${editingComp.id} updated`, 'ok'); }
-  
+
   updateJSONFromComponents(); loadComponents(); closeCompEditor();
 }
 
@@ -1489,17 +1516,17 @@ function updateJSONFromComponents() {
 
 function calculateFootprintArea() {
   if (components.length === 0) return { area: 0, bounds: { minCol: 0, maxCol: 0, minRow: 0, maxRow: 0 } };
-  
+
   let minCol = Infinity, maxCol = -Infinity;
   let minRow = Infinity, maxRow = -Infinity;
-  
+
   components.forEach(c => {
     minCol = Math.min(minCol, c.ox);
-    maxCol = Math.max(maxCol, c.ox + c.w - 1); 
+    maxCol = Math.max(maxCol, c.ox + c.w - 1);
     minRow = Math.min(minRow, c.oy);
     maxRow = Math.max(maxRow, c.oy + c.h - 1);
   });
-  
+
   wires.forEach(w => {
     if (w.path) w.path.forEach(pt => {
       minCol = Math.min(minCol, pt.col);
@@ -1508,11 +1535,11 @@ function calculateFootprintArea() {
       maxRow = Math.max(maxRow, pt.row);
     });
   });
-  
+
   const width = maxCol - minCol + 1;
   const height = maxRow - minRow + 1;
   const area = width * height;
-  
+
   return { area, bounds: { minCol, maxCol, minRow, maxRow } };
 }
 
@@ -1753,7 +1780,7 @@ async function enumeratePlateauNeighbors(baseBox, baseScore, cols, rows, maxPerC
         if (onProgress) onProgress(totalEvals, maxTotalEvals, `${cId} rot${rot}`);
         if (totalEvals > maxTotalEvals) break;
 
-        const testWires = await route(components, cols, rows, () => {}, false);
+        const testWires = await route(components, cols, rows, () => { }, false);
         const testScore = scoreState(testWires);
         if (testScore.comp < baseScore.comp) continue;
 
@@ -1925,7 +1952,7 @@ async function tryShrinkAlongWires(bestScore, cols, rows) {
       if (!ok) continue;
       if (anyOverlap(c, components)) continue;
 
-      const testWires = await route(components, cols, rows, () => {}, false);
+      const testWires = await route(components, cols, rows, () => { }, false);
       const testScore = scoreState(testWires);
 
       // Only allow moves that keep routing completion and improve score.
@@ -1996,7 +2023,7 @@ async function explorePlateauStates(bestScore, cols, rows) {
           if (area2 > baseArea) continue;
           if (area2 === baseArea && per2 > basePerim) continue;
 
-          const testWires = await route(components, cols, rows, () => {}, false);
+          const testWires = await route(components, cols, rows, () => { }, false);
           const testScore = scoreState(testWires);
 
           if (testScore.comp < bestScore.comp) continue;
@@ -2045,7 +2072,7 @@ async function tryRotateOptimize() {
       const tempW = c.w;
       c.w = c.h;
       c.h = tempW;
-      
+
       c.pins.forEach(p => {
         const oldRow = p.dRow;
         p.dRow = p.dCol;
@@ -2056,13 +2083,13 @@ async function tryRotateOptimize() {
 
       if (anyOverlap(c, components)) continue;
 
-      const testWires = await route(components, COLS, ROWS, () => {}, false);
+      const testWires = await route(components, COLS, ROWS, () => { }, false);
       const testScore = scoreState(testWires);
 
       if (isScoreBetter(testScore, bestScore)) {
         bestScore = testScore;
         wires = testWires;
-        improved = true; cImproved = true; break; 
+        improved = true; cImproved = true; break;
       }
     }
 
@@ -2099,7 +2126,7 @@ async function doRecursivePushPacking() {
     const compTargets = new Map();
     components.forEach(c => {
       let sumX = 0, sumY = 0, count = 0;
-      
+
       c.pins.forEach(p => {
         if (p.net && nets[p.net]) {
           nets[p.net].forEach(op => {
@@ -2111,7 +2138,7 @@ async function doRecursivePushPacking() {
           });
         }
       });
-      
+
       // If connected to things, target their average location. If unconnected, drift to global center.
       if (count > 0) {
         compTargets.set(c, { x: sumX / count, y: sumY / count });
@@ -2122,45 +2149,45 @@ async function doRecursivePushPacking() {
 
     // Sort components: furthest from their personal target move first
     const sorted = [...components].sort((a, b) => {
-       const tA = compTargets.get(a);
-       const tB = compTargets.get(b);
-       const distA = Math.max(Math.abs(a.ox + a.w/2 - tA.x), Math.abs(a.oy + a.h/2 - tA.y));
-       const distB = Math.max(Math.abs(b.ox + b.w/2 - tB.x), Math.abs(b.oy + b.h/2 - tB.y));
-       return distB - distA;
+      const tA = compTargets.get(a);
+      const tB = compTargets.get(b);
+      const distA = Math.max(Math.abs(a.ox + a.w / 2 - tA.x), Math.abs(a.oy + a.h / 2 - tA.y));
+      const distB = Math.max(Math.abs(b.ox + b.w / 2 - tB.x), Math.abs(b.oy + b.h / 2 - tB.y));
+      return distB - distA;
     });
 
     const oldStates = saveComps();
     let moveOccurred = false;
 
     for (let c of sorted) {
-       const target = compTargets.get(c);
-       let dx = 0, dy = 0;
-       
-       // Move toward personal target
-       if (c.ox + c.w/2 < target.x - 0.5) dx = 1;
-       else if (c.ox + c.w/2 > target.x + 0.5) dx = -1;
+      const target = compTargets.get(c);
+      let dx = 0, dy = 0;
 
-       if (c.oy + c.h/2 < target.y - 0.5) dy = 1;
-       else if (c.oy + c.h/2 > target.y + 0.5) dy = -1;
+      // Move toward personal target
+      if (c.ox + c.w / 2 < target.x - 0.5) dx = 1;
+      else if (c.ox + c.w / 2 > target.x + 0.5) dx = -1;
 
-       const tryMove = (mx, my) => {
-         if (mx === 0 && my === 0) return false;
-         moveComp(c, c.ox + mx, c.oy + my);
-         if (anyOverlap(c, components)) {
-            moveComp(c, c.ox - mx, c.oy - my); // Revert physical collision
-            return false;
-         }
-         return true;
-       };
+      if (c.oy + c.h / 2 < target.y - 0.5) dy = 1;
+      else if (c.oy + c.h / 2 > target.y + 0.5) dy = -1;
 
-       // Try moving diagonally first, then slide horizontally or vertically
-       if (tryMove(dx, dy) || tryMove(dx, 0) || tryMove(0, dy)) {
-         moveOccurred = true;
-       }
+      const tryMove = (mx, my) => {
+        if (mx === 0 && my === 0) return false;
+        moveComp(c, c.ox + mx, c.oy + my);
+        if (anyOverlap(c, components)) {
+          moveComp(c, c.ox - mx, c.oy - my); // Revert physical collision
+          return false;
+        }
+        return true;
+      };
+
+      // Try moving diagonally first, then slide horizontally or vertically
+      if (tryMove(dx, dy) || tryMove(dx, 0) || tryMove(0, dy)) {
+        moveOccurred = true;
+      }
     }
 
     if (moveOccurred) {
-      const testWires = await route(components, COLS, ROWS, () => {}, false);
+      const testWires = await route(components, COLS, ROWS, () => { }, false);
       const testScore = scoreState(testWires);
 
       if (isScoreBetter(testScore, bestScore) || (
@@ -2204,7 +2231,7 @@ async function tryGlobalNudge(bestScore, cols, rows) {
     // Apply the translation atomically.
     for (const c of components) moveComp(c, c.ox + d.dx, c.oy + d.dy);
 
-    const testWires = await route(components, cols, rows, () => {}, false);
+    const testWires = await route(components, cols, rows, () => { }, false);
     const testScore = scoreState(testWires);
     if (isScoreBetter(testScore, bestScore)) {
       wires = testWires;
@@ -2223,14 +2250,14 @@ async function doOptimizeFootprint() {
   cancelRequested = false;
   cancelOp = 'Optimize';
 
-  const MAX_ITERS = 100; 
+  const MAX_ITERS = 100;
   showOverlay(true);
   ostep(1);
   setBestLine('');
 
   // Keep optimization transactional: if nothing improves, restore exactly.
   const startSnapshot = snapshotBoardState();
-  const startWires = await route(components, COLS, ROWS, () => {}, false);
+  const startWires = await route(components, COLS, ROWS, () => { }, false);
   const startScore = scoreState(startWires);
   wires = startWires;
 
@@ -2254,8 +2281,8 @@ async function doOptimizeFootprint() {
 
   setProg(0, `Preparing virtual workspace...`);
   // Route only for internal initialization; evaluation later is done on the original board.
-  wires = await route(components, vCols, vRows, () => {}, false);
-  
+  wires = await route(components, vCols, vRows, () => { }, false);
+
   // Track Absolute Best
   let globalBestScore = scoreState(wires);
   let globalBestComps = saveComps();
@@ -2302,7 +2329,7 @@ async function doOptimizeFootprint() {
   for (let iter = 1; iter <= MAX_ITERS; iter++) {
     if (cancelRequested) break;
     document.getElementById('ot').textContent = `Optimize ${iter} / ${MAX_ITERS}`;
-    
+
     if (iter % 10 === 0 || stagnation >= 5) {
       // ==========================================
       // MACRO MUTATION (Simulated Annealing)
@@ -2324,22 +2351,22 @@ async function doOptimizeFootprint() {
         }
         stagnation = 6;
       }
-      
+
       await anneal(components, vCols, vRows, (p, s) => {
-        setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: SA Routing ${macroCount} — ${Math.round(p*100)}%`);
+        setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: SA Routing ${macroCount} — ${Math.round(p * 100)}%`);
         // We skip rendering during SA to keep it lightning fast
       }, () => cancelRequested);
-      
+
       stagnation = 0; // Reset frustration
-      
+
     } else {
       // ==========================================
       // MICRO MUTATION (Jitter)
       // ==========================================
       setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: Micro Search (Stagnation: ${stagnation}/5)...`);
-      
+
       // Branch off the current local working set
-      restoreComps(localBestComps); 
+      restoreComps(localBestComps);
 
       // Tweak 1 or 2 components slightly
       const numMutations = Math.max(1, Math.floor(components.length * 0.15));
@@ -2362,7 +2389,7 @@ async function doOptimizeFootprint() {
 
         const nx = Math.max(0, Math.min(vCols - c.w, c.ox + dx));
         const ny = Math.max(0, Math.min(vRows - c.h, c.oy + dy));
-        
+
         moveComp(c, nx, ny);
         if (anyOverlap(c, components)) {
           c.w = oldW; c.h = oldH;
@@ -2419,7 +2446,7 @@ async function doOptimizeFootprint() {
       continue;
     }
 
-    const testWires = await route(components, uiCols, uiRows, () => {}, false);
+    const testWires = await route(components, uiCols, uiRows, () => { }, false);
     const testScore = scoreState(testWires);
 
     // 1. Is it a new GLOBAL Best?
@@ -2434,7 +2461,7 @@ async function doOptimizeFootprint() {
       // Save global records
       globalBestScore = testScore;
       globalBestComps = saveComps(); globalBestWires = [...testWires];
-      
+
       // Sync local records to the new global high score
       localBestScore = testScore;
       localBestComps = saveComps();
@@ -2455,7 +2482,7 @@ async function doOptimizeFootprint() {
       } else {
         restoreBoardState(startPreviewSnapshot);
       }
-    } 
+    }
     else if (isLocalBest) {
       // Made progress, but didn't beat the absolute high score
       localBestScore = testScore;
@@ -2464,14 +2491,14 @@ async function doOptimizeFootprint() {
       const msg = `Iter ${iter}: Local improvement — ${formatScore(testScore)}`;
       console.log(`[Iter ${iter}] Local improvement. ${formatScore(testScore)}`);
       setProg((iter / MAX_ITERS) * 100, msg);
-    } 
+    }
     else {
       // Dead end. Increase frustration.
-      stagnation++; 
+      stagnation++;
     }
-    
+
     // Always yield event loop to keep the browser responsive
-    await new Promise(r => setTimeout(r, 0)); 
+    await new Promise(r => setTimeout(r, 0));
 
     // Restore the virtual search state after UI-space evaluation/preview.
     restoreComps(preEval);
@@ -2520,7 +2547,7 @@ async function doPlateauExplore() {
   showOverlay(true);
   ostep(2);
 
-  let bestWires = await route(components, COLS, ROWS, () => {}, false);
+  let bestWires = await route(components, COLS, ROWS, () => { }, false);
   let bestScore = scoreState(bestWires);
   const startScore = bestScore;
   wires = bestWires;
@@ -2623,38 +2650,38 @@ async function doPlateauExplore() {
 
 function goBack() {
   if (!window.lastState) { toast('No previous state to go back to', 'warn'); return; }
-  
+
   restoreComps(window.lastState.comps);
   wires = window.lastState.wires;
-  
+
   render(); updateStats(); renderNetPanel();
   toast('Reverted to previous configuration', 'ok');
   window.lastState = null;
 }
 
 function cutToBoundingBox() {
-  if (!components.length) { 
-    toast('No components loaded', 'warn'); 
-    return; 
+  if (!components.length) {
+    toast('No components loaded', 'warn');
+    return;
   }
-  
+
   const { bounds } = calculateFootprintArea();
-  
+
   // CHANGED: pad from 1 to 0 to remove the empty rim
   const pad = 0;
   const newCols = (bounds.maxCol - bounds.minCol) + 1 + (pad * 2);
   const newRows = (bounds.maxRow - bounds.minRow) + 1 + (pad * 2);
-  
+
   if (newCols <= 0 || newRows <= 0) { toast('Invalid bounding box', 'warn'); return; }
-  
+
   COLS = newCols;
   ROWS = newRows;
   document.getElementById('bCols').value = newCols;
   document.getElementById('bRows').value = newRows;
-  
+
   const offsetX = -bounds.minCol + pad;
   const offsetY = -bounds.minRow + pad;
-  
+
   components.forEach(comp => {
     comp.ox += offsetX;
     comp.oy += offsetY;
@@ -2663,7 +2690,7 @@ function cutToBoundingBox() {
       pin.row += offsetY;
     });
   });
-  
+
   wires.forEach(wire => {
     if (wire.path) {
       wire.path.forEach(point => {
@@ -2672,10 +2699,10 @@ function cutToBoundingBox() {
       });
     }
   });
-  
+
   applyBoard();
   toast(`Board cut to ${newCols}×${newRows}`, 'ok');
-  saveState(); 
+  saveState();
 }
 
 window.app = {

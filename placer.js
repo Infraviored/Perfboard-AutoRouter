@@ -1,24 +1,45 @@
 // placer.js
 import { Grid } from './grid.js';
 
-// Ultra-fast HPWL heuristic replaces MST
+let bboxCache = null;
+let numNetsCache = 0;
+
+function setupHpwl(numNets) {
+  numNetsCache = numNets;
+  if (!bboxCache || bboxCache.length < numNets * 4) {
+    bboxCache = new Int32Array(numNets * 4);
+  }
+}
+
 function hpwl(components) {
-  const nets = {};
-  components.forEach(c => c.pins.forEach(p => {
-    if (!p.net) return;
-    if (!nets[p.net]) nets[p.net] = { minC: Infinity, maxC: -Infinity, minR: Infinity, maxR: -Infinity };
-    const n = nets[p.net];
-    if (p.col < n.minC) n.minC = p.col;
-    if (p.col > n.maxC) n.maxC = p.col;
-    if (p.row < n.minR) n.minR = p.row;
-    if (p.row > n.maxR) n.maxR = p.row;
-  }));
-  
+  // Reset existing bounding boxes
+  for (let i = 0; i < numNetsCache * 4; i += 4) {
+    bboxCache[i] = 1000000;    // minC
+    bboxCache[i + 1] = -1000000; // maxC
+    bboxCache[i + 2] = 1000000;  // minR
+    bboxCache[i + 3] = -1000000; // maxR
+  }
+
+  // Populate bounds
+  for (let i = 0; i < components.length; i++) {
+    const pins = components[i].pins;
+    for (let j = 0; j < pins.length; j++) {
+      const p = pins[j];
+      const nid = p.netId;
+      if (nid === undefined) continue;
+
+      const base = nid * 4;
+      if (p.col < bboxCache[base]) bboxCache[base] = p.col;
+      if (p.col > bboxCache[base + 1]) bboxCache[base + 1] = p.col;
+      if (p.row < bboxCache[base + 2]) bboxCache[base + 2] = p.row;
+      if (p.row > bboxCache[base + 3]) bboxCache[base + 3] = p.row;
+    }
+  }
+
   let total = 0;
-  for (const k in nets) {
-    const n = nets[k];
-    if (n.minC !== Infinity) {
-      total += (n.maxC - n.minC) + (n.maxR - n.minR);
+  for (let i = 0; i < numNetsCache * 4; i += 4) {
+    if (bboxCache[i] !== 1000000) {
+      total += (bboxCache[i + 1] - bboxCache[i]) + (bboxCache[i + 3] - bboxCache[i + 2]);
     }
   }
   return total;
@@ -26,39 +47,68 @@ function hpwl(components) {
 
 function hasOverlap(a, b) {
   return a.ox < b.ox + b.w && a.ox + a.w > b.ox &&
-         a.oy < b.oy + b.h && a.oy + a.h > b.oy;
+    a.oy < b.oy + b.h && a.oy + a.h > b.oy;
 }
 
 function moveComp(comp, ox, oy) {
   comp.ox = ox; comp.oy = oy;
-  comp.pins.forEach(p => { p.col = ox + p.dCol; p.row = oy + p.dRow; });
+  const pins = comp.pins;
+  for (let i = 0; i < pins.length; i++) {
+    const p = pins[i];
+    p.col = ox + p.dCol;
+    p.row = oy + p.dRow;
+  }
 }
 
 function anyOverlap(comp, all) {
-  return all.some(o => o !== comp && hasOverlap(comp, o));
+  for (let i = 0; i < all.length; i++) {
+    const o = all[i];
+    if (o !== comp && hasOverlap(comp, o)) return true;
+  }
+  return false;
 }
 
 // In-place rotation to prevent GC pauses
 function rotateCompInPlace(c) {
   const oldW = c.w;
   const oldH = c.h;
-  
-  // Swap dimensions
+
   c.w = oldH;
   c.h = oldW;
-  
-  // Rotate pins 90 degrees clockwise
-  c.pins.forEach(p => {
+
+  const pins = c.pins;
+  for (let i = 0; i < pins.length; i++) {
+    const p = pins[i];
     const oldCol = p.dCol;
     const oldRow = p.dRow;
-    
-    p.dCol = oldH - 1 - oldRow; 
+
+    p.dCol = oldH - 1 - oldRow;
     p.dRow = oldCol;
-    
-    // Update absolute grid positions
+
     p.col = c.ox + p.dCol;
     p.row = c.oy + p.dRow;
-  });
+  }
+}
+
+function unrotateCompInPlace(c) {
+  const oldW = c.w;
+  const oldH = c.h;
+
+  c.w = oldH;
+  c.h = oldW;
+
+  const pins = c.pins;
+  for (let i = 0; i < pins.length; i++) {
+    const p = pins[i];
+    const oldCol = p.dCol;
+    const oldRow = p.dRow;
+
+    p.dCol = oldRow;
+    p.dRow = oldW - 1 - oldCol;
+
+    p.col = c.ox + p.dCol;
+    p.row = c.oy + p.dRow;
+  }
 }
 
 export async function anneal(components, cols, rows, onProgress, shouldCancel) {
@@ -66,8 +116,27 @@ export async function anneal(components, cols, rows, onProgress, shouldCancel) {
 
   function yld() { return new Promise(r => setTimeout(r, 0)); }
 
+  // Assign fast numeric net IDs before annealing for blazing fast HPWL memory lookups
+  const netIdMap = new Map();
+  let nextNetId = 0;
+  for (let i = 0; i < components.length; i++) {
+    const pins = components[i].pins;
+    for (let j = 0; j < pins.length; j++) {
+      const p = pins[j];
+      if (p.net) {
+        if (!netIdMap.has(p.net)) {
+          netIdMap.set(p.net, nextNetId++);
+        }
+        p.netId = netIdMap.get(p.net);
+      } else {
+        p.netId = undefined; // Erase past state cleanly
+      }
+    }
+  }
+  setupHpwl(nextNetId);
+
   let T = 100, Tmin = 0.5, alpha = 0.94;
-  let cur = hpwl(components); // Using HPWL now
+  let cur = hpwl(components); // Using fast static Memory HPWL now
   const totalSteps = Math.ceil(Math.log(Tmin / T) / Math.log(alpha));
   let step = 0;
 
@@ -77,42 +146,45 @@ export async function anneal(components, cols, rows, onProgress, shouldCancel) {
       if (shouldCancel && shouldCancel()) return;
       const c = components[Math.floor(Math.random() * components.length)];
       const oldOx = c.ox, oldOy = c.oy;
-      const oldPins = c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow, col: p.col, row: p.row }));
       const oldW = c.w, oldH = c.h;
-      
+
       // Try rotation in-place
       let rotated = false;
       if (Math.random() < 0.3) {
         rotateCompInPlace(c);
         rotated = true;
       }
-      
+
       const mag = Math.ceil(Math.random() * 4);
-      const dirs = [[0,mag],[0,-mag],[mag,0],[-mag,0]];
-      const [dox, doy] = dirs[Math.floor(Math.random() * 4)];
-      
+      let dox = 0, doy = 0;
+      const randDir = Math.random();
+      if (randDir < 0.25) dox = mag;
+      else if (randDir < 0.5) dox = -mag;
+      else if (randDir < 0.75) doy = mag;
+      else doy = -mag;
+
       const nox = Math.max(1, Math.min(cols - c.w - 1, c.ox + dox));
       const noy = Math.max(1, Math.min(rows - c.h - 1, c.oy + doy));
+
       moveComp(c, nox, noy);
-      
-      if (anyOverlap(c, components)) { 
+
+      let overlap = anyOverlap(c, components);
+      if (overlap) {
         // Revert 
-        c.w = oldW; c.h = oldH;
+        if (rotated) unrotateCompInPlace(c);
         moveComp(c, oldOx, oldOy);
-        c.pins.forEach((p, i) => Object.assign(p, oldPins[i]));
-        continue; 
+        continue;
       }
-      
+
       const ns = hpwl(components); // Fast HPWL evaluation
       const dE = ns - cur;
-      
-      if (dE < 0 || Math.random() < Math.exp(-dE / T)) { 
-        cur = ns; 
-      } else { 
+
+      if (dE < 0 || Math.random() < Math.exp(-dE / T)) {
+        cur = ns;
+      } else {
         // Revert
-        c.w = oldW; c.h = oldH;
+        if (rotated) unrotateCompInPlace(c);
         moveComp(c, oldOx, oldOy);
-        c.pins.forEach((p, i) => Object.assign(p, oldPins[i]));
       }
     }
     T *= alpha; step++;
