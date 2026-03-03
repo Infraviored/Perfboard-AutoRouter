@@ -645,6 +645,62 @@ let isSpaceDown = false;
 let lastRenderedW = 0;
 let lastRenderedH = 0;
 
+function updateIncrementalWires(movedComp) {
+  // 1. Identify nets connected to the pins of the moving component
+  const affectedNets = new Set(movedComp.pins.map(p => p.net).filter(Boolean));
+
+  // 2. Filter existing wires: 
+  // - Drop wires of affected nets
+  // - Drop wires that collide with the new component body (unless routeUnder)
+  wires = wires.filter(w => {
+    if (affectedNets.has(w.net)) return false;
+    if (w.failed) return true;
+    if (!movedComp.routeUnder) {
+      return !w.path.some(pt =>
+        pt.col >= movedComp.ox && pt.col < movedComp.ox + movedComp.w &&
+        pt.row >= movedComp.oy && pt.row < movedComp.oy + movedComp.h
+      );
+    }
+    return true;
+  });
+
+  // 3. Attempt live re-route for affected nets
+  // We use a simplified synchronous routing loop for immediate feedback
+  const allNets = getAllNets(components);
+  const toRoute = allNets.filter(n => affectedNets.has(n.net));
+
+  const grid = new Grid(COLS, ROWS);
+  components.forEach(c => grid.registerComp(c));
+  // Mark surviving wires in the grid so the new routes avoid them
+  wires.forEach(w => { if (!w.failed) grid.markWire(w.path); });
+
+  for (const net of toRoute) {
+    const pins = [...net.pins];
+    if (pins.length < 2) continue;
+
+    const routedIndices = new Set();
+    const first = pins.shift();
+    routedIndices.add(grid.idx(first.col, first.row));
+
+    while (pins.length > 0) {
+      const targetIndices = pins.map(p => grid.idx(p.col, p.row));
+      const result = grid.astarMultiTarget(routedIndices, targetIndices);
+
+      if (result && result.path) {
+        wires.push({ net: net.net, path: result.path, failed: false });
+        grid.markWire(result.path);
+        result.path.forEach(pt => routedIndices.add(grid.idx(pt.col, pt.row)));
+        const hitIdx = pins.findIndex(p => grid.idx(p.col, p.row) === result.hitTargetIdx);
+        if (hitIdx !== -1) pins.splice(hitIdx, 1);
+      } else {
+        // Simple fallback for live routing: just show a straight red line
+        const failPin = pins.shift();
+        wires.push({ net: net.net, path: [{ col: first.col, row: first.row }, { col: failPin.col, row: failPin.row }], failed: true });
+      }
+    }
+  }
+}
+
 
 // Prevent context menu on right-click so we can use it to pan/rotate
 ca.addEventListener('contextmenu', e => e.preventDefault());
@@ -656,7 +712,7 @@ function handleRightClickRotation(e) {
     rotateComp90InPlace(dragging);
     // Update dragOff based on current mouse position and fixed origin to avoid jumps
     dragOff = { dc: gc - dragging.ox, dr: gr - dragging.oy };
-    wires = [];
+    updateIncrementalWires(dragging);
     queueRender();
     return true;
   }
@@ -664,7 +720,7 @@ function handleRightClickRotation(e) {
   const hit = hitComp(gc, gr);
   if (hit && hit === selComp) {
     rotateComp90InPlace(hit);
-    wires = [];
+    updateIncrementalWires(hit);
     queueRender();
     return true;
   }
@@ -778,7 +834,7 @@ ca.addEventListener('pointermove', e => {
 
     if (nox !== dragging.ox || noy !== dragging.oy) {
       moveComp(dragging, nox, noy);
-      wires = [];
+      updateIncrementalWires(dragging);
       queueRender();
     }
   }
