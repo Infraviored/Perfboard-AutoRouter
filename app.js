@@ -2031,10 +2031,7 @@ async function explorePlateauStates(bestScore, cols, rows) {
           if (area2 > baseArea) continue;
           if (area2 === baseArea && per2 > basePerim) continue;
 
-          const testWires = await route(components, cols, rows, () => { }, false, () => cancelRequested);
-          const testScore = scoreState(testWires);
-
-          if (testScore.comp < bestScore.comp) continue;
+          const testScore = { comp: bestScore.comp, area: area2, perim: per2, wl: bestScore.wl, width: w2, height: h2, bounds: b2 };
 
           if (isScoreBetter(testScore, bestLocalScore) || (
             testScore.comp === bestLocalScore.comp &&
@@ -2042,9 +2039,21 @@ async function explorePlateauStates(bestScore, cols, rows) {
             testScore.perim === bestLocalScore.perim &&
             testScore.wl < bestLocalScore.wl
           )) {
-            bestLocalScore = testScore;
-            bestLocalComps = saveComps();
-            bestLocalWires = testWires;
+            // Need actual routing if we pretend we improved
+            const testWires = await route(components, cols, rows, () => { }, false, () => cancelRequested);
+            const realScore = scoreState(testWires);
+            if (realScore.comp < bestScore.comp) continue;
+
+            if (isScoreBetter(realScore, bestLocalScore) || (
+              realScore.comp === bestLocalScore.comp &&
+              realScore.area === bestLocalScore.area &&
+              realScore.perim === bestLocalScore.perim &&
+              realScore.wl < bestLocalScore.wl
+            )) {
+              bestLocalScore = realScore;
+              bestLocalComps = saveComps();
+              bestLocalWires = testWires;
+            }
           }
         }
       }
