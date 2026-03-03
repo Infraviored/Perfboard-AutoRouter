@@ -1780,18 +1780,18 @@ async function enumeratePlateauNeighbors(baseBox, baseScore, cols, rows, maxPerC
         if (onProgress) onProgress(totalEvals, maxTotalEvals, `${cId} rot${rot}`);
         if (totalEvals > maxTotalEvals || cancelRequested) break;
 
-        const testWires = await route(components, cols, rows, () => { }, false, () => cancelRequested);
-        const testScore = scoreState(testWires);
-        if (testScore.comp < baseScore.comp) continue;
+        // IMPORTANT FIX: DO NOT run a full `await route` A* for every single candidate. 
+        // We defer full routing to `doPlateauExplore`.
+        // Measure changes primarily via area bounds for now to quickly filter candidates.
+        const cBounds = footprintBoxMetrics(wires);
 
-        if (testScore.area > baseBox.area) continue;
-        if (testScore.area === baseBox.area && testScore.perim > baseBox.perim) continue;
+        if (cBounds.area > baseBox.area) continue;
+        if (cBounds.area === baseBox.area && cBounds.perim > baseBox.perim) continue;
 
         out.push({
           key: preKey,
           comps: saveComps(),
-          wires: testWires,
-          score: testScore,
+          score: { comp: baseScore.comp, area: cBounds.area, perim: cBounds.perim, wl: baseScore.wl }, // placeholder, full routing evaluated by caller
           compId: cId,
           desc: `${cId}@(${ox},${oy}) rot${rot}`
         });
@@ -1857,10 +1857,17 @@ async function postOptimizePlateauTree(startBestScore, cols, rows) {
     const neighbors = await enumeratePlateauNeighbors(cur.box, cur.score, cols, rows);
     for (const n of neighbors) {
       if (visited.has(n.key)) continue;
+
+      // Compute actual routing metrics before adopting
+      restoreComps(n.comps);
+      const testWires = await route(components, cols, rows, () => { }, false, () => cancelRequested);
+      n.wires = testWires;
+      n.score = scoreState(testWires);
+
       visited.add(n.key);
       const msg = `NEW plateau ${cur.depth + 1}: ${n.desc} | ${formatScore(n.score)}`;
       console.log(msg);
-      q.push({ comps: n.comps, wires: n.wires, score: n.score, box: cur.box, depth: cur.depth + 1, tag: n.desc });
+      q.push({ comps: n.comps, wires: n.wires, score: n.score, box: footprintBoxMetrics(n.wires), depth: cur.depth + 1, tag: n.desc });
       if (q.length + nodes >= MAX_NODES) break;
     }
   }
@@ -2604,6 +2611,13 @@ async function doPlateauExplore() {
     const neighbors = neighborsAll.filter(n => !visited.has(n.key));
     let pick = null;
     for (const n of neighbors) {
+      if (cancelRequested) break;
+
+      restoreComps(n.comps);
+      const testWires = await route(components, COLS, ROWS, () => { }, false, () => cancelRequested);
+      n.wires = testWires;
+      n.score = scoreState(testWires);
+
       if (n.score.comp < bestScore.comp) continue;
       if (n.score.area > baseBox.area) continue;
       if (n.score.area === baseBox.area && n.score.perim > baseBox.perim) continue;
