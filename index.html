@@ -144,10 +144,6 @@ text { user-select: none; }
     <input type="checkbox" id="autoOptimize" checked style="margin:0">
     Auto-optimize
   </label>
-  <label style="display:flex;align-items:center;gap:4px;color:var(--txt0);font-size:.8em" title="Allow routing traces under component bodies">
-    <input type="checkbox" id="routeUnder" style="margin:0">
-    Route Under Comps
-  </label>
   <button class="tbtn" onclick="app.doRouteOnly()">〰 Route Only <kbd>Shift+R</kbd></button>
   <button class="tbtn" onclick="app.clearWires()">⊘ Clear Wires</button>
   <div class="sep"></div>
@@ -274,6 +270,11 @@ text { user-select: none; }
             <input type="number" id="editCompHeight" min="1" max="10" style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--txt0);padding:5px;border-radius:4px">
           </div>
         </div>
+
+        <label style="display:flex;align-items:center;gap:8px;color:var(--txt1);font-size:.8em;margin-bottom:15px" title="Allow routing traces under this component's body (pins still block)">
+          <input type="checkbox" id="editCompRouteUnder" style="margin:0">
+          Route under component body
+        </label>
         
         <div style="margin-bottom:15px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">

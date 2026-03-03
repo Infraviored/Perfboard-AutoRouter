@@ -153,6 +153,7 @@ function loadComponents() {
     return {
       id: cd.id || ('C'+(idx+1)), name: cd.name||'?', value: cd.value||'',
       color: cd.color||'#222a22',
+      routeUnder: !!cd.routeUnder,
       offsets: normalizedOffsets,
       pinNets: cd.pins.map(p => p.net || null),
       pinLbls: cd.pins.map(p => p.label || p.lbl || String(idx+1)),
@@ -185,6 +186,7 @@ function placeInitial() {
 function makeComp(cd, ox, oy) {
   return {
     id: cd.id, name: cd.name, value: cd.value, color: cd.color,
+    routeUnder: !!cd.routeUnder,
     w: cd.w, h: cd.h, ox, oy,
     pins: cd.offsets.map((off, i) => ({
       col: ox + off[0], row: oy + off[1],
@@ -238,7 +240,11 @@ function saveState() {
   const state = {
     boardSize: { cols: COLS, rows: ROWS },
     components: components.map(c => ({
-      id: c.id, ox: c.ox, oy: c.oy, w: c.w, h: c.h,
+      id: c.id,
+      name: c.name,
+      value: c.value,
+      color: c.color,
+      ox: c.ox, oy: c.oy, w: c.w, h: c.h, routeUnder: !!c.routeUnder,
       pins: c.pins.map(p => ({
         dCol: p.dCol, dRow: p.dRow, col: p.col, row: p.row, net: p.net, lbl: p.lbl
       }))
@@ -270,16 +276,25 @@ function restoreState(state) {
   document.getElementById('bCols').value = COLS;
   document.getElementById('bRows').value = ROWS;
   
-  components = state.components.map(c => ({
-    ...c,
-    pins: c.pins.map(p => {
-      const pp = { ...p };
-      if (pp.lbl === undefined) pp.lbl = pp.label;
-      if (pp.lbl === undefined) pp.lbl = '';
-      if (pp.net === undefined) pp.net = null;
-      return pp;
-    })
-  }));
+  const defsById = new Map((state.compDefs || compDefs || []).map(cd => [cd.id, cd]));
+  components = state.components.map(c => {
+    const def = defsById.get(c.id);
+    const out = {
+      ...c,
+      name: c.name ?? def?.name ?? '?',
+      value: c.value ?? def?.value ?? '',
+      color: c.color ?? def?.color ?? '#222a22',
+      routeUnder: !!(c.routeUnder ?? def?.routeUnder),
+      pins: (c.pins || []).map(p => {
+        const pp = { ...p };
+        if (pp.lbl === undefined) pp.lbl = pp.label;
+        if (pp.lbl === undefined) pp.lbl = '';
+        if (pp.net === undefined) pp.net = null;
+        return pp;
+      })
+    };
+    return out;
+  });
   
   wires = state.wires.map(w => ({
     ...w, path: w.path || []
@@ -316,7 +331,11 @@ function exportCompleteState() {
   const state = {
     boardSize: { cols: COLS, rows: ROWS },
     components: components.map(c => ({
-      id: c.id, ox: c.ox, oy: c.oy, w: c.w, h: c.h,
+      id: c.id,
+      name: c.name,
+      value: c.value,
+      color: c.color,
+      ox: c.ox, oy: c.oy, w: c.w, h: c.h, routeUnder: !!c.routeUnder,
       pins: c.pins.map(p => ({
         dCol: p.dCol, dRow: p.dRow, col: p.col, row: p.row, net: p.net, lbl: p.lbl
       }))
@@ -423,7 +442,7 @@ async function doPlaceAndRoute() {
     const candidateWires = await route(
       components, COLS, ROWS,
       (p, s) => { setProg(p * 100, `[${attempt}/${maxAttempts}] Route — ${s}`); render(); },
-      getRouteUnder() // <--- ADDED
+      false
     );
 
     const c = completion(candidateWires);
@@ -464,7 +483,7 @@ async function doPlaceAndRoute() {
 async function doRouteOnly() {
   if (!components.length) { toast('No components loaded', 'warn'); return; }
   showOverlay(true); ostep(2); setProg(0, 'Routing…');
-  wires = await route(components, COLS, ROWS, (p, s) => { setProg(p * 100, s); render(); }, getRouteUnder()); // <--- ADDED
+  wires = await route(components, COLS, ROWS, (p, s) => { setProg(p * 100, s); render(); }, false);
   showOverlay(false);
   render(); updateStats(); renderNetPanel();
   finishMsg();
@@ -703,6 +722,7 @@ function addFromLibrary(dbIndex) {
     name: tpl.name,
     value: tpl.value,
     color: tpl.color || '#333333',
+    routeUnder: false,
     offsets: newPins.map(p => p.offset),
     pinNets: newPins.map(p => p.net),
     pinLbls: newPins.map(p => p.label),
@@ -926,11 +946,6 @@ function fitView() {
   applyT(); render();
 }
 
-function getRouteUnder() {
-  const el = document.getElementById('routeUnder');
-  return el ? el.checked : false;
-}
-
 // ── HELPERS ──
 function gridPos(e) {
   const r = ca.getBoundingClientRect();
@@ -1029,7 +1044,7 @@ document.addEventListener('keydown', e => {
 // Debug function to print board congestion heatmap
 function debugBoard() {
   console.log("=== DEBUG BOARD CONGESTION ===");
-  const grid = new Grid(COLS, ROWS, getRouteUnder()); // <--- ADDED
+  const grid = new Grid(COLS, ROWS);
   components.forEach(c => grid.registerComp(c));
   wires.forEach(w => {
     if (!w.failed && w.path) {
@@ -1114,14 +1129,17 @@ Now, please generate JSON for the following circuit description:
 // ── INIT ──
 applyBoard();
 
-fetch('./default.json')
-  .then(r => { if (!r.ok) throw new Error('no default.json'); return r.json(); })
-  .then(data => {
-    document.getElementById('jsonInput').value = JSON.stringify(data, null, 2);
-    loadComponents();
-    toast('Loaded default.json', 'inf');
-  })
-  .catch(() => { /* no default.json, silent */ });
+// Only auto-load default.json when there is no saved app state.
+if (!localStorage.getItem('autorouterState')) {
+  fetch('./default.json')
+    .then(r => { if (!r.ok) throw new Error('no default.json'); return r.json(); })
+    .then(data => {
+      document.getElementById('jsonInput').value = JSON.stringify(data, null, 2);
+      loadComponents();
+      toast('Loaded default.json', 'inf');
+    })
+    .catch(() => { /* no default.json, silent */ });
+}
 
 // ── COMPONENT EDITOR ──
 function openCompEditor(compId) {
@@ -1138,6 +1156,8 @@ function openCompEditor(compId) {
   document.getElementById('editCompColor').value = editingComp.color;
   document.getElementById('editCompWidth').value = editingComp.w;
   document.getElementById('editCompHeight').value = editingComp.h;
+  const ru = document.getElementById('editCompRouteUnder');
+  if (ru) ru.checked = !!editingComp.routeUnder;
   document.getElementById('compEditorTitle').textContent = `Edit Component: ${editingComp.id}`;
   
   const widthInput = document.getElementById('editCompWidth');
@@ -1159,7 +1179,7 @@ function closeCompEditor() {
 function addNewComponent() {
   editingComp = {
     id: 'NEW' + Date.now(), name: 'New Component', value: '', color: '#2a2808',
-    offsets: [[0, 0]], pinNets: ['NET1'], pinLbls: ['1'], w: 1, h: 1
+    offsets: [[0, 0]], pinNets: ['NET1'], pinLbls: ['1'], w: 1, h: 1, routeUnder: false
   };
   editingCompIndex = -1; isAddingNewComponent = true;
   
@@ -1169,6 +1189,8 @@ function addNewComponent() {
   document.getElementById('editCompColor').value = editingComp.color;
   document.getElementById('editCompWidth').value = editingComp.w;
   document.getElementById('editCompHeight').value = editingComp.h;
+  const ru = document.getElementById('editCompRouteUnder');
+  if (ru) ru.checked = !!editingComp.routeUnder;
   document.getElementById('compEditorTitle').textContent = 'Create New Component';
   
   const widthInput = document.getElementById('editCompWidth');
@@ -1390,6 +1412,8 @@ function saveComponentEdit() {
   editingComp.color = document.getElementById('editCompColor').value;
   editingComp.w = parseInt(document.getElementById('editCompWidth').value);
   editingComp.h = parseInt(document.getElementById('editCompHeight').value);
+  const ru = document.getElementById('editCompRouteUnder');
+  editingComp.routeUnder = ru ? !!ru.checked : false;
   
   if (!editingComp.id.trim()) { toast('Component ID cannot be empty', 'warn'); return; }
   
@@ -1420,7 +1444,8 @@ function updateJSONFromComponents() {
       pins: cd.offsets.map((off, i) => ({
         offset: [off[0] + (cd.boardOffset ? cd.boardOffset[0] : 0), off[1] + (cd.boardOffset ? cd.boardOffset[1] : 0)],
         net: cd.pinNets[i], label: cd.pinLbls[i]
-      }))
+      })),
+      routeUnder: !!cd.routeUnder
     }))
   };
   document.getElementById('jsonInput').value = JSON.stringify(data, null, 2);
@@ -1523,7 +1548,7 @@ async function tryRotateOptimize() {
 
       if (anyOverlap(c, components)) continue;
 
-      const testWires = await route(components, COLS, ROWS, () => {}, getRouteUnder());
+      const testWires = await route(components, COLS, ROWS, () => {}, false);
       const testScore = scoreState(testWires);
 
       if (isScoreBetter(testScore, bestScore)) {
@@ -1627,7 +1652,7 @@ async function doRecursivePushPacking() {
     }
 
     if (moveOccurred) {
-      const testWires = await route(components, COLS, ROWS, () => {}, getRouteUnder());
+      const testWires = await route(components, COLS, ROWS, () => {}, false);
       const testScore = scoreState(testWires);
 
       if (isScoreBetter(testScore, bestScore) || (
@@ -1671,7 +1696,7 @@ async function tryGlobalNudge(bestScore, cols, rows) {
     // Apply the translation atomically.
     for (const c of components) moveComp(c, c.ox + d.dx, c.oy + d.dy);
 
-    const testWires = await route(components, cols, rows, () => {}, getRouteUnder());
+    const testWires = await route(components, cols, rows, () => {}, false);
     const testScore = scoreState(testWires);
     if (isScoreBetter(testScore, bestScore)) {
       wires = testWires;
@@ -1693,9 +1718,12 @@ async function doOptimizeFootprint() {
 
   // Keep optimization transactional: if nothing improves, restore exactly.
   const startSnapshot = snapshotBoardState();
-  const startWires = await route(components, COLS, ROWS, () => {}, getRouteUnder());
+  const startWires = await route(components, COLS, ROWS, () => {}, false);
   const startScore = scoreState(startWires);
   wires = startWires;
+
+  // Keep showing pre-opt PCB until we actually beat startScore.
+  const startPreviewSnapshot = snapshotBoardState();
 
   const uiCols = COLS;
   const uiRows = ROWS;
@@ -1714,7 +1742,7 @@ async function doOptimizeFootprint() {
 
   setProg(0, `Preparing virtual workspace...`);
   // Route only for internal initialization; evaluation later is done on the original board.
-  wires = await route(components, vCols, vRows, () => {}, getRouteUnder());
+  wires = await route(components, vCols, vRows, () => {}, false);
   
   // Track Absolute Best
   let globalBestScore = scoreState(wires);
@@ -1728,7 +1756,7 @@ async function doOptimizeFootprint() {
   let stagnation = 0;
   let macroCount = 0;
 
-  render();
+  // IMPORTANT: do not render here; keep showing the pre-opt PCB until we have an actual improvement.
 
   const translateToFitUI = () => {
     const b = calculateComponentBounds();
@@ -1823,7 +1851,7 @@ async function doOptimizeFootprint() {
       continue;
     }
 
-    const testWires = await route(components, uiCols, uiRows, () => {}, getRouteUnder());
+    const testWires = await route(components, uiCols, uiRows, () => {}, false);
     const testScore = scoreState(testWires);
 
     // 1. Is it a new GLOBAL Best?
@@ -1846,11 +1874,15 @@ async function doOptimizeFootprint() {
       stagnation = 0;
       console.log(`[Iter ${iter}] NEW GLOBAL BEST! Comp ${Math.round(testScore.comp*100)}%, Box ${testScore.area}/${testScore.perim}, WL ${testScore.wl}`);
 
-      // UPDATE UI: Show the new global best immediately!
-      wires = globalBestWires;
-      render();
-      updateStats();
-      await new Promise(r => setTimeout(r, 0)); // Let browser paint
+      // UPDATE UI: Only preview if we actually improved over the original pre-opt.
+      if (isScoreBetter(testScore, startScore)) {
+        wires = globalBestWires;
+        render();
+        updateStats();
+        await new Promise(r => setTimeout(r, 0)); // Let browser paint
+      } else {
+        restoreBoardState(startPreviewSnapshot);
+      }
     } 
     else if (isLocalBest) {
       // Made progress, but didn't beat the absolute high score

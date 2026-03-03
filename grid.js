@@ -47,11 +47,10 @@ class MinHeap {
 }
 
 export class Grid {
-  constructor(cols, rows, allowRouteUnder = false) {
+  constructor(cols, rows) {
     this.cols = cols;
     this.rows = rows;
     this.cells = new Uint8Array(cols * rows);
-    this.allowRouteUnder = allowRouteUnder;
   }
 
   idx(c, r) { return r * this.cols + c; }
@@ -61,26 +60,23 @@ export class Grid {
   has(c, r, flag)   { return this.inBounds(c,r) && (this.cells[this.idx(c,r)] & flag) !== 0; }
   isFree(c, r) { 
     if (!this.inBounds(c,r)) return false; 
-    const v = this.cells[this.idx(c,r)];
-    if (this.allowRouteUnder) {
-      // Ignore BLOCKED_COMP body, but strictly block Pins and other Wires
-      return (v & (BLOCKED_PIN | BLOCKED_WIRE)) === 0;
-    }
-    return v === 0; 
+    return this.cells[this.idx(c,r)] === 0;
   }
 
   canTerminate(c, r) {
     if (!this.inBounds(c,r)) return false;
     const v = this.cells[this.idx(c,r)];
     if (v & BLOCKED_WIRE) return false;
-    if (this.allowRouteUnder) return true; // Target is known to be a pin, so we can land on it
+    // We can terminate on pins, but not on plain component body.
     return !((v & BLOCKED_COMP) && !(v & BLOCKED_PIN));
   }
 
   registerComp(comp) {
-    for (let dc = 0; dc < comp.w; dc++) {
-      for (let dr = 0; dr < comp.h; dr++) {
-        this.set(comp.ox + dc, comp.oy + dr, BLOCKED_COMP);
+    if (!comp.routeUnder) {
+      for (let dc = 0; dc < comp.w; dc++) {
+        for (let dr = 0; dr < comp.h; dr++) {
+          this.set(comp.ox + dc, comp.oy + dr, BLOCKED_COMP);
+        }
       }
     }
     comp.pins.forEach(p => this.set(p.col, p.row, BLOCKED_PIN));
