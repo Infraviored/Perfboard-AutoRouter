@@ -240,13 +240,13 @@ function saveState() {
     components: components.map(c => ({
       id: c.id, ox: c.ox, oy: c.oy, w: c.w, h: c.h,
       pins: c.pins.map(p => ({
-        dCol: p.dCol, dRow: p.dRow, col: p.col, row: p.row, net: p.net, label: p.label
+        dCol: p.dCol, dRow: p.dRow, col: p.col, row: p.row, net: p.net, lbl: p.lbl
       }))
     })),
     wires: wires.map(w => ({
       net: w.net, failed: w.failed, path: w.path || []
     })),
-    compDefs: compDefs,
+    compDefs: JSON.parse(JSON.stringify(compDefs)),
     timestamp: Date.now()
   };
   
@@ -272,16 +272,26 @@ function restoreState(state) {
   
   components = state.components.map(c => ({
     ...c,
-    pins: c.pins.map(p => ({ ...p }))
+    pins: c.pins.map(p => {
+      const pp = { ...p };
+      if (pp.lbl === undefined) pp.lbl = pp.label;
+      if (pp.lbl === undefined) pp.lbl = '';
+      if (pp.net === undefined) pp.net = null;
+      return pp;
+    })
   }));
   
   wires = state.wires.map(w => ({
     ...w, path: w.path || []
   }));
   
-  compDefs = state.compDefs || [];
+  compDefs = state.compDefs ? JSON.parse(JSON.stringify(state.compDefs)) : [];
   
   applyBoard(); // CHANGED: Must call this so SVG actually resizes!
+  render();
+  updateStats();
+  renderNetPanel();
+  renderCompList();
 }
 
 function goBackState() {
@@ -308,11 +318,11 @@ function exportCompleteState() {
     components: components.map(c => ({
       id: c.id, ox: c.ox, oy: c.oy, w: c.w, h: c.h,
       pins: c.pins.map(p => ({
-        dCol: p.dCol, dRow: p.dRow, col: p.col, row: p.row, net: p.net, label: p.label
+        dCol: p.dCol, dRow: p.dRow, col: p.col, row: p.row, net: p.net, lbl: p.lbl
       }))
     })),
     wires: wires.map(w => ({ net: w.net, failed: w.failed, path: w.path || [] })),
-    compDefs: compDefs,
+    compDefs: JSON.parse(JSON.stringify(compDefs)),
     timestamp: Date.now(),
     version: '1.0'
   };
@@ -349,6 +359,30 @@ function restoreComps(saved) {
       });
     }
   });
+}
+
+function snapshotBoardState() {
+  return {
+    boardSize: { cols: COLS, rows: ROWS },
+    components: JSON.parse(JSON.stringify(components)),
+    wires: JSON.parse(JSON.stringify(wires)),
+    compDefs: JSON.parse(JSON.stringify(compDefs))
+  };
+}
+
+function restoreBoardState(s) {
+  COLS = s.boardSize.cols;
+  ROWS = s.boardSize.rows;
+  document.getElementById('bCols').value = COLS;
+  document.getElementById('bRows').value = ROWS;
+  components = JSON.parse(JSON.stringify(s.components));
+  wires = JSON.parse(JSON.stringify(s.wires));
+  compDefs = JSON.parse(JSON.stringify(s.compDefs));
+  applyBoard();
+  render();
+  updateStats();
+  renderNetPanel();
+  renderCompList();
 }
 
 function completion(wires) {
@@ -1421,13 +1455,52 @@ function calculateFootprintArea() {
   return { area, bounds: { minCol, maxCol, minRow, maxRow } };
 }
 
+function calculateComponentBounds() {
+  if (components.length === 0) return { minCol: 0, maxCol: 0, minRow: 0, maxRow: 0 };
+  let minCol = Infinity, maxCol = -Infinity;
+  let minRow = Infinity, maxRow = -Infinity;
+  components.forEach(c => {
+    minCol = Math.min(minCol, c.ox);
+    maxCol = Math.max(maxCol, c.ox + c.w - 1);
+    minRow = Math.min(minRow, c.oy);
+    maxRow = Math.max(maxRow, c.oy + c.h - 1);
+  });
+  return { minCol, maxCol, minRow, maxRow };
+}
+
+function componentBoxMetrics() {
+  const b = calculateComponentBounds();
+  const w = (b.maxCol - b.minCol + 1);
+  const h = (b.maxRow - b.minRow + 1);
+  const area = w * h;
+  const perim = (w + h) * 2;
+  return { area, perim, bounds: b };
+}
+
+function wireLengthMetric(ws) {
+  return (ws || []).reduce((s, w) => s + (w.failed ? 0 : Math.max(0, (w.path?.length || 0) - 1)), 0);
+}
+
+function scoreState(ws) {
+  const comp = completion(ws || []);
+  const { area, perim } = componentBoxMetrics();
+  const wl = wireLengthMetric(ws || []);
+  return { comp, area, perim, wl };
+}
+
+function isScoreBetter(a, b) {
+  if (a.comp !== b.comp) return a.comp > b.comp;
+  if (a.area !== b.area) return a.area < b.area;
+  if (a.perim !== b.perim) return a.perim < b.perim;
+  if (a.wl !== b.wl) return a.wl < b.wl;
+  return false;
+}
+
 // --- OPTIMIZATION ALGORITHMS ---
 // --- OPTIMIZATION ALGORITHMS ---
 
 async function tryRotateOptimize() {
-  let bestComp = completion(wires);
-  let bestWL = wires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
-  let bestArea = calculateFootprintArea().area;
+  let bestScore = scoreState(wires);
   let improved = false;
 
   for (let c of components) {
@@ -1451,19 +1524,11 @@ async function tryRotateOptimize() {
       if (anyOverlap(c, components)) continue;
 
       const testWires = await route(components, COLS, ROWS, () => {}, getRouteUnder());
-      const newArea = calculateFootprintArea().area;
-      const newWL = testWires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
-      const testComp = completion(testWires);
+      const testScore = scoreState(testWires);
 
-      let isBetter = false;
-      if (testComp > bestComp) isBetter = true;
-      else if (testComp === bestComp) {
-        if (newArea < bestArea) isBetter = true;
-        else if (newArea === bestArea && newWL < bestWL) isBetter = true;
-      }
-
-      if (isBetter) {
-        bestArea = newArea; bestWL = newWL; bestComp = testComp; wires = testWires;
+      if (isScoreBetter(testScore, bestScore)) {
+        bestScore = testScore;
+        wires = testWires;
         improved = true; cImproved = true; break; 
       }
     }
@@ -1485,8 +1550,7 @@ async function tryRotateOptimize() {
 async function doRecursivePushPacking() {
   let changed = true;
   let loops = 0;
-  let bestComp = completion(wires);
-  let bestArea = calculateFootprintArea().area;
+  let bestScore = scoreState(wires);
 
   while (changed && loops < 25) {
     changed = false;
@@ -1564,25 +1628,60 @@ async function doRecursivePushPacking() {
 
     if (moveOccurred) {
       const testWires = await route(components, COLS, ROWS, () => {}, getRouteUnder());
-      const newArea = calculateFootprintArea().area;
-      const testComp = completion(testWires);
+      const testScore = scoreState(testWires);
 
-      let isBetter = false;
-      if (testComp > bestComp) isBetter = true;
-      else if (testComp === bestComp && newArea < bestArea) isBetter = true;
-      else if (testComp === bestComp && newArea === bestArea) isBetter = true; // Allow sliding into better positions
-
-      if (isBetter) {
-        if (newArea < bestArea || testComp > bestComp) {
-          bestArea = newArea; bestComp = testComp;
-        }
+      if (isScoreBetter(testScore, bestScore) || (
+        testScore.comp === bestScore.comp && testScore.area === bestScore.area && testScore.perim === bestScore.perim
+      )) {
+        if (isScoreBetter(testScore, bestScore)) bestScore = testScore;
         wires = testWires;
-        changed = true; 
+        changed = true;
       } else {
         restoreComps(oldStates); // Revert if topological move broke a wire
       }
     }
   }
+}
+
+async function tryGlobalNudge(bestScore, cols, rows) {
+  const dirs = [
+    { dx: -1, dy: 0 },
+    { dx: 1, dy: 0 },
+    { dx: 0, dy: -1 },
+    { dx: 0, dy: 1 }
+  ];
+
+  const original = saveComps();
+  const originalWires = wires;
+
+  for (const d of dirs) {
+    restoreComps(original);
+
+    // Validate bounds for the entire translation first.
+    // (Checking overlaps while moving one-by-one can falsely fail because other comps
+    // haven't moved yet; a pure translation preserves relative spacing.)
+    let inBounds = true;
+    for (const c of components) {
+      const nx = c.ox + d.dx;
+      const ny = c.oy + d.dy;
+      if (nx < 0 || ny < 0 || nx + c.w > cols || ny + c.h > rows) { inBounds = false; break; }
+    }
+    if (!inBounds) continue;
+
+    // Apply the translation atomically.
+    for (const c of components) moveComp(c, c.ox + d.dx, c.oy + d.dy);
+
+    const testWires = await route(components, cols, rows, () => {}, getRouteUnder());
+    const testScore = scoreState(testWires);
+    if (isScoreBetter(testScore, bestScore)) {
+      wires = testWires;
+      return { improved: true, score: testScore };
+    }
+  }
+
+  restoreComps(original);
+  wires = originalWires;
+  return { improved: false, score: bestScore };
 }
 
 async function doOptimizeFootprint() {
@@ -1592,35 +1691,38 @@ async function doOptimizeFootprint() {
   showOverlay(true);
   ostep(1);
 
+  // Keep optimization transactional: if nothing improves, restore exactly.
+  const startSnapshot = snapshotBoardState();
+  const startWires = await route(components, COLS, ROWS, () => {}, getRouteUnder());
+  const startScore = scoreState(startWires);
+  wires = startWires;
+
+  const uiCols = COLS;
+  const uiRows = ROWS;
+  document.getElementById('ot').textContent = `Optimize 0 / ${MAX_ITERS}`;
+
   // --- 1. EXPAND VIRTUAL BOARD ---
   const { bounds } = calculateFootprintArea();
   // Pad by 20 units so the Simulated Annealer has room to breathe
-  const vCols = Math.max(COLS, (bounds.maxCol - bounds.minCol) + 20);
-  const vRows = Math.max(ROWS, (bounds.maxRow - bounds.minRow) + 20);
-  
-  COLS = vCols; ROWS = vRows;
-  document.getElementById('bCols').value = COLS;
-  document.getElementById('bRows').value = ROWS;
+  const vCols = Math.max(uiCols, (bounds.maxCol - bounds.minCol) + 20);
+  const vRows = Math.max(uiRows, (bounds.maxRow - bounds.minRow) + 20);
 
   // Center everything initially
-  const offsetX = Math.floor(COLS / 2 - (bounds.minCol + (bounds.maxCol - bounds.minCol) / 2));
-  const offsetY = Math.floor(ROWS / 2 - (bounds.minRow + (bounds.maxRow - bounds.minRow) / 2));
+  const offsetX = Math.floor(vCols / 2 - (bounds.minCol + (bounds.maxCol - bounds.minCol) / 2));
+  const offsetY = Math.floor(vRows / 2 - (bounds.minRow + (bounds.maxRow - bounds.minRow) / 2));
   components.forEach(c => moveComp(c, c.ox + offsetX, c.oy + offsetY));
 
   setProg(0, `Preparing virtual workspace...`);
-  wires = await route(components, COLS, ROWS, () => {}, getRouteUnder());
+  // Route only for internal initialization; evaluation later is done on the original board.
+  wires = await route(components, vCols, vRows, () => {}, getRouteUnder());
   
   // Track Absolute Best
-  let globalBestComp = completion(wires);
-  let globalBestArea = calculateFootprintArea().area;
-  let globalBestWL = wires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
+  let globalBestScore = scoreState(wires);
   let globalBestComps = saveComps();
   let globalBestWires = [...wires];
 
   // Track Progress of Current Search Branch
-  let localBestComp = globalBestComp;
-  let localBestArea = globalBestArea;
-  let localBestWL = globalBestWL;
+  let localBestScore = globalBestScore;
   let localBestComps = saveComps();
 
   let stagnation = 0;
@@ -1628,8 +1730,20 @@ async function doOptimizeFootprint() {
 
   render();
 
+  const translateToFitUI = () => {
+    const b = calculateComponentBounds();
+    const w = (b.maxCol - b.minCol + 1);
+    const h = (b.maxRow - b.minRow + 1);
+    if (w > uiCols || h > uiRows) return false;
+    const dx = -b.minCol;
+    const dy = -b.minRow;
+    for (const c of components) moveComp(c, c.ox + dx, c.oy + dy);
+    return true;
+  };
+
   // --- 2. SEARCH LOOP ---
   for (let iter = 1; iter <= MAX_ITERS; iter++) {
+    document.getElementById('ot').textContent = `Optimize ${iter} / ${MAX_ITERS}`;
     
     // We trigger a Macro Mutation (Simulated Annealing) every 10 iterations, 
     // or if the micro-mutations get stuck for 5 rounds.
@@ -1641,7 +1755,7 @@ async function doOptimizeFootprint() {
       // We don't restore comps here! We want SA to start from wherever it is 
       // and do a massive global topology search based on Wirelength.
       
-      await anneal(components, COLS, ROWS, (p, s) => {
+      await anneal(components, vCols, vRows, (p, s) => {
         setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: SA Routing ${macroCount} — ${Math.round(p*100)}%`);
         // We skip rendering during SA to keep it lightning fast
       });
@@ -1676,8 +1790,8 @@ async function doOptimizeFootprint() {
         let dx = (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 2) + 1);
         let dy = (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 2) + 1);
 
-        const nx = Math.max(0, Math.min(COLS - c.w, c.ox + dx));
-        const ny = Math.max(0, Math.min(ROWS - c.h, c.oy + dy));
+        const nx = Math.max(0, Math.min(vCols - c.w, c.ox + dx));
+        const ny = Math.max(0, Math.min(vRows - c.h, c.oy + dy));
         
         moveComp(c, nx, ny);
         if (anyOverlap(c, components)) {
@@ -1693,39 +1807,44 @@ async function doOptimizeFootprint() {
     await tryRotateOptimize();
     await doRecursivePushPacking();
 
+    const nudgeRes = await tryGlobalNudge(localBestScore, vCols, vRows);
+    if (nudgeRes.improved) {
+      localBestScore = nudgeRes.score;
+    }
+
     // --- EVALUATE METRICS ---
-    const testWires = await route(components, COLS, ROWS, () => {}, getRouteUnder());
-    const testArea = calculateFootprintArea().area;
-    const testWL = testWires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
-    const testComp = completion(testWires);
+    // Translate the current virtual placement into the UI board window for evaluation.
+    const preEval = saveComps();
+    const preEvalWires = wires;
+    if (!translateToFitUI()) {
+      restoreComps(preEval);
+      stagnation++;
+      await new Promise(r => setTimeout(r, 0));
+      continue;
+    }
+
+    const testWires = await route(components, uiCols, uiRows, () => {}, getRouteUnder());
+    const testScore = scoreState(testWires);
 
     // 1. Is it a new GLOBAL Best?
     let isGlobalBest = false;
-    if (testComp > globalBestComp) isGlobalBest = true;
-    else if (testComp === globalBestComp) {
-      if (testArea < globalBestArea) isGlobalBest = true;
-      else if (testArea === globalBestArea && testWL < globalBestWL) isGlobalBest = true;
-    }
+    if (isScoreBetter(testScore, globalBestScore)) isGlobalBest = true;
 
     // 2. Is it a new LOCAL Best?
     let isLocalBest = false;
-    if (testComp > localBestComp) isLocalBest = true;
-    else if (testComp === localBestComp) {
-      if (testArea < localBestArea) isLocalBest = true;
-      else if (testArea === localBestArea && testWL < localBestWL) isLocalBest = true;
-    }
+    if (isScoreBetter(testScore, localBestScore)) isLocalBest = true;
 
     if (isGlobalBest) {
       // Save global records
-      globalBestComp = testComp; globalBestArea = testArea; globalBestWL = testWL;
+      globalBestScore = testScore;
       globalBestComps = saveComps(); globalBestWires = [...testWires];
       
       // Sync local records to the new global high score
-      localBestComp = testComp; localBestArea = testArea; localBestWL = testWL;
+      localBestScore = testScore;
       localBestComps = saveComps();
 
       stagnation = 0;
-      console.log(`[Iter ${iter}] NEW GLOBAL BEST! Comp ${Math.round(testComp*100)}%, Area ${testArea}, WL ${testWL}`);
+      console.log(`[Iter ${iter}] NEW GLOBAL BEST! Comp ${Math.round(testScore.comp*100)}%, Box ${testScore.area}/${testScore.perim}, WL ${testScore.wl}`);
 
       // UPDATE UI: Show the new global best immediately!
       wires = globalBestWires;
@@ -1735,10 +1854,10 @@ async function doOptimizeFootprint() {
     } 
     else if (isLocalBest) {
       // Made progress, but didn't beat the absolute high score
-      localBestComp = testComp; localBestArea = testArea; localBestWL = testWL;
+      localBestScore = testScore;
       localBestComps = saveComps();
       stagnation = 0;
-      console.log(`[Iter ${iter}] Local improvement. Area: ${testArea}`);
+      console.log(`[Iter ${iter}] Local improvement. Box: ${testScore.area}/${testScore.perim}, WL: ${testScore.wl}`);
     } 
     else {
       // Dead end. Increase frustration.
@@ -1747,15 +1866,32 @@ async function doOptimizeFootprint() {
     
     // Always yield event loop to keep the browser responsive
     await new Promise(r => setTimeout(r, 0)); 
+
+    // Restore the virtual search state after UI-space evaluation/preview.
+    restoreComps(preEval);
+    wires = preEvalWires;
   }
 
   // --- 3. CLEANUP & RESTORE ---
   restoreComps(globalBestComps);
   wires = globalBestWires;
-  
-  // Snip the virtual padding off to leave the final masterpiece
-  cutToBoundingBox(); 
-  
+
+  // Always end in UI board dimensions.
+  COLS = uiCols;
+  ROWS = uiRows;
+  document.getElementById('bCols').value = COLS;
+  document.getElementById('bRows').value = ROWS;
+  applyBoard();
+
+  // Commit only if strictly improved vs start.
+  const finalScore = scoreState(wires);
+  if (!isScoreBetter(finalScore, startScore)) {
+    restoreBoardState(startSnapshot);
+    showOverlay(false);
+    toast('Optimization found no improvement', 'inf');
+    return;
+  }
+
   showOverlay(false);
   render(); updateStats(); saveState();
   toast(`Optimization complete!`, "ok");
