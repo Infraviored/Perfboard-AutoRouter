@@ -1421,6 +1421,7 @@ function calculateFootprintArea() {
 }
 
 // --- OPTIMIZATION ALGORITHMS ---
+// --- OPTIMIZATION ALGORITHMS ---
 
 async function tryRotateOptimize() {
   let bestComp = completion(wires);
@@ -1442,7 +1443,6 @@ async function tryRotateOptimize() {
         const oldRow = p.dRow;
         p.dRow = p.dCol;
         p.dCol = c.w - 1 - oldRow;
-        
         p.col = c.ox + p.dCol;
         p.row = c.oy + p.dRow;
       });
@@ -1454,7 +1454,6 @@ async function tryRotateOptimize() {
       const newWL = testWires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
       const testComp = completion(testWires);
 
-      // Evaluate Fitness: 1. Completion, 2. Area, 3. Wire Length
       let isBetter = false;
       if (testComp > bestComp) isBetter = true;
       else if (testComp === bestComp) {
@@ -1469,7 +1468,6 @@ async function tryRotateOptimize() {
     }
 
     if (!cImproved) {
-      // Revert if rotation didn't help
       c.w = originalW; c.h = originalH;
       c.pins.forEach((p, idx) => {
         p.dCol = originalPins[idx].dCol;
@@ -1482,7 +1480,7 @@ async function tryRotateOptimize() {
   return improved;
 }
 
-// Gravity Packer: Pulls all components toward the center of mass
+// Gravity Packer: Pulls components tightly toward the center of mass
 async function doRecursivePushPacking() {
   let changed = true;
   let loops = 0;
@@ -1520,13 +1518,12 @@ async function doRecursivePushPacking() {
          if (mx === 0 && my === 0) return false;
          moveComp(c, c.ox + mx, c.oy + my);
          if (anyOverlap(c, components)) {
-            moveComp(c, c.ox - mx, c.oy - my); // Revert
+            moveComp(c, c.ox - mx, c.oy - my); // Revert overlap
             return false;
          }
          return true;
        };
 
-       // Try diagonal, then horizontal, then vertical
        if (tryMove(dx, dy) || tryMove(dx, 0) || tryMove(0, dy)) {
          moveOccurred = true;
        }
@@ -1540,7 +1537,7 @@ async function doRecursivePushPacking() {
       let isBetter = false;
       if (testComp > bestComp) isBetter = true;
       else if (testComp === bestComp && newArea < bestArea) isBetter = true;
-      else if (testComp === bestComp && newArea === bestArea) isBetter = true; // Allow sliding
+      else if (testComp === bestComp && newArea === bestArea) isBetter = true; // Allow sideways sliding
 
       if (isBetter) {
         if (newArea < bestArea || testComp > bestComp) {
@@ -1552,25 +1549,22 @@ async function doRecursivePushPacking() {
         restoreComps(oldStates); 
       }
     }
-    
-    if (loops % 5 === 0) { render(); await new Promise(r => setTimeout(r, 0)); }
   }
 }
 
+// Iterated Local Search with Simulated Annealing Restarts
 async function doOptimizeFootprint() {
   if (!components.length) { toast('No components to optimize', 'warn'); return; }
 
-  const MAX_CONFIGS = 100; 
+  const MAX_ITERS = 100; 
   showOverlay(true);
   ostep(1);
 
   // --- 1. EXPAND VIRTUAL BOARD ---
   const { bounds } = calculateFootprintArea();
-  
-  // Pad the board by 24 units (12 holes per side). 
-  // We need this wide berth so the Macro Mutations have room to spawn random seeds.
-  const vCols = Math.max(COLS, (bounds.maxCol - bounds.minCol) + 24);
-  const vRows = Math.max(ROWS, (bounds.maxRow - bounds.minRow) + 24);
+  // Pad by 20 units so the Simulated Annealer has room to breathe
+  const vCols = Math.max(COLS, (bounds.maxCol - bounds.minCol) + 20);
+  const vRows = Math.max(ROWS, (bounds.maxRow - bounds.minRow) + 20);
   
   COLS = vCols; ROWS = vRows;
   document.getElementById('bCols').value = COLS;
@@ -1584,88 +1578,62 @@ async function doOptimizeFootprint() {
   setProg(0, `Preparing virtual workspace...`);
   wires = await route(components, COLS, ROWS, () => {}, getRouteUnder());
   
-  let globalBestCompletion = completion(wires);
+  // Track Absolute Best
+  let globalBestComp = completion(wires);
   let globalBestArea = calculateFootprintArea().area;
   let globalBestWL = wires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
   let globalBestComps = saveComps();
   let globalBestWires = [...wires];
 
-  let frustration = 0;
+  // Track Progress of Current Search Branch
+  let localBestComp = globalBestComp;
+  let localBestArea = globalBestArea;
+  let localBestWL = globalBestWL;
+  let localBestComps = saveComps();
 
-  // --- 2. HYBRID MUTATION LOOP ---
-  for (let config = 1; config <= MAX_CONFIGS; config++) {
+  let stagnation = 0;
+  let macroCount = 0;
+
+  render();
+
+  // --- 2. SEARCH LOOP ---
+  for (let iter = 1; iter <= MAX_ITERS; iter++) {
     
-    restoreComps(globalBestComps); 
-    
-    // DECISION: Big Bang (Macro) OR Jitter (Micro)?
-    // We trigger a Big Bang every 15 iterations, OR if we've been stuck in a local minimum for 8 rounds.
-    const isMacroMutation = (config % 15 === 0) || (frustration > 8);
-
-    if (isMacroMutation) {
+    // We trigger a Macro Mutation (Simulated Annealing) every 10 iterations, 
+    // or if the micro-mutations get stuck for 5 rounds.
+    if (iter % 10 === 0 || stagnation >= 5) {
       // ==========================================
-      // MACRO MUTATION: The "Big Bang" Seed Reset
+      // MACRO MUTATION (Simulated Annealing)
       // ==========================================
-      setProg((config / MAX_CONFIGS) * 100, `Config ${config}/${MAX_CONFIGS}: Big Bang (Macro Mutation)...`);
+      macroCount++;
+      // We don't restore comps here! We want SA to start from wherever it is 
+      // and do a massive global topology search based on Wirelength.
       
-      // Pick 50% to 80% of components to completely randomize
-      const numToScramble = Math.floor(components.length * (0.5 + Math.random() * 0.3));
-      let compsToMutate = [...components].sort(() => 0.5 - Math.random()).slice(0, numToScramble);
-
-      for (let c of compsToMutate) {
-        const oldW = c.w, oldH = c.h, oldOx = c.ox, oldOy = c.oy;
-        const oldPins = c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow }));
-
-        // 50% chance to rotate
-        if (Math.random() > 0.5) {
-          c.w = oldH; c.h = oldW;
-          c.pins.forEach(p => {
-            const r = p.dRow; p.dRow = p.dCol; p.dCol = c.w - 1 - r;
-            p.col = c.ox + p.dCol; p.row = c.oy + p.dRow;
-          });
-        }
-
-        // Try up to 10 times to find a completely random, non-overlapping spot on the padded board
-        let placed = false;
-        for (let attempt = 0; attempt < 10; attempt++) {
-          const nx = Math.floor(Math.random() * (COLS - c.w - 4)) + 2; // Keep slightly off extreme edge
-          const ny = Math.floor(Math.random() * (ROWS - c.h - 4)) + 2;
-          
-          moveComp(c, nx, ny);
-          if (!anyOverlap(c, components)) {
-            placed = true;
-            break;
-          }
-        }
-
-        // If we couldn't find a random spot, revert this specific component
-        if (!placed) {
-          c.w = oldW; c.h = oldH;
-          moveComp(c, oldOx, oldOy);
-          c.pins.forEach((p, idx) => {
-            p.dCol = oldPins[idx].dCol;
-            p.dRow = oldPins[idx].dRow;
-            p.col = c.ox + p.dCol; p.row = c.oy + p.dRow;
-          });
-        }
-      }
+      await anneal(components, COLS, ROWS, (p, s) => {
+        setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: SA Routing ${macroCount} — ${Math.round(p*100)}%`);
+        // We skip rendering during SA to keep it lightning fast
+      });
       
-      // Reset frustration so we spend the next several loops micro-tuning this new random seed
-      if (frustration > 8) frustration = 0; 
-
+      stagnation = 0; // Reset frustration
+      
     } else {
       // ==========================================
-      // MICRO MUTATION: The "Jitter"
+      // MICRO MUTATION (Jitter)
       // ==========================================
-      const numMutations = Math.max(1, Math.min(3, Math.floor(components.length * 0.2)));
-      setProg((config / MAX_CONFIGS) * 100, `Config ${config}/${MAX_CONFIGS}: Jittering ${numMutations} comps...`);
+      setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: Micro Search (Stagnation: ${stagnation}/5)...`);
+      
+      // Branch off the current local working set
+      restoreComps(localBestComps); 
 
+      // Tweak 1 or 2 components slightly
+      const numMutations = Math.max(1, Math.floor(components.length * 0.15));
       let compsToMutate = [...components].sort(() => 0.5 - Math.random()).slice(0, numMutations);
 
       for (let c of compsToMutate) {
         const oldW = c.w, oldH = c.h, oldOx = c.ox, oldOy = c.oy;
         const oldPins = c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow }));
 
-        if (Math.random() < 0.3) {
+        if (Math.random() < 0.2) {
           c.w = oldH; c.h = oldW;
           c.pins.forEach(p => {
             const r = p.dRow; p.dRow = p.dCol; p.dCol = c.w - 1 - r;
@@ -1673,66 +1641,80 @@ async function doOptimizeFootprint() {
           });
         }
 
-        // Jitter 1 or 2 spaces
         let dx = (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 2) + 1);
         let dy = (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 2) + 1);
 
         const nx = Math.max(0, Math.min(COLS - c.w, c.ox + dx));
         const ny = Math.max(0, Math.min(ROWS - c.h, c.oy + dy));
-
+        
         moveComp(c, nx, ny);
         if (anyOverlap(c, components)) {
           c.w = oldW; c.h = oldH;
           moveComp(c, oldOx, oldOy);
-          c.pins.forEach((p, idx) => {
-            p.dCol = oldPins[idx].dCol;
-            p.dRow = oldPins[idx].dRow;
-            p.col = c.ox + p.dCol; p.row = c.oy + p.dRow;
-          });
+          c.pins.forEach((p, idx) => Object.assign(p, oldPins[idx]));
         }
       }
     }
 
-    // --- APPLY PACKING TO THE CURRENT TOPOLOGY ---
-    setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Gravity Pack...`);
+    // --- APPLY PACKING (The Squeeze) ---
     await doRecursivePushPacking();
-
-    setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Rotating...`);
     await tryRotateOptimize();
-
-    setProg((config / MAX_CONFIGS) * 100, `Config ${config}: Final Squeeze...`);
     await doRecursivePushPacking();
 
-    // --- EVALUATE ---
+    // --- EVALUATE METRICS ---
     const testWires = await route(components, COLS, ROWS, () => {}, getRouteUnder());
-    const currentCompArea = calculateFootprintArea().area;
-    const currentCompWL = testWires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
-    const currentCompRate = completion(testWires);
+    const testArea = calculateFootprintArea().area;
+    const testWL = testWires.reduce((s, w) => s + (w.failed ? 0 : w.path.length), 0);
+    const testComp = completion(testWires);
 
-    let isBetter = false;
-    if (currentCompRate > globalBestCompletion) {
-      isBetter = true;
+    // 1. Is it a new GLOBAL Best?
+    let isGlobalBest = false;
+    if (testComp > globalBestComp) isGlobalBest = true;
+    else if (testComp === globalBestComp) {
+      if (testArea < globalBestArea) isGlobalBest = true;
+      else if (testArea === globalBestArea && testWL < globalBestWL) isGlobalBest = true;
+    }
+
+    // 2. Is it a new LOCAL Best?
+    let isLocalBest = false;
+    if (testComp > localBestComp) isLocalBest = true;
+    else if (testComp === localBestComp) {
+      if (testArea < localBestArea) isLocalBest = true;
+      else if (testArea === localBestArea && testWL < localBestWL) isLocalBest = true;
+    }
+
+    if (isGlobalBest) {
+      // Save global records
+      globalBestComp = testComp; globalBestArea = testArea; globalBestWL = testWL;
+      globalBestComps = saveComps(); globalBestWires = [...testWires];
+      
+      // Sync local records to the new global high score
+      localBestComp = testComp; localBestArea = testArea; localBestWL = testWL;
+      localBestComps = saveComps();
+
+      stagnation = 0;
+      console.log(`[Iter ${iter}] NEW GLOBAL BEST! Comp ${Math.round(testComp*100)}%, Area ${testArea}, WL ${testWL}`);
+
+      // UPDATE UI: Show the new global best immediately!
+      wires = globalBestWires;
+      render();
+      updateStats();
+      await new Promise(r => setTimeout(r, 0)); // Let browser paint
     } 
-    else if (currentCompRate === globalBestCompletion) {
-      if (currentCompArea < globalBestArea) {
-        isBetter = true;
-      } 
-      else if (currentCompArea === globalBestArea && currentCompWL < globalBestWL) {
-        isBetter = true;
-      }
+    else if (isLocalBest) {
+      // Made progress, but didn't beat the absolute high score
+      localBestComp = testComp; localBestArea = testArea; localBestWL = testWL;
+      localBestComps = saveComps();
+      stagnation = 0;
+      console.log(`[Iter ${iter}] Local improvement. Area: ${testArea}`);
+    } 
+    else {
+      // Dead end. Increase frustration.
+      stagnation++; 
     }
-
-    if (isBetter) {
-      globalBestCompletion = currentCompRate;
-      globalBestArea = currentCompArea;
-      globalBestWL = currentCompWL;
-      globalBestComps = saveComps();
-      globalBestWires = [...testWires];
-      frustration = 0; 
-      console.log(`[Optimizer ${config}] New Leader! Comp ${Math.round(currentCompRate*100)}%, Area ${currentCompArea}, WL ${currentCompWL}`);
-    } else {
-      frustration++; 
-    }
+    
+    // Always yield event loop to keep the browser responsive
+    await new Promise(r => setTimeout(r, 0)); 
   }
 
   // --- 3. CLEANUP & RESTORE ---
