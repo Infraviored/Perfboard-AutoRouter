@@ -2330,40 +2330,41 @@ async function doOptimizeFootprint() {
     if (cancelRequested) break;
     document.getElementById('ot').textContent = `Optimize ${iter} / ${MAX_ITERS}`;
 
-    if (iter % 10 === 0 || stagnation >= 5) {
-      // ==========================================
-      // MACRO MUTATION (Simulated Annealing)
-      // ==========================================
-      macroCount++;
-      // We don't restore comps here! We want SA to start from wherever it is 
-      // and do a massive global topology search based on Wirelength.
-
-      if (stagnation >= 12) {
-        const b = calculateComponentBounds();
-        const spanX = Math.max(1, (b.maxCol - b.minCol + 1));
-        const spanY = Math.max(1, (b.maxRow - b.minRow + 1));
-        const cx = Math.floor(vCols / 2 - spanX / 2);
-        const cy = Math.floor(vRows / 2 - spanY / 2);
-        for (const c of components) {
-          const nx = Math.max(0, Math.min(vCols - c.w, cx + Math.floor(Math.random() * 7) - 3));
-          const ny = Math.max(0, Math.min(vRows - c.h, cy + Math.floor(Math.random() * 7) - 3));
-          moveComp(c, nx, ny);
+    if (iter % 10 === 0 || stagnation >= 8) {
+      if (stagnation >= 5 && stagnation < 8) {
+        // Skip SA, let stagnation hit 8 to trigger plateau explore
+      } else {
+        // ==========================================
+        // MACRO MUTATION (Simulated Annealing)
+        // ==========================================
+        macroCount++;
+        if (stagnation >= 12) {
+          const b = calculateComponentBounds();
+          const spanX = Math.max(1, (b.maxCol - b.minCol + 1));
+          const spanY = Math.max(1, (b.maxRow - b.minRow + 1));
+          const cx = Math.floor(vCols / 2 - spanX / 2);
+          const cy = Math.floor(vRows / 2 - spanY / 2);
+          for (const c of components) {
+            const nx = Math.max(0, Math.min(vCols - c.w, cx + Math.floor(Math.random() * 7) - 3));
+            const ny = Math.max(0, Math.min(vRows - c.h, cy + Math.floor(Math.random() * 7) - 3));
+            moveComp(c, nx, ny);
+          }
+          stagnation = 6;
         }
-        stagnation = 6;
+
+        await anneal(components, vCols, vRows, (p, s) => {
+          setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: SA Routing ${macroCount} — ${Math.round(p * 100)}%`);
+        }, () => cancelRequested);
+
+        if (stagnation >= 12) stagnation = 0; // Reset deep frustration, but let edge stay near plateau
       }
+    }
 
-      await anneal(components, vCols, vRows, (p, s) => {
-        setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: SA Routing ${macroCount} — ${Math.round(p * 100)}%`);
-        // We skip rendering during SA to keep it lightning fast
-      }, () => cancelRequested);
-
-      stagnation = 0; // Reset frustration
-
-    } else {
+    if (iter % 10 !== 0 && stagnation < 8) {
       // ==========================================
       // MICRO MUTATION (Jitter)
       // ==========================================
-      setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: Micro Search (Stagnation: ${stagnation}/5)...`);
+      setProg((iter / MAX_ITERS) * 100, `Iter ${iter}: Micro Search (Stagnation: ${stagnation}/8)...`);
 
       // Branch off the current local working set
       restoreComps(localBestComps);

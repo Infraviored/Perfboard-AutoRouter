@@ -148,11 +148,13 @@ export async function anneal(components, cols, rows, onProgress, shouldCancel) {
       const oldOx = c.ox, oldOy = c.oy;
       const oldW = c.w, oldH = c.h;
 
-      // Try rotation in-place
-      let rotated = false;
-      if (Math.random() < 0.3) {
-        rotateCompInPlace(c);
-        rotated = true;
+      // Try rotation in-place (1 to 3 times for 90, 180, 270 deg)
+      let rotationSteps = 0;
+      if (Math.random() < 0.4) {
+        rotationSteps = Math.floor(Math.random() * 3) + 1;
+        for (let r = 0; r < rotationSteps; r++) {
+          rotateCompInPlace(c);
+        }
       }
 
       const mag = Math.ceil(Math.random() * 4);
@@ -171,7 +173,7 @@ export async function anneal(components, cols, rows, onProgress, shouldCancel) {
       let overlap = anyOverlap(c, components);
       if (overlap) {
         // Revert 
-        if (rotated) unrotateCompInPlace(c);
+        for (let r = 0; r < rotationSteps; r++) unrotateCompInPlace(c);
         moveComp(c, oldOx, oldOy);
         continue;
       }
@@ -183,7 +185,7 @@ export async function anneal(components, cols, rows, onProgress, shouldCancel) {
         cur = ns;
       } else {
         // Revert
-        if (rotated) unrotateCompInPlace(c);
+        for (let r = 0; r < rotationSteps; r++) unrotateCompInPlace(c);
         moveComp(c, oldOx, oldOy);
       }
     }

@@ -1,0 +1,964 @@
+{
+  "boardSize": {
+    "cols": 30,
+    "rows": 30
+  },
+  "components": [
+    {
+      "id": "U1",
+      "name": "ESP32-C3",
+      "value": "SuperMini",
+      "color": "#1a3320",
+      "ox": 0,
+      "oy": 1,
+      "w": 8,
+      "h": 7,
+      "routeUnder": false,
+      "pins": [
+        {
+          "dCol": 7,
+          "dRow": 0,
+          "col": 7,
+          "row": 1,
+          "net": null,
+          "lbl": "5V"
+        },
+        {
+          "dCol": 6,
+          "dRow": 0,
+          "col": 6,
+          "row": 1,
+          "net": "GND",
+          "lbl": "GND"
+        },
+        {
+          "dCol": 5,
+          "dRow": 0,
+          "col": 5,
+          "row": 1,
+          "net": "3V3",
+          "lbl": "3V3"
+        },
+        {
+          "dCol": 4,
+          "dRow": 0,
+          "col": 4,
+          "row": 1,
+          "net": null,
+          "lbl": "IO10"
+        },
+        {
+          "dCol": 3,
+          "dRow": 0,
+          "col": 3,
+          "row": 1,
+          "net": null,
+          "lbl": "IO9"
+        },
+        {
+          "dCol": 2,
+          "dRow": 0,
+          "col": 2,
+          "row": 1,
+          "net": null,
+          "lbl": "IO8"
+        },
+        {
+          "dCol": 1,
+          "dRow": 0,
+          "col": 1,
+          "row": 1,
+          "net": null,
+          "lbl": "RX"
+        },
+        {
+          "dCol": 0,
+          "dRow": 0,
+          "col": 0,
+          "row": 1,
+          "net": null,
+          "lbl": "TX"
+        },
+        {
+          "dCol": 7,
+          "dRow": 6,
+          "col": 7,
+          "row": 7,
+          "net": null,
+          "lbl": "IO0"
+        },
+        {
+          "dCol": 6,
+          "dRow": 6,
+          "col": 6,
+          "row": 7,
+          "net": null,
+          "lbl": "IO1"
+        },
+        {
+          "dCol": 5,
+          "dRow": 6,
+          "col": 5,
+          "row": 7,
+          "net": null,
+          "lbl": "IO2"
+        },
+        {
+          "dCol": 4,
+          "dRow": 6,
+          "col": 4,
+          "row": 7,
+          "net": null,
+          "lbl": "IO3"
+        },
+        {
+          "dCol": 3,
+          "dRow": 6,
+          "col": 3,
+          "row": 7,
+          "net": null,
+          "lbl": "IO4"
+        },
+        {
+          "dCol": 2,
+          "dRow": 6,
+          "col": 2,
+          "row": 7,
+          "net": "IO5",
+          "lbl": "IO5"
+        },
+        {
+          "dCol": 1,
+          "dRow": 6,
+          "col": 1,
+          "row": 7,
+          "net": null,
+          "lbl": "IO6"
+        },
+        {
+          "dCol": 0,
+          "dRow": 6,
+          "col": 0,
+          "row": 7,
+          "net": null,
+          "lbl": "IO7"
+        }
+      ]
+    },
+    {
+      "id": "J_12V",
+      "name": "Power Connector",
+      "value": "12V Input",
+      "color": "#8b0000",
+      "ox": 8,
+      "oy": 1,
+      "w": 1,
+      "h": 1,
+      "routeUnder": false,
+      "pins": [
+        {
+          "dCol": 0,
+          "dRow": 0,
+          "col": 8,
+          "row": 1,
+          "net": "+12V",
+          "lbl": "+12V_IN"
+        }
+      ]
+    },
+    {
+      "id": "J_3V3",
+      "name": "Power Connector",
+      "value": "3.3V Input",
+      "color": "#b8860b",
+      "ox": 4,
+      "oy": 0,
+      "w": 1,
+      "h": 1,
+      "routeUnder": false,
+      "pins": [
+        {
+          "dCol": 0,
+          "dRow": 0,
+          "col": 4,
+          "row": 0,
+          "net": "3V3",
+          "lbl": "3V3_IN"
+        }
+      ]
+    },
+    {
+      "id": "J_GND",
+      "name": "Power Connector",
+      "value": "Ground",
+      "color": "#000000",
+      "ox": 7,
+      "oy": 0,
+      "w": 1,
+      "h": 1,
+      "routeUnder": false,
+      "pins": [
+        {
+          "dCol": 0,
+          "dRow": 0,
+          "col": 7,
+          "row": 0,
+          "net": "GND",
+          "lbl": "GND_IN"
+        }
+      ]
+    },
+    {
+      "id": "Rg",
+      "name": "Gate Resistor",
+      "value": "220Ω",
+      "color": "#2e1a08",
+      "ox": 5,
+      "oy": 8,
+      "w": 2,
+      "h": 1,
+      "routeUnder": false,
+      "pins": [
+        {
+          "dCol": 0,
+          "dRow": 0,
+          "col": 5,
+          "row": 8,
+          "net": "IO5",
+          "lbl": "A"
+        },
+        {
+          "dCol": 1,
+          "dRow": 0,
+          "col": 6,
+          "row": 8,
+          "net": "GATE",
+          "lbl": "B"
+        }
+      ]
+    },
+    {
+      "id": "Rpd",
+      "name": "Pull-down",
+      "value": "47kΩ",
+      "color": "#2e1a08",
+      "ox": 7,
+      "oy": 8,
+      "w": 1,
+      "h": 2,
+      "routeUnder": false,
+      "pins": [
+        {
+          "dCol": 0,
+          "dRow": 0,
+          "col": 7,
+          "row": 8,
+          "net": "GATE",
+          "lbl": "A"
+        },
+        {
+          "dCol": 0,
+          "dRow": 1,
+          "col": 7,
+          "row": 9,
+          "net": "GND",
+          "lbl": "B"
+        }
+      ]
+    },
+    {
+      "id": "Q1",
+      "name": "MOSFET",
+      "value": "IRLB8721",
+      "color": "#1a3320",
+      "ox": 8,
+      "oy": 4,
+      "w": 3,
+      "h": 1,
+      "routeUnder": false,
+      "pins": [
+        {
+          "dCol": 0,
+          "dRow": 0,
+          "col": 8,
+          "row": 4,
+          "net": "GATE",
+          "lbl": "G"
+        },
+        {
+          "dCol": 1,
+          "dRow": 0,
+          "col": 9,
+          "row": 4,
+          "net": "DRAIN",
+          "lbl": "D"
+        },
+        {
+          "dCol": 2,
+          "dRow": 0,
+          "col": 10,
+          "row": 4,
+          "net": "GND",
+          "lbl": "S"
+        }
+      ]
+    },
+    {
+      "id": "L1",
+      "name": "Door Strike",
+      "value": "12V Coil",
+      "color": "#1a1a2e",
+      "ox": 8,
+      "oy": 2,
+      "w": 1,
+      "h": 2,
+      "routeUnder": false,
+      "pins": [
+        {
+          "dCol": 0,
+          "dRow": 0,
+          "col": 8,
+          "row": 2,
+          "net": "+12V",
+          "lbl": "+"
+        },
+        {
+          "dCol": 0,
+          "dRow": 1,
+          "col": 8,
+          "row": 3,
+          "net": "DRAIN",
+          "lbl": "-"
+        }
+      ]
+    },
+    {
+      "id": "D1",
+      "name": "Flyback Diode",
+      "value": "SS54",
+      "color": "#2a0a18",
+      "ox": 9,
+      "oy": 2,
+      "w": 1,
+      "h": 2,
+      "routeUnder": false,
+      "pins": [
+        {
+          "dCol": 0,
+          "dRow": 0,
+          "col": 9,
+          "row": 2,
+          "net": "+12V",
+          "lbl": "K"
+        },
+        {
+          "dCol": 0,
+          "dRow": 1,
+          "col": 9,
+          "row": 3,
+          "net": "DRAIN",
+          "lbl": "A"
+        }
+      ]
+    }
+  ],
+  "wires": [
+    {
+      "net": "3V3",
+      "failed": false,
+      "path": [
+        {
+          "col": 5,
+          "row": 1
+        },
+        {
+          "col": 5,
+          "row": 0
+        },
+        {
+          "col": 4,
+          "row": 0
+        }
+      ]
+    },
+    {
+      "net": "+12V",
+      "failed": false,
+      "path": [
+        {
+          "col": 8,
+          "row": 1
+        },
+        {
+          "col": 8,
+          "row": 2
+        }
+      ]
+    },
+    {
+      "net": "+12V",
+      "failed": false,
+      "path": [
+        {
+          "col": 8,
+          "row": 2
+        },
+        {
+          "col": 9,
+          "row": 2
+        }
+      ]
+    },
+    {
+      "net": "DRAIN",
+      "failed": false,
+      "path": [
+        {
+          "col": 9,
+          "row": 4
+        },
+        {
+          "col": 9,
+          "row": 3
+        }
+      ]
+    },
+    {
+      "net": "DRAIN",
+      "failed": false,
+      "path": [
+        {
+          "col": 9,
+          "row": 3
+        },
+        {
+          "col": 8,
+          "row": 3
+        }
+      ]
+    },
+    {
+      "net": "IO5",
+      "failed": false,
+      "path": [
+        {
+          "col": 2,
+          "row": 7
+        },
+        {
+          "col": 2,
+          "row": 8
+        },
+        {
+          "col": 3,
+          "row": 8
+        },
+        {
+          "col": 4,
+          "row": 8
+        },
+        {
+          "col": 5,
+          "row": 8
+        }
+      ]
+    },
+    {
+      "net": "GATE",
+      "failed": false,
+      "path": [
+        {
+          "col": 6,
+          "row": 8
+        },
+        {
+          "col": 7,
+          "row": 8
+        }
+      ]
+    },
+    {
+      "net": "GATE",
+      "failed": false,
+      "path": [
+        {
+          "col": 7,
+          "row": 8
+        },
+        {
+          "col": 8,
+          "row": 8
+        },
+        {
+          "col": 8,
+          "row": 7
+        },
+        {
+          "col": 8,
+          "row": 6
+        },
+        {
+          "col": 8,
+          "row": 5
+        },
+        {
+          "col": 8,
+          "row": 4
+        }
+      ]
+    },
+    {
+      "net": "GND",
+      "failed": false,
+      "path": [
+        {
+          "col": 6,
+          "row": 1
+        },
+        {
+          "col": 6,
+          "row": 0
+        },
+        {
+          "col": 7,
+          "row": 0
+        }
+      ]
+    },
+    {
+      "net": "GND",
+      "failed": false,
+      "path": [
+        {
+          "col": 7,
+          "row": 0
+        },
+        {
+          "col": 8,
+          "row": 0
+        },
+        {
+          "col": 9,
+          "row": 0
+        },
+        {
+          "col": 10,
+          "row": 0
+        },
+        {
+          "col": 10,
+          "row": 1
+        },
+        {
+          "col": 10,
+          "row": 2
+        },
+        {
+          "col": 10,
+          "row": 3
+        },
+        {
+          "col": 10,
+          "row": 4
+        }
+      ]
+    },
+    {
+      "net": "GND",
+      "failed": false,
+      "path": [
+        {
+          "col": 10,
+          "row": 4
+        },
+        {
+          "col": 10,
+          "row": 5
+        },
+        {
+          "col": 10,
+          "row": 6
+        },
+        {
+          "col": 10,
+          "row": 7
+        },
+        {
+          "col": 10,
+          "row": 8
+        },
+        {
+          "col": 10,
+          "row": 9
+        },
+        {
+          "col": 9,
+          "row": 9
+        },
+        {
+          "col": 8,
+          "row": 9
+        },
+        {
+          "col": 7,
+          "row": 9
+        }
+      ]
+    }
+  ],
+  "compDefs": [
+    {
+      "id": "U1",
+      "name": "ESP32-C3",
+      "value": "SuperMini",
+      "color": "#1a3320",
+      "routeUnder": false,
+      "offsets": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          0,
+          6
+        ],
+        [
+          0,
+          7
+        ],
+        [
+          6,
+          0
+        ],
+        [
+          6,
+          1
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          6,
+          5
+        ],
+        [
+          6,
+          6
+        ],
+        [
+          6,
+          7
+        ]
+      ],
+      "pinNets": [
+        null,
+        "GND",
+        "3V3",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "IO5",
+        null,
+        null
+      ],
+      "pinLbls": [
+        "5V",
+        "GND",
+        "3V3",
+        "IO10",
+        "IO9",
+        "IO8",
+        "RX",
+        "TX",
+        "IO0",
+        "IO1",
+        "IO2",
+        "IO3",
+        "IO4",
+        "IO5",
+        "IO6",
+        "IO7"
+      ],
+      "w": 7,
+      "h": 8,
+      "boardOffset": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "J_12V",
+      "name": "Power Connector",
+      "value": "12V Input",
+      "color": "#8b0000",
+      "routeUnder": false,
+      "offsets": [
+        [
+          0,
+          0
+        ]
+      ],
+      "pinNets": [
+        "+12V"
+      ],
+      "pinLbls": [
+        "+12V_IN"
+      ],
+      "w": 1,
+      "h": 1,
+      "boardOffset": [
+        10,
+        0
+      ]
+    },
+    {
+      "id": "J_3V3",
+      "name": "Power Connector",
+      "value": "3.3V Input",
+      "color": "#b8860b",
+      "routeUnder": false,
+      "offsets": [
+        [
+          0,
+          0
+        ]
+      ],
+      "pinNets": [
+        "3V3"
+      ],
+      "pinLbls": [
+        "3V3_IN"
+      ],
+      "w": 1,
+      "h": 1,
+      "boardOffset": [
+        10,
+        2
+      ]
+    },
+    {
+      "id": "J_GND",
+      "name": "Power Connector",
+      "value": "Ground",
+      "color": "#000000",
+      "routeUnder": false,
+      "offsets": [
+        [
+          0,
+          0
+        ]
+      ],
+      "pinNets": [
+        "GND"
+      ],
+      "pinLbls": [
+        "GND_IN"
+      ],
+      "w": 1,
+      "h": 1,
+      "boardOffset": [
+        10,
+        4
+      ]
+    },
+    {
+      "id": "Rg",
+      "name": "Gate Resistor",
+      "value": "220Ω",
+      "color": "#2e1a08",
+      "routeUnder": false,
+      "offsets": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "pinNets": [
+        "IO5",
+        "GATE"
+      ],
+      "pinLbls": [
+        "A",
+        "B"
+      ],
+      "w": 2,
+      "h": 1,
+      "boardOffset": [
+        13,
+        5
+      ]
+    },
+    {
+      "id": "Rpd",
+      "name": "Pull-down",
+      "value": "47kΩ",
+      "color": "#2e1a08",
+      "routeUnder": false,
+      "offsets": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "pinNets": [
+        "GATE",
+        "GND"
+      ],
+      "pinLbls": [
+        "A",
+        "B"
+      ],
+      "w": 1,
+      "h": 2,
+      "boardOffset": [
+        15,
+        6
+      ]
+    },
+    {
+      "id": "Q1",
+      "name": "MOSFET",
+      "value": "IRLB8721",
+      "color": "#1a3320",
+      "routeUnder": false,
+      "offsets": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "pinNets": [
+        "GATE",
+        "DRAIN",
+        "GND"
+      ],
+      "pinLbls": [
+        "G",
+        "D",
+        "S"
+      ],
+      "w": 1,
+      "h": 3,
+      "boardOffset": [
+        17,
+        5
+      ]
+    },
+    {
+      "id": "L1",
+      "name": "Door Strike",
+      "value": "12V Coil",
+      "color": "#1a1a2e",
+      "routeUnder": false,
+      "offsets": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "pinNets": [
+        "+12V",
+        "DRAIN"
+      ],
+      "pinLbls": [
+        "+",
+        "-"
+      ],
+      "w": 1,
+      "h": 2,
+      "boardOffset": [
+        22,
+        0
+      ]
+    },
+    {
+      "id": "D1",
+      "name": "Flyback Diode",
+      "value": "SS54",
+      "color": "#2a0a18",
+      "routeUnder": false,
+      "offsets": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "pinNets": [
+        "+12V",
+        "DRAIN"
+      ],
+      "pinLbls": [
+        "K",
+        "A"
+      ],
+      "w": 1,
+      "h": 2,
+      "boardOffset": [
+        20,
+        0
+      ]
+    }
+  ],
+  "timestamp": 1772545635208,
+  "version": "1.0"
+}
