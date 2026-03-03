@@ -1655,7 +1655,7 @@ function stateKeyForPlateau() {
   })));
 }
 
-async function enumeratePlateauNeighbors(baseBox, baseScore, cols, rows, maxPerComp = 80) {
+async function enumeratePlateauNeighbors(baseBox, baseScore, cols, rows, maxPerComp = 80, startCompOffset = 0, visited = null, onProgress = null, maxTotalEvals = 80) {
   const out = [];
   const bounds = baseBox.bounds;
   const minX = bounds.minCol;
@@ -1663,8 +1663,20 @@ async function enumeratePlateauNeighbors(baseBox, baseScore, cols, rows, maxPerC
   const minY = bounds.minRow;
   const maxY = bounds.maxRow;
 
+  const makeKey = (ox, oy) => `${ox},${oy}`;
+  const shuffle = (arr) => {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  };
+
   const compsSorted = [...components].slice().sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  for (const c of compsSorted) {
+  const ncs = compsSorted.length;
+  let totalEvals = 0;
+  for (let ci = 0; ci < ncs; ci++) {
+    const c = compsSorted[(ci + (startCompOffset % Math.max(1, ncs))) % Math.max(1, ncs)];
     const cId = c.id;
     const orig = { ox: c.ox, oy: c.oy, w: c.w, h: c.h, pins: c.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow })) };
     let emitted = 0;
@@ -1677,41 +1689,86 @@ async function enumeratePlateauNeighbors(baseBox, baseScore, cols, rows, maxPerC
       const maxOy = maxY - c.h + 1;
       if (minX > maxOx || minY > maxOy) continue;
 
-      for (let ox = minX; ox <= maxOx; ox++) {
-        for (let oy = minY; oy <= maxOy; oy++) {
-          if (rot === 0 && ox === orig.ox && oy === orig.oy) continue;
-          moveComp(c, ox, oy);
-          if (anyOverlap(c, components)) continue;
+      // Instead of scanning all ox/oy (very slow), sample a small set of promising candidates.
+      const cand = [];
+      const candSeen = new Set();
+      const add = (ox, oy) => {
+        if (ox < minX || ox > maxOx || oy < minY || oy > maxOy) return;
+        const k = makeKey(ox, oy);
+        if (candSeen.has(k)) return;
+        candSeen.add(k);
+        cand.push({ ox, oy });
+      };
 
-          const b2 = calculateComponentBounds();
-          const w2 = (b2.maxCol - b2.minCol + 1);
-          const h2 = (b2.maxRow - b2.minRow + 1);
-          const area2 = w2 * h2;
-          const per2 = (w2 + h2) * 2;
-          if (area2 > baseBox.area) continue;
-          if (area2 === baseBox.area && per2 > baseBox.perim) continue;
+      // Boundary / shrink-friendly positions.
+      add(minX, orig.oy);
+      add(maxOx, orig.oy);
+      add(orig.ox, minY);
+      add(orig.ox, maxOy);
+      add(minX, minY);
+      add(minX, maxOy);
+      add(maxOx, minY);
+      add(maxOx, maxOy);
 
-          const testWires = await route(components, cols, rows, () => {}, false);
-          const testScore = scoreState(testWires);
-          if (testScore.comp < baseScore.comp) continue;
+      // One-step and two-step pulls toward wires.
+      const pull = moveVectorTowardWires(c);
+      if (pull.dx || pull.dy) {
+        add(orig.ox + pull.dx, orig.oy + pull.dy);
+        add(orig.ox + 2 * pull.dx, orig.oy + 2 * pull.dy);
+        add(orig.ox + 3 * pull.dx, orig.oy + 3 * pull.dy);
+      }
 
-          const key = stateKeyForPlateau();
-          out.push({
-            key,
-            comps: saveComps(),
-            wires: testWires,
-            score: testScore,
-            desc: `${cId}@(${ox},${oy}) rot${rot}`
-          });
-          emitted++;
-          if (emitted >= maxPerComp) break;
-        }
+      // Small local neighborhood (helps avoid missing near improvements).
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) add(orig.ox + dx, orig.oy + dy);
+
+      // A few random samples within the current bbox.
+      for (let i = 0; i < 10; i++) {
+        const ox = minX + Math.floor(Math.random() * (maxOx - minX + 1));
+        const oy = minY + Math.floor(Math.random() * (maxOy - minY + 1));
+        add(ox, oy);
+      }
+
+      shuffle(cand);
+
+      for (const pos of cand) {
+        const ox = pos.ox;
+        const oy = pos.oy;
+        if (rot === 0 && ox === orig.ox && oy === orig.oy) continue;
+        moveComp(c, ox, oy);
+        if (anyOverlap(c, components)) continue;
+
+        const preKey = stateKeyForPlateau();
+        if (visited && visited.has(preKey)) continue;
+
+        totalEvals++;
+        if (onProgress) onProgress(totalEvals, maxTotalEvals, `${cId} rot${rot}`);
+        if (totalEvals > maxTotalEvals) break;
+
+        const testWires = await route(components, cols, rows, () => {}, false);
+        const testScore = scoreState(testWires);
+        if (testScore.comp < baseScore.comp) continue;
+
+        if (testScore.area > baseBox.area) continue;
+        if (testScore.area === baseBox.area && testScore.perim > baseBox.perim) continue;
+
+        out.push({
+          key: preKey,
+          comps: saveComps(),
+          wires: testWires,
+          score: testScore,
+          compId: cId,
+          desc: `${cId}@(${ox},${oy}) rot${rot}`
+        });
+        emitted++;
         if (emitted >= maxPerComp) break;
       }
+
+      if (totalEvals > maxTotalEvals) break;
       if (emitted >= maxPerComp) break;
     }
     restoreCompRotation(c, orig);
     moveComp(c, orig.ox, orig.oy);
+    if (totalEvals > maxTotalEvals) break;
   }
   return out;
 }
@@ -2433,11 +2490,16 @@ async function doPlateauExplore() {
   let bestMsg = `Best: ${formatScore(bestScore)}`;
   setBestLine(bestMsg);
 
-  const MAX_STEPS = 45;
+  const visited = new Set();
+  visited.add(stateKeyForPlateau());
+  let lastPickedCompId = null;
+
+  const MAX_STEPS = 10;
   const MAX_NEIGHBORS_PER_COMP = 12;
+  const MAX_ROUTINGS_PER_STEP = 35;
 
   for (let step = 1; step <= MAX_STEPS; step++) {
-    setProg((step / MAX_STEPS) * 100, `Step ${step} / ${MAX_STEPS}`);
+    setProg((step / MAX_STEPS) * 100, `Plateau explore: step ${step} / ${MAX_STEPS}`);
 
     const shrinkRes = await tryShrinkAlongWires(bestScore, COLS, ROWS);
     if (shrinkRes.improved) {
@@ -2454,7 +2516,20 @@ async function doPlateauExplore() {
     const box = footprintBoxMetrics(wires);
     const baseBox = { area: box.area, perim: box.perim, bounds: box.bounds };
 
-    const neighbors = await enumeratePlateauNeighbors(baseBox, bestScore, COLS, ROWS, MAX_NEIGHBORS_PER_COMP);
+    const neighborsAll = await enumeratePlateauNeighbors(
+      baseBox,
+      bestScore,
+      COLS,
+      ROWS,
+      MAX_NEIGHBORS_PER_COMP,
+      step,
+      visited,
+      (done, total, tag) => {
+        setProg((step / MAX_STEPS) * 100, `Plateau explore: step ${step}/${MAX_STEPS} — eval ${Math.min(done, total)}/${total} (${tag})`);
+      },
+      MAX_ROUTINGS_PER_STEP
+    );
+    const neighbors = neighborsAll.filter(n => !visited.has(n.key));
     let pick = null;
     for (const n of neighbors) {
       if (n.score.comp < bestScore.comp) continue;
@@ -2464,6 +2539,15 @@ async function doPlateauExplore() {
       else {
         const a = n.score;
         const b = pick.score;
+        // Greedy: try potentially space-shrinking moves first.
+        if (a.area !== b.area) { if (a.area < b.area) pick = n; continue; }
+        if (a.perim !== b.perim) { if (a.perim < b.perim) pick = n; continue; }
+
+        // Diversify: if tied on space, prefer changing a different component than last time.
+        const aSame = lastPickedCompId !== null && String(n.compId) === String(lastPickedCompId);
+        const bSame = lastPickedCompId !== null && String(pick.compId) === String(lastPickedCompId);
+        if (aSame !== bSame) { if (!aSame) pick = n; continue; }
+
         if (a.wl < b.wl) pick = n;
       }
     }
@@ -2471,6 +2555,8 @@ async function doPlateauExplore() {
     if (!pick) break;
     restoreComps(pick.comps);
     wires = pick.wires;
+    visited.add(pick.key);
+    lastPickedCompId = pick.compId;
     bestWires = wires;
     bestScore = pick.score;
     bestMsg = `Best: ${formatScore(bestScore)}`;
