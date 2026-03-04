@@ -108,6 +108,7 @@ export class AutorouterEngine {
             onStateChange: (state) => {
                 this.components = state.components;
                 this.wires = state.wires;
+                this.tick++;
                 this.notify();
             }
         };

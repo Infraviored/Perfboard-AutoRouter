@@ -391,6 +391,7 @@ export async function doPlateauExplore(components, wires, cols, rows, options = 
         if (!pick) break;
         restoreComps(components, pick.comps);
         currentWires = pick.wires;
+        recenterComponents(components, currentWires);
         visited.add(pick.key);
         lastPickedCompId = pick.compId;
         bestWires = currentWires;
