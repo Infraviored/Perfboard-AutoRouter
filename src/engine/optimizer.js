@@ -34,9 +34,19 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
     };
 
     // Flash the main canvas with whatever intermediate state we're exploring
-    const flashUIState = () => {
+    const flashUIState = (dx = 0, dy = 0) => {
+        // Create transient shifted wires for the UI flash so it matches shifted components
+        const shiftedWires = currentWires.map(w => ({
+            ...w,
+            path: w.path?.map(pt => ({ col: pt.col + dx, row: pt.row + dy }))
+        }));
         // Spread each component so React sees new references and re-renders positions
-        onStateChange?.({ components: components.map(c => ({ ...c, pins: c.pins })), wires: currentWires, cols: uiCols, rows: uiRows });
+        onStateChange?.({
+            components: components.map(c => ({ ...c, pins: c.pins })),
+            wires: shiftedWires,
+            cols: uiCols,
+            rows: uiRows
+        });
     };
     // Push a new "best" snapshot to the bottom bar preview, using full component arrays
     const pushHydratedBest = (liveComps, ws) => {
@@ -113,12 +123,12 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
         const w = (b.maxCol - b.minCol + 1);
         const h = (b.maxRow - b.minRow + 1);
         const margin = 2;
-        if (w + margin * 2 > uiCols || h + margin * 2 > uiRows) return false;
+        if (w + margin * 2 > uiCols || h + margin * 2 > uiRows) return null;
 
         const dx = Math.floor((uiCols - w) / 2) - b.minCol;
         const dy = Math.floor((uiRows - h) / 2) - b.minRow;
         for (const c of components) moveComp(c, c.ox + dx, c.oy + dy);
-        return true;
+        return { dx, dy };
     };
 
     const translateFootprintToTopLeftUI = () => {
@@ -188,6 +198,9 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                         setProg?.((iter / MAX_ITERS) * 100, `Iter ${iter}: SA Routing ${macroCount} — ${Math.round(p * 100)}%`);
                     }, checkCancel);
 
+                    // Re-route after SA since positions changed
+                    currentWires = await route(components, vCols, vRows, () => { }, checkCancel);
+
                     if (stagnation >= deepThresh) stagnation = 0;
                 }
             }
@@ -226,6 +239,8 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                         });
                     }
                 }
+                // Re-route after micro-mutations so wires aren't "detached"
+                currentWires = await route(components, vCols, vRows, () => { }, checkCancel);
             }
 
             if (checkCancel()) break;
@@ -268,7 +283,8 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
 
             if (checkCancel()) break;
             const preEval = saveComps(components);
-            if (!translateToFitUI()) {
+            const offset = translateToFitUI();
+            if (!offset) {
                 restoreComps(components, preEval);
                 stagnation++;
                 await new Promise(r => setTimeout(r, 0));
@@ -302,7 +318,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
             }
 
             // Flash the canvas so the user sees the AI "thinking"
-            flashUIState();
+            flashUIState(offset.dx, offset.dy);
             await new Promise(r => setTimeout(r, 0));
             restoreComps(components, preEval);
         } // End Iter Loop
