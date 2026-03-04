@@ -36,7 +36,7 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
     }));
 
     const pad = 1;
-    minC = Math.max(0, minC - pad); minR = Math.max(0, minR - pad);
+    minC -= pad; minR -= pad;
     maxC += pad; maxR += pad;
 
     // Ensure all metrics are valid numbers
