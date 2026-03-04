@@ -141,7 +141,7 @@ function App() {
     } catch (e) {
       setToast({ msg: 'Error: ' + e.message, type: 'err' });
     }
-    setStatus(prev => ({ ...prev, isProcessing: false, title: '' }));
+    setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
     saveHistory();
   }, [engine, jsonInput, autoOptimize, saveHistory]);
 
@@ -176,7 +176,25 @@ Use this format:
   const handleRouteOnly = useCallback(async () => {
     setStatus(prev => ({ ...prev, isProcessing: true }));
     await engine.routeOnly();
-    setStatus(prev => ({ ...prev, isProcessing: false, title: '' }));
+    setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
+    saveHistory();
+  }, [engine, saveHistory]);
+
+  const handleOptimizeFootprint = useCallback(async () => {
+    setBestSnapshot(null);
+    setStatus(prev => ({ ...prev, isProcessing: true }));
+    await engine.optimize();
+    setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
+    setBestSnapshot(null);
+    saveHistory();
+  }, [engine, saveHistory]);
+
+  const handlePlateauExplore = useCallback(async () => {
+    setBestSnapshot(null);
+    setStatus(prev => ({ ...prev, isProcessing: true }));
+    await engine.plateau();
+    setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
+    setBestSnapshot(null);
     saveHistory();
   }, [engine, saveHistory]);
 
@@ -329,8 +347,8 @@ Use this format:
     <div className="app-main">
       <Topbar
         tool={tool} setTool={setTool} autoOptimize={autoOptimize} setAutoOptimize={setAutoOptimize}
-        onPlaceAndRoute={handlePlaceAndRoute} onOptimizeFootprint={() => engine.optimize()}
-        onPlateauExplore={() => engine.plateau()} onRouteOnly={handleRouteOnly}
+        onPlaceAndRoute={handlePlaceAndRoute} onOptimizeFootprint={handleOptimizeFootprint}
+        onPlateauExplore={handlePlateauExplore} onRouteOnly={handleRouteOnly}
         onClearWires={handleClearWires} onReset={handleReset} onUndo={handleUndo} onRedo={handleRedo}
         onExportState={handleExportState} onExportSVG={() => {/* SVG Export Logic */ }}
         hasWires={board.wires.length > 0}
