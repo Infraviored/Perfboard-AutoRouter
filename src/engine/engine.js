@@ -1,4 +1,5 @@
-import { route } from './router.js';
+import { route, getAllNets } from './router.js';
+import { Grid } from './grid.js';
 import { doOptimizeFootprint, doPlateauExplore } from './optimizer.js';
 import { scoreState, doRecursivePushPacking } from './optimizer-algorithms.js';
 import { placeInitial } from './initial-placement.js';
@@ -217,8 +218,10 @@ export class AutorouterEngine {
     moveComponent(id, ox, oy) {
         const c = this.components.find(x => x.id === id);
         if (c) {
-            // Use moveComp from placer.js which also updates pins
             moveComp(c, ox, oy);
+            if (this.wires.length > 0) {
+                this.updateIncrementalWires(c);
+            }
             this.components = [...this.components];
             this.tick++;
             this.notify();
@@ -229,9 +232,68 @@ export class AutorouterEngine {
         const c = this.components.find(x => x.id === id);
         if (c) {
             rotateComp90InPlace(c);
+            if (this.wires.length > 0) {
+                this.updateIncrementalWires(c);
+            }
             this.components = [...this.components];
             this.tick++;
             this.notify();
+        }
+    }
+
+    updateIncrementalWires(movedComp) {
+        const affectedNets = new Set(movedComp.pins.map(p => p.net).filter(Boolean));
+        if (affectedNets.size === 0) return;
+
+        // 1. Filter existing wires
+        this.wires = this.wires.filter(w => {
+            if (affectedNets.has(w.net)) return false;
+            if (w.failed) return true;
+            if (!movedComp.routeUnder) {
+                return !w.path.some(pt =>
+                    pt.col >= movedComp.ox && pt.col < movedComp.ox + movedComp.w &&
+                    pt.row >= movedComp.oy && pt.row < movedComp.oy + movedComp.h
+                );
+            }
+            return true;
+        });
+
+        // 2. Setup grid for current state
+        const grid = new Grid(this.cols, this.rows);
+        this.components.forEach(comp => grid.registerComp(comp));
+        this.wires.forEach(w => { if (!w.failed) grid.markWire(w.path); });
+
+        // 3. Reroute affected nets
+        const allNets = getAllNets(this.components);
+        const toRoute = allNets.filter(n => affectedNets.has(n.net));
+
+        for (const net of toRoute) {
+            const pins = [...net.pins];
+            if (pins.length < 2) continue;
+
+            const routedIndices = new Set();
+            const first = pins.shift();
+            routedIndices.add(grid.idx(first.col, first.row));
+
+            while (pins.length > 0) {
+                const targetIndices = pins.map(p => grid.idx(p.col, p.row));
+                const result = grid.astarMultiTarget(routedIndices, targetIndices);
+
+                if (result && result.path) {
+                    this.wires.push({ net: net.net, path: result.path, failed: false });
+                    grid.markWire(result.path);
+                    result.path.forEach(pt => routedIndices.add(grid.idx(pt.col, pt.row)));
+                    const hitIdx = pins.findIndex(p => grid.idx(p.col, p.row) === result.hitTargetIdx);
+                    if (hitIdx !== -1) pins.splice(hitIdx, 1);
+                } else {
+                    const failPin = pins.shift();
+                    this.wires.push({
+                        net: net.net,
+                        path: [{ col: first.col, row: first.row }, { col: failPin.col, row: failPin.row }],
+                        failed: true
+                    });
+                }
+            }
         }
     }
 
