@@ -730,7 +730,7 @@ export function cutToBoundingBox(components, wires) {
 
   const { bounds } = calculateFootprintArea(components, wires);
 
-  const pad = 0;
+  const pad = 1;
   const newCols = (bounds.maxCol - bounds.minCol) + 1 + (pad * 2);
   const newRows = (bounds.maxRow - bounds.minRow) + 1 + (pad * 2);
 

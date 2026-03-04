@@ -137,6 +137,38 @@ export function renderCompSVG(c, isSelected = false) {
   return out;
 }
 
+export function generateBoundingBoxSVG(components, wires = []) {
+  if (!components.length) return '';
+
+  let minC = Infinity, maxC = -Infinity, minR = Infinity, maxR = -Infinity;
+  components.forEach(c => {
+    minC = Math.min(minC, c.ox);
+    maxC = Math.max(maxC, c.ox + c.w);
+    minR = Math.min(minR, c.oy);
+    maxR = Math.max(maxR, c.oy + c.h);
+  });
+
+  wires.forEach(w => {
+    if (w.failed) return;
+    w.path?.forEach(pt => {
+      minC = Math.min(minC, pt.col);
+      maxC = Math.max(maxC, pt.col + 1);
+      minR = Math.min(minR, pt.row);
+      maxR = Math.max(maxR, pt.row + 1);
+    });
+  });
+
+  if (!isFinite(minC)) return '';
+
+  const pad = 1;
+  const x = (minC - pad) * SP;
+  const y = (minR - pad) * SP;
+  const w = (maxC - minC + pad * 2) * SP;
+  const h = (maxR - minR + pad * 2) * SP;
+
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="8 6" rx="4"/>`;
+}
+
 export function hitComp(col, row, components) {
   return components.find(c =>
     col >= c.ox && col < c.ox + c.w &&

@@ -1,7 +1,7 @@
 import { route, getAllNets } from './router.js';
 import { Grid } from './grid.js';
 import { doOptimizeFootprint, doPlateauExplore } from './optimizer.js';
-import { scoreState, doRecursivePushPacking } from './optimizer-algorithms.js';
+import { scoreState, doRecursivePushPacking, cutToBoundingBox } from './optimizer-algorithms.js';
 import { placeInitial } from './initial-placement.js';
 import { anneal, moveComp, rotateComp90InPlace } from './placer.js';
 import { saveComps, restoreComps, completion } from './state-utils.js';
@@ -285,5 +285,16 @@ export class AutorouterEngine {
         this.components = placeInitial(compDefs, this.cols, this.rows);
         this.wires = [];
         this.notify();
+    }
+
+    cutToBoundingBox() {
+        const result = cutToBoundingBox(this.components, this.wires);
+        if (result) {
+            this.cols = result.cols;
+            this.rows = result.rows;
+            this.tick++;
+            return { cols: this.cols, rows: this.rows, components: this.components, wires: this.wires, tick: this.tick };
+        }
+        return null;
     }
 }

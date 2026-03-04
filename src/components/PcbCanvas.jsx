@@ -5,7 +5,8 @@ import {
     renderCompSVG,
     SP,
     hitComp,
-    generateBackgroundSVG
+    generateBackgroundSVG,
+    generateBoundingBoxSVG
 } from '../engine/render-utils.js';
 
 export function PcbCanvas({
@@ -117,6 +118,7 @@ export function PcbCanvas({
         components.map(c => renderCompSVG(c, c.id === selectedId)).join(''),
         [components, selectedId, tick]
     );
+    const boundingBoxSvg = useMemo(() => generateBoundingBoxSVG(components, wires), [components, wires, tick]);
 
     return (
         <div
@@ -148,6 +150,7 @@ export function PcbCanvas({
                     <g dangerouslySetInnerHTML={{ __html: wiresSvg }} />
                     <g dangerouslySetInnerHTML={{ __html: ratsnestSvg }} />
                     <g dangerouslySetInnerHTML={{ __html: componentsSvg }} />
+                    <g dangerouslySetInnerHTML={{ __html: boundingBoxSvg }} />
                 </g>
             </svg>
 
