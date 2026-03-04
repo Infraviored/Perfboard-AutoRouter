@@ -2,10 +2,14 @@ import { moveComp, rotateComp90InPlace } from './placer.js';
 
 export function placeInitial(compDefs, cols, rows) {
   const components = [];
+  const cx = Math.floor(cols / 2), cy = Math.floor(rows / 2);
+  // Calculate a small spread based on number of components to keep them tight but distinct
+  const spread = Math.max(5, Math.ceil(Math.sqrt(compDefs.length) * 2));
+
   compDefs.forEach(cd => {
-    // 1. Random Initial Position
-    const ox = Math.floor(Math.random() * (cols - cd.w - 1)) + 1;
-    const oy = Math.floor(Math.random() * (rows - cd.h - 1)) + 1;
+    // 1. Position within a tight center zone
+    const ox = cx + Math.floor(Math.random() * spread - spread / 2);
+    const oy = cy + Math.floor(Math.random() * spread - spread / 2);
 
     let c = makeComp(cd, ox, oy);
 
@@ -15,7 +19,7 @@ export function placeInitial(compDefs, cols, rows) {
       rotateComp90InPlace(c);
     }
 
-    // Safety clamp to ensure rotation didn't push us out of bounds
+    // Safety clamp 
     if (c.ox + c.w >= cols) moveComp(c, cols - c.w - 1, c.oy);
     if (c.oy + c.h >= rows) moveComp(c, c.ox, rows - c.h - 1);
 

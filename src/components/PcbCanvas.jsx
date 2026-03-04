@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo, useCallback } from 'react';
+import React, { useRef, useState, useMemo, useCallback, useEffect } from 'react';
 import {
     generateWiresSVG,
     generateRatsnestSVG,
@@ -20,7 +20,8 @@ export function PcbCanvas({
     onMove,
     onRotate,
     onMoveEnd,
-    tick
+    tick,
+    isProcessing
 }) {
     const svgRef = useRef(null);
     const [zoom, setZoom] = useState(1.0);
@@ -110,8 +111,84 @@ export function PcbCanvas({
         }
     };
 
+    const [hasCentered, setHasCentered] = useState(false);
+
+    // Center camera on components when they are first added or during optimization
+    useEffect(() => {
+        if (components.length === 0) return;
+        if (!isProcessing && hasCentered) return;
+
+        // Auto-center view on current circuit every tick during processing
+        let minC = Infinity, maxC = -Infinity, minR = Infinity, maxR = -Infinity;
+        components.forEach(c => {
+            minC = Math.min(minC, c.ox);
+            maxC = Math.max(maxC, c.ox + c.w);
+            minR = Math.min(minR, c.oy);
+            maxR = Math.max(maxR, c.oy + c.h);
+        });
+
+        // Center on that area
+        const rect = svgRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const cx = (minC + maxC) / 2 * SP;
+        const cy = (minR + maxR) / 2 * SP;
+
+        const targetX = rect.width / 2 - cx * zoom;
+        const targetY = rect.height / 2 - cy * zoom;
+
+        if (!hasCentered) {
+            setPan({ x: targetX, y: targetY });
+            setHasCentered(true);
+        } else {
+            setPan(prev => ({
+                x: prev.x + (targetX - prev.x) * 0.1,
+                y: prev.y + (targetY - prev.y) * 0.1
+            }));
+        }
+    }, [isProcessing, tick, components, zoom, hasCentered]);
+
+    // Bounding box for background fading
+    const bounds = useMemo(() => {
+        if (components.length === 0) return null;
+        let minCol = Infinity, maxCol = -Infinity, minRow = Infinity, maxRow = -Infinity;
+        components.forEach(c => {
+            minCol = Math.min(minCol, c.ox);
+            maxCol = Math.max(maxCol, c.ox + c.w - 1);
+            minRow = Math.min(minRow, c.oy);
+            maxRow = Math.max(maxRow, c.oy + c.h - 1);
+        });
+        wires.forEach(w => w.path?.forEach(pt => {
+            minCol = Math.min(minCol, pt.col);
+            maxCol = Math.max(maxCol, pt.col);
+            minRow = Math.min(minRow, pt.row);
+            maxRow = Math.max(maxRow, pt.row);
+        }));
+        return { minCol, maxCol, minRow, maxRow };
+    }, [components, wires, tick]);
+
+    // Labels for the board
+    const labelsSvg = useMemo(() => {
+        if (!bounds) return '';
+        let out = '';
+        const pad = 15; // wide margin for labels
+        const minC = bounds.minCol - pad, maxC = bounds.maxCol + pad;
+        const minR = bounds.minRow - pad, maxR = bounds.maxRow + pad;
+
+        // X labels
+        for (let c = minC; c <= maxC; c++) {
+            if (c % 5 !== 0) continue;
+            out += `<text x="${c * SP + SP / 2}" y="${(bounds.minRow - 0.6) * SP}" fill="rgba(0,187,144,0.3)" font-family="monospace" font-size="9" text-anchor="middle">${c}</text>`;
+        }
+        // Y labels
+        for (let r = minR; r <= maxR; r++) {
+            if (r % 5 !== 0) continue;
+            out += `<text x="${(bounds.minCol - 0.8) * SP}" y="${r * SP + SP / 2 + 3}" fill="rgba(0,187,144,0.3)" font-family="monospace" font-size="9" text-anchor="end">${r}</text>`;
+        }
+        return out;
+    }, [bounds]);
+
     // Memoize SVG parts for performance
-    const background = useMemo(() => generateBackgroundSVG(cols, rows), [cols, rows]);
+    const background = useMemo(() => generateBackgroundSVG(cols, rows, bounds), [cols, rows, bounds]);
     const wiresSvg = useMemo(() => generateWiresSVG(wires, hoveredNet), [wires, hoveredNet, tick]);
     const ratsnestSvg = useMemo(() => generateRatsnestSVG(components, wires, !!draggingId), [components, wires, draggingId, tick]);
     const componentsSvg = useMemo(() =>
@@ -147,6 +224,7 @@ export function PcbCanvas({
             >
                 <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
                     <g dangerouslySetInnerHTML={{ __html: background }} />
+                    <g dangerouslySetInnerHTML={{ __html: labelsSvg }} />
                     <g dangerouslySetInnerHTML={{ __html: wiresSvg }} />
                     <g dangerouslySetInnerHTML={{ __html: ratsnestSvg }} />
                     <g dangerouslySetInnerHTML={{ __html: componentsSvg }} />

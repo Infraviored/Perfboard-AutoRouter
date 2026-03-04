@@ -205,12 +205,24 @@ Use this format:
       mw = Math.max(mw, p.offset[0] + 1);
       mh = Math.max(mh, p.offset[1] + 1);
     });
+
+    let cx = 5, cy = 5;
+    if (board.components.length > 0) {
+      let minC = Infinity, maxC = -Infinity, minR = Infinity, maxR = -Infinity;
+      board.components.forEach(c => {
+        minC = Math.min(minC, c.ox); maxC = Math.max(maxC, c.ox + c.w);
+        minR = Math.min(minR, c.oy); maxR = Math.max(maxR, c.oy + c.h);
+      });
+      cx = Math.floor((minC + maxC) / 2) + Math.floor(Math.random() * 5);
+      cy = Math.floor((minR + maxR) / 2) + Math.floor(Math.random() * 5);
+    }
+
     const newComp = {
       id: newId, name: compDef.name, value: compDef.value, color: compDef.color,
-      w: mw, h: mh, ox: 5, oy: 5,
+      w: mw, h: mh, ox: cx, oy: cy,
       pins: compDef.pins.map(p => ({
         dCol: p.offset[0], dRow: p.offset[1],
-        col: 5 + p.offset[0], row: 5 + p.offset[1],
+        col: cx + p.offset[0], row: cy + p.offset[1],
         lbl: p.label, net: ''
       }))
     };
@@ -227,10 +239,6 @@ Use this format:
     setToast({ msg: 'Component saved', type: 'ok' });
   }, [board.components, engine, saveHistory]);
 
-  const handleCutToBoundingBox = useCallback(() => {
-    engine.setState(engine.cutToBoundingBox());
-    saveHistory();
-  }, [engine, saveHistory]);
 
   const handleExportState = useCallback(() => {
     const state = { components: board.components, wires: board.wires };
@@ -317,8 +325,6 @@ Use this format:
       />
       <div id="layout">
         <SidebarLeft
-          cols={board.cols} rows={board.rows} onApplyBoard={(c, r) => engine.setState({ cols: c, rows: r })}
-          onCutToBoundingBox={handleCutToBoundingBox}
           onOpenPrompt={() => setIsPromptOpen(true)}
           jsonInput={jsonInput} setJsonInput={setJsonInput} onLoadCircuit={handleLoadCircuit}
           onLoadTemplate={handleLoadTemplate} components={board.components} selectedId={selectedId}

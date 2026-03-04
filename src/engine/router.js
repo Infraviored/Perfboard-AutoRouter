@@ -12,7 +12,24 @@ export const getAllNets = function (components) {
 }
 export const route = async function (components, cols, rows, onProg, shouldCancel = null) {
   const nets = getAllNets(components);
-  const grid = new Grid(cols, rows);
+
+  let minCol = Infinity, maxCol = -Infinity, minRow = Infinity, maxRow = -Infinity;
+  if (components.length > 0) {
+    components.forEach(c => {
+      minCol = Math.min(minCol, c.ox); maxCol = Math.max(maxCol, c.ox + c.w - 1);
+      minRow = Math.min(minRow, c.oy); maxRow = Math.max(maxRow, c.oy + c.h - 1);
+    });
+  } else {
+    minCol = 0; maxCol = cols || 50; minRow = 0; maxRow = rows || 50;
+  }
+
+  const pad = 15;
+  const gridMinC = minCol - pad;
+  const gridMinR = minRow - pad;
+  const gridCols = (maxCol - minCol + 1) + pad * 2;
+  const gridRows = (maxRow - minRow + 1) + pad * 2;
+
+  const grid = new Grid(gridCols, gridRows, gridMinC, gridMinR);
   components.forEach(c => grid.registerComp(c));
 
   const wires = [];

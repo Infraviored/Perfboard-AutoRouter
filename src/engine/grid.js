@@ -65,9 +65,11 @@ const DCS = new Int32Array([0, 0, 1, -1]);
 const DRS = new Int32Array([1, -1, 0, 0]);
 
 export class Grid {
-  constructor(cols, rows) {
+  constructor(cols, rows, minCol = 0, minRow = 0) {
     this.cols = cols;
     this.rows = rows;
+    this.minCol = minCol;
+    this.minRow = minRow;
     const size = cols * rows;
     this.cells = new Uint8Array(size);
     this.gScore = new Float32Array(size);
@@ -77,8 +79,8 @@ export class Grid {
     this.open = new MinHeap(size * 4);
   }
 
-  idx(c, r) { return r * this.cols + c; }
-  inBounds(c, r) { return c >= 0 && c < this.cols && r >= 0 && r < this.rows; }
+  idx(c, r) { return (r - this.minRow) * this.cols + (c - this.minCol); }
+  inBounds(c, r) { return c >= this.minCol && c < this.minCol + this.cols && r >= this.minRow && r < this.minRow + this.rows; }
   set(c, r, flag) { if (this.inBounds(c, r)) this.cells[this.idx(c, r)] |= flag; }
   clear(c, r, flag) { if (this.inBounds(c, r)) this.cells[this.idx(c, r)] &= ~flag; }
   has(c, r, flag) { return this.inBounds(c, r) && (this.cells[this.idx(c, r)] & flag) !== 0; }
@@ -108,7 +110,7 @@ export class Grid {
 
   // Optimized Multi-Target A*
   astarMultiTarget(startIndices, targetIndices) {
-    const key = (c, r) => r * this.cols + c;
+    const key = (c, r) => (r - this.minRow) * this.cols + (c - this.minCol);
     const size = this.cols * this.rows;
 
     this.gScore.fill(1e6);
@@ -135,8 +137,8 @@ export class Grid {
     const targets = [];
     for (let i = 0; i < targetIndices.length; i++) {
       targets.push({
-        c: targetIndices[i] % this.cols,
-        r: Math.floor(targetIndices[i] / this.cols)
+        c: (targetIndices[i] % this.cols) + this.minCol,
+        r: Math.floor(targetIndices[i] / this.cols) + this.minRow
       });
     }
 
@@ -144,18 +146,18 @@ export class Grid {
 
     while (open.length > 0 && iters++ < size * 4) {
       const currKey = open.pop();
-      const c = currKey % this.cols;
-      const r = Math.floor(currKey / this.cols);
+      const c = (currKey % this.cols) + this.minCol;
+      const r = Math.floor(currKey / this.cols) + this.minRow;
 
       // Early exit: First target hit wins!
       if (targetMap[currKey] === 1) {
         const path = [];
         let k = currKey;
         while (k !== -1 && !startIndices.has(k)) {
-          path.unshift({ col: k % this.cols, row: Math.floor(k / this.cols) });
+          path.unshift({ col: (k % this.cols) + this.minCol, row: Math.floor(k / this.cols) + this.minRow });
           k = parent[k];
         }
-        if (k !== -1) path.unshift({ col: k % this.cols, row: Math.floor(k / this.cols) });
+        if (k !== -1) path.unshift({ col: (k % this.cols) + this.minCol, row: Math.floor(k / this.cols) + this.minRow });
 
         // Return path and which target we successfully hit
         return { path, hitTargetIdx: currKey };
@@ -175,7 +177,9 @@ export class Grid {
         let moveCost = 1.0;
         if (parent[currKey] !== -1) {
           const pk = parent[currKey];
-          if ((c - (pk % this.cols)) !== DCS[i] || (r - Math.floor(pk / this.cols)) !== DRS[i]) {
+          const pc = (pk % this.cols) + this.minCol;
+          const pr = Math.floor(pk / this.cols) + this.minRow;
+          if ((c - pc) !== DCS[i] || (r - pr) !== DRS[i]) {
             moveCost += 1.5; // Turn penalty
           }
         }

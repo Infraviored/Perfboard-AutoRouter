@@ -43,19 +43,43 @@ export function boostColor(hex) {
   return `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
 }
 
-export function generateBackgroundSVG(cols, rows) {
-  const W = cols * SP;
-  const H = rows * SP;
+export function generateBackgroundSVG(cols, rows, bounds = null) {
+  // Use massive dimensions for infinite panning
+  const W = 100000;
+  const H = 100000;
+  const OX = -50000;
+  const OY = -50000;
+
+  let maskContent = '';
+  if (bounds) {
+    const cx = ((bounds.minCol + bounds.maxCol + 1) / 2) * SP;
+    const cy = ((bounds.minRow + bounds.maxRow + 1) / 2) * SP;
+    const rw = (bounds.maxCol - bounds.minCol + 10) * SP / 2;
+    const rh = (bounds.maxRow - bounds.minRow + 10) * SP / 2;
+    const r = Math.max(rw, rh, 300);
+
+    maskContent = `
+      <radialGradient id="fadeGrad" cx="${cx}" cy="${cy}" r="${r}" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stop-color="white" stop-opacity="1"/>
+        <stop offset="60%" stop-color="white" stop-opacity="0.3"/>
+        <stop offset="100%" stop-color="white" stop-opacity="0"/>
+      </radialGradient>
+      <mask id="fadeMask">
+        <rect x="${OX}" y="${OY}" width="${W}" height="${H}" fill="url(#fadeGrad)"/>
+      </mask>
+    `;
+  }
+
   return `
     <defs>
-      <pattern id="perfPattern" patternUnits="userSpaceOnUse" width="${SP}" height="${SP}">
+      <pattern id="perfPattern" patternUnits="userSpaceOnUse" width="${SP}" height="${SP}" x="0" y="0">
         <rect width="${SP}" height="${SP}" fill="#1a1208"/>
         <circle cx="${SP / 2}" cy="${SP / 2}" r="${SP * .22}" fill="#b87333"/>
         <circle cx="${SP / 2}" cy="${SP / 2}" r="${SP * .09}" fill="#0d0a06"/>
       </pattern>
+      ${maskContent}
     </defs>
-    <rect width="${W}" height="${H}" fill="url(#perfPattern)"/>
-    <rect x="1" y="1" width="${W - 2}" height="${H - 2}" fill="none" stroke="#c8a800" stroke-width="2"/>
+    <rect x="${OX}" y="${OY}" width="${W}" height="${H}" fill="url(#perfPattern)" ${bounds ? 'mask="url(#fadeMask)"' : ''}/>
   `;
 }
 

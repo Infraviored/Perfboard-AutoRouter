@@ -2,127 +2,98 @@ import React, { useState } from 'react';
 import { boostColor } from '../engine/render-utils.js';
 
 export function SidebarLeft({
-    cols,
-    rows,
-    onApplyBoard,
-    onCutToBoundingBox,
-    jsonInput,
-    setJsonInput,
-    onLoadCircuit,
-    onLoadTemplate,
-    components,
-    selectedId,
-    onSelectComponent,
-    onOpenLibrary,
-    onAddNewComponent,
-    onEditComponent,
-    onOpenPrompt
+  cols,
+  rows,
+  onApplyBoard,
+  onCutToBoundingBox,
+  jsonInput,
+  setJsonInput,
+  onLoadCircuit,
+  onLoadTemplate,
+  components,
+  selectedId,
+  onSelectComponent,
+  onOpenLibrary,
+  onAddNewComponent,
+  onEditComponent,
+  onOpenPrompt
 }) {
-    const [localCols, setLocalCols] = useState(cols);
-    const [localRows, setLocalRows] = useState(rows);
+  const [localCols, setLocalCols] = useState(cols);
+  const [localRows, setLocalRows] = useState(rows);
 
-    const handleApply = () => {
-        onApplyBoard(parseInt(localCols), parseInt(localRows));
-    };
+  const handleApply = () => {
+    onApplyBoard(parseInt(localCols), parseInt(localRows));
+  };
 
-    return (
-        <aside id="lsb">
-            {/* 1. Board Section */}
-            <div className="ph">
-                <span><span className="sbadge act">1</span>Board</span>
-            </div>
-            <div className="lbody">
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                    <div>
-                        <label>Cols (X)</label>
-                        <input
-                            type="number"
-                            value={localCols}
-                            onChange={(e) => setLocalCols(e.target.value)}
-                            min="5" max="80"
-                        />
-                    </div>
-                    <div>
-                        <label>Rows (Y)</label>
-                        <input
-                            type="number"
-                            value={localRows}
-                            onChange={(e) => setLocalRows(e.target.value)}
-                            min="5" max="60"
-                        />
-                    </div>
+  return (
+    <aside id="lsb">
+      {/* 2. Circuit Definition Section */}
+      <div className="ph">
+        <span><span className="sbadge">2</span>Circuit Definition</span>
+      </div>
+      <div className="lbody">
+        <textarea
+          placeholder="Paste JSON or generate with an LLM..."
+          value={jsonInput}
+          onChange={(e) => setJsonInput(e.target.value)}
+          spellCheck="false"
+        />
+        <button className="btn blu" onClick={onLoadCircuit}>▶ Load Circuit</button>
+        <button
+          className="btn"
+          style={{ background: '#1a1a1a', border: '1px solid #333', color: 'var(--txt1)', marginTop: '2px' }}
+          onClick={onOpenPrompt}
+        >
+          💡 How do I get this?
+        </button>
+      </div>
+
+      {/* 3. Components Section */}
+      <div className="ph">
+        <span><span className="sbadge">3</span>Components</span>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          <button className="tplbtn blu-bg" onClick={onOpenLibrary}>📚 Library</button>
+          <button className="tplbtn grn-bg" onClick={onAddNewComponent}>+ New</button>
+        </div>
+      </div>
+      <div className="scroll-container lbody" style={{ gap: '8px' }}>
+        {components.length === 0 ? (
+          <div style={{ fontSize: '.7em', color: 'var(--txt2)', textAlign: 'center', padding: '10px' }}>Load components first.</div>
+        ) : (
+          components.map(c => {
+            const boosted = boostColor(c.color);
+            return (
+              <div
+                key={c.id}
+                className={`comp-card ${selectedId === c.id ? 'sel' : ''}`}
+                onClick={() => onSelectComponent(c.id)}
+                style={{
+                  '--comp-color': boosted,
+                }}
+              >
+                <div className="comp-id-tag">{c.id}</div>
+                <div className="comp-info">
+                  <div className="comp-name">{c.name}</div>
+                  <div className="comp-value">{c.value}</div>
                 </div>
-                <button className="btn grn" onClick={handleApply}>Apply Board</button>
-                <button className="btn" style={{ fontSize: '.7em' }} onClick={onCutToBoundingBox}>✂ Cut to Bounding Box</button>
-            </div>
-
-            {/* 2. Circuit Definition Section */}
-            <div className="ph">
-                <span><span className="sbadge">2</span>Circuit Definition</span>
-            </div>
-            <div className="lbody">
-                <textarea
-                    placeholder="Paste JSON or generate with an LLM..."
-                    value={jsonInput}
-                    onChange={(e) => setJsonInput(e.target.value)}
-                    spellCheck="false"
-                />
-                <button className="btn blu" onClick={onLoadCircuit}>▶ Load Circuit</button>
-                <button
-                    className="btn"
-                    style={{ background: '#1a1a1a', border: '1px solid #333', color: 'var(--txt1)', marginTop: '2px' }}
-                    onClick={onOpenPrompt}
-                >
-                    💡 How do I get this?
-                </button>
-            </div>
-
-            {/* 3. Components Section */}
-            <div className="ph">
-                <span><span className="sbadge">3</span>Components</span>
-                <div style={{ display: 'flex', gap: '4px' }}>
-                    <button className="tplbtn blu-bg" onClick={onOpenLibrary}>📚 Library</button>
-                    <button className="tplbtn grn-bg" onClick={onAddNewComponent}>+ New</button>
+                <div className="comp-actions">
+                  <div className="comp-pins-tag">{c.pins.length}P</div>
+                  <button
+                    className="edit-mini-btn"
+                    onClick={(e) => { e.stopPropagation(); onEditComponent(c.id); }}
+                    title="Edit Component"
+                  >
+                    🔧
+                  </button>
                 </div>
-            </div>
-            <div className="scroll-container lbody" style={{ gap: '8px' }}>
-                {components.length === 0 ? (
-                    <div style={{ fontSize: '.7em', color: 'var(--txt2)', textAlign: 'center', padding: '10px' }}>Load components first.</div>
-                ) : (
-                    components.map(c => {
-                        const boosted = boostColor(c.color);
-                        return (
-                            <div
-                                key={c.id}
-                                className={`comp-card ${selectedId === c.id ? 'sel' : ''}`}
-                                onClick={() => onSelectComponent(c.id)}
-                                style={{
-                                    '--comp-color': boosted,
-                                }}
-                            >
-                                <div className="comp-id-tag">{c.id}</div>
-                                <div className="comp-info">
-                                    <div className="comp-name">{c.name}</div>
-                                    <div className="comp-value">{c.value}</div>
-                                </div>
-                                <div className="comp-actions">
-                                    <div className="comp-pins-tag">{c.pins.length}P</div>
-                                    <button
-                                        className="edit-mini-btn"
-                                        onClick={(e) => { e.stopPropagation(); onEditComponent(c.id); }}
-                                        title="Edit Component"
-                                    >
-                                        🔧
-                                    </button>
-                                </div>
-                            </div>
-                        );
-                    })
-                )}
-            </div>
+              </div>
+            );
+          })
+        )}
+      </div>
 
-            <style dangerouslySetInnerHTML={{
-                __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         #lsb {
           width: var(--lsb-width);
           background: var(--bg2);
@@ -265,6 +236,6 @@ export function SidebarLeft({
           transform: rotate(15deg); 
         }
       `}} />
-        </aside>
-    );
+    </aside>
+  );
 }

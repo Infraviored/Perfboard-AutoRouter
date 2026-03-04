@@ -12,7 +12,8 @@ import {
     explorePlateauStates,
     tryRotateOptimize,
     doRecursivePushPacking,
-    tryGlobalNudge
+    tryGlobalNudge,
+    recenterComponents
 } from './optimizer-algorithms.js';
 import { saveComps, restoreComps } from './state-utils.js';
 import { moveComp, rotateComp90InPlace, anneal, anyOverlap } from './placer.js';
@@ -34,16 +35,11 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
     };
 
     // Flash the main canvas with whatever intermediate state we're exploring
-    const flashUIState = (dx = 0, dy = 0) => {
-        // Create transient shifted wires for the UI flash so it matches shifted components
-        const shiftedWires = currentWires.map(w => ({
-            ...w,
-            path: w.path?.map(pt => ({ col: pt.col + dx, row: pt.row + dy }))
-        }));
+    const flashUIState = () => {
         // Spread each component so React sees new references and re-renders positions
         onStateChange?.({
             components: components.map(c => ({ ...c, pins: c.pins })),
-            wires: shiftedWires,
+            wires: currentWires,
             cols: uiCols,
             rows: uiRows
         });
@@ -89,15 +85,9 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
     };
     setIterStatus(0, 0);
 
-    // --- 1. EXPAND VIRTUAL BOARD ---
-    const { bounds } = calculateFootprintArea(components, currentWires);
-    const vCols = Math.max(uiCols, (bounds.maxCol - bounds.minCol) + 20);
-    const vRows = Math.max(uiRows, (bounds.maxRow - bounds.minRow) + 20);
-
-    // Center everything initially
-    const offsetX = Math.floor(vCols / 2 - (bounds.minCol + (bounds.maxCol - bounds.minCol) / 2));
-    const offsetY = Math.floor(vRows / 2 - (bounds.minRow + (bounds.maxRow - bounds.minRow) / 2));
-    components.forEach(c => moveComp(c, c.ox + offsetX, c.oy + offsetY));
+    // --- 1. SET INFINITE BOUNDS ---
+    const vCols = 1e6;
+    const vRows = 1e6;
 
     setProg?.(0, `Preparing virtual workspace...`);
     currentWires = await route(components, vCols, vRows, () => { }, false, checkCancel);
@@ -117,31 +107,6 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
 
     let stagnation = 0;
     let macroCount = 0;
-
-    const translateToFitUI = () => {
-        const b = calculateComponentBounds(components);
-        const w = (b.maxCol - b.minCol + 1);
-        const h = (b.maxRow - b.minRow + 1);
-        const margin = 2;
-        if (w + margin * 2 > uiCols || h + margin * 2 > uiRows) return null;
-
-        const dx = Math.floor((uiCols - w) / 2) - b.minCol;
-        const dy = Math.floor((uiRows - h) / 2) - b.minRow;
-        for (const c of components) moveComp(c, c.ox + dx, c.oy + dy);
-        return { dx, dy };
-    };
-
-    const translateFootprintToTopLeftUI = () => {
-        const fb = footprintBoxMetrics(components, currentWires);
-        const dx = -fb.bounds.minCol;
-        const dy = -fb.bounds.minRow;
-        for (const c of components) moveComp(c, c.ox + dx, c.oy + dy);
-        if (currentWires) {
-            currentWires.forEach(w => {
-                if (w?.path) w.path.forEach(pt => { pt.col += dx; pt.row += dy; });
-            });
-        }
-    };
 
     const startTime = performance.now();
 
@@ -182,10 +147,8 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                     macroCount++;
                     if (stagnation >= deepThresh) {
                         const b = calculateComponentBounds(components);
-                        const spanX = Math.max(1, (b.maxCol - b.minCol + 1));
-                        const spanY = Math.max(1, (b.maxRow - b.minRow + 1));
-                        const cx = Math.floor(vCols / 2 - spanX / 2);
-                        const cy = Math.floor(vRows / 2 - spanY / 2);
+                        const cx = Math.floor((b.minCol + b.maxCol) / 2);
+                        const cy = Math.floor((b.minRow + b.maxRow) / 2);
                         for (const c of components) {
                             const nx = Math.max(0, Math.min(vCols - c.w, cx + Math.floor(Math.random() * 7) - 3));
                             const ny = Math.max(0, Math.min(vRows - c.h, cy + Math.floor(Math.random() * 7) - 3));
@@ -283,15 +246,8 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
 
             if (checkCancel()) break;
             const preEval = saveComps(components);
-            const offset = translateToFitUI();
-            if (!offset) {
-                restoreComps(components, preEval);
-                stagnation++;
-                await new Promise(r => setTimeout(r, 0));
-                continue;
-            }
 
-            const testWires = await route(components, uiCols, uiRows, () => { }, checkCancel);
+            const testWires = await route(components, vCols, vRows, () => { }, checkCancel);
             const testScore = scoreState(components, testWires);
 
             if (isScoreBetter(testScore, globalBestScore)) {
@@ -318,7 +274,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
             }
 
             // Flash the canvas so the user sees the AI "thinking"
-            flashUIState(offset.dx, offset.dy);
+            flashUIState();
             await new Promise(r => setTimeout(r, 0));
             restoreComps(components, preEval);
         } // End Iter Loop
@@ -327,7 +283,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
     // --- 3. CLEANUP & RESTORE ---
     restoreComps(components, globalBestComps);
     currentWires = globalBestWires;
-    translateFootprintToTopLeftUI();
+    // Removed translateFootprintToTopLeftUI(); to stop jumping to top-left
 
     const finalScore = scoreState(components, currentWires);
     if (!isScoreBetter(finalScore, startScore)) {
