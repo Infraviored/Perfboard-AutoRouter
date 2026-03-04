@@ -1,5 +1,6 @@
+import { Grid } from './grid.js';
 
-window.getAllNets = function (components) {
+export const getAllNets = function (components) {
   const m = {};
   components.forEach(c => c.pins.forEach(p => {
     if (p.net) {
@@ -9,7 +10,7 @@ window.getAllNets = function (components) {
   }));
   return Object.entries(m).map(([net, pins]) => ({ net, pins }));
 }
-window.route = async function (components, cols, rows, onProg, debug = false, shouldCancel = null) {
+export const route = async function (components, cols, rows, onProg, debug = false, shouldCancel = null) {
   const nets = getAllNets(components);
   const grid = new Grid(cols, rows);
   components.forEach(c => grid.registerComp(c));

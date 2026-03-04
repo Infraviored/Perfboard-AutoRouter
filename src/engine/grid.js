@@ -64,7 +64,7 @@ class MinHeap {
 const DCS = new Int32Array([0, 0, 1, -1]);
 const DRS = new Int32Array([1, -1, 0, 0]);
 
-class Grid {
+export class Grid {
   constructor(cols, rows) {
     this.cols = cols;
     this.rows = rows;

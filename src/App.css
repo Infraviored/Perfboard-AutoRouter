@@ -1,0 +1,61 @@
+.app-container {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) 1fr;
+  grid-template-rows: var(--topbar-height) 1fr;
+  grid-template-areas:
+    "sidebar topbar"
+    "sidebar canvas";
+  height: 100vh;
+  width: 100vw;
+  background-color: var(--bg-deep);
+  color: var(--text-main);
+  overflow: hidden;
+}
+
+.topbar {
+  grid-area: topbar;
+  background-color: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  z-index: 10;
+}
+
+.sidebar {
+  grid-area: sidebar;
+  background-color: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  overflow: hidden;
+}
+
+.canvas-area {
+  grid-area: canvas;
+  background-color: var(--bg-deep);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.comp-item {
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.comp-item:hover {
+  transform: translateX(4px);
+  filter: brightness(1.2);
+}
+
+.comp-item:active {
+  transform: scale(0.98);
+}
+
+.pcb-comp:hover {
+  filter: drop-shadow(0 0 4px var(--accent-blue));
+}
