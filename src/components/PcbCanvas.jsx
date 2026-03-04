@@ -139,17 +139,6 @@ export function PcbCanvas({
         if ((pan.x === 0 && pan.y === 0) || forceCenterToggle) {
             setPan({ x: targetX, y: targetY });
             if (forceCenterToggle) setForceCenterToggle(false);
-        } else if (isProcessing) {
-            // Smooth drift only when processing
-            setPan(prev => {
-                const dx = targetX - prev.x;
-                const dy = targetY - prev.y;
-                if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return prev;
-                return {
-                    x: prev.x + dx * 0.05,
-                    y: prev.y + dy * 0.05
-                };
-            });
         }
     }, [isProcessing, tick, components, zoom, pan.x, pan.y, forceCenterToggle]);
 

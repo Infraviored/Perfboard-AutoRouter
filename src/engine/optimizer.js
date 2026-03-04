@@ -118,6 +118,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                 moveComp(c, nx, ny);
             }
             currentWires = await route(components, vCols, vRows, () => { }, checkCancel);
+            recenterComponents(components, currentWires);
             localBestScore = scoreState(components, currentWires);
             localBestComps = saveComps(components);
             stagnation = 0;
@@ -147,6 +148,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                     }
 
                     await anneal(components, vCols, vRows, (p) => {
+                        recenterComponents(components, null);
                         setProg?.((iter / MAX_ITERS) * 100, `Iter ${iter}: SA Routing ${macroCount} — ${Math.round(p * 100)}%`);
                     }, checkCancel);
 

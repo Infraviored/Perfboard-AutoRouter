@@ -1,7 +1,7 @@
 import { route, getAllNets } from './router.js';
 import { Grid } from './grid.js';
 import { doOptimizeFootprint, doPlateauExplore } from './optimizer.js';
-import { scoreState, doRecursivePushPacking } from './optimizer-algorithms.js';
+import { scoreState, doRecursivePushPacking, recenterComponents } from './optimizer-algorithms.js';
 import { placeInitial } from './initial-placement.js';
 import { anneal, moveComp, rotateComp90InPlace } from './placer.js';
 import { saveComps, restoreComps, completion } from './state-utils.js';
@@ -160,11 +160,13 @@ export class AutorouterEngine {
 
             this.onStatusUpdate?.({ title: `Attempt ${attempt}/${maxAttempts}` });
 
-            // 1. Initial random placement
-            const currentComponents = placeInitial(compDefs, this.cols, this.rows);
+            // 1. Initial random placement centered around 0,0
+            const currentComponents = placeInitial(compDefs, 0, 0);
+            recenterComponents(currentComponents, null);
 
             // 2. Simulated Annealing
             await anneal(currentComponents, this.cols, this.rows, (p, s) => {
+                recenterComponents(currentComponents, null);
                 this.onProgress?.(p * 100, `[${attempt}/${maxAttempts}] SA — ${s}`);
             }, () => this.gCancelRequested);
 
@@ -176,6 +178,7 @@ export class AutorouterEngine {
                 (p, s) => { this.onProgress?.(p * 100, `[${attempt}/${maxAttempts}] Route — ${s}`); },
                 () => this.gCancelRequested
             );
+            recenterComponents(currentComponents, candidateWires);
 
             const c = completion(candidateWires);
             if (c > bestCompletion) {
