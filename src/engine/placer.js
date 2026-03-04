@@ -144,7 +144,6 @@ export async function anneal(components, cols, rows, onProgress, shouldCancel) {
       if (shouldCancel && shouldCancel()) return;
       const c = components[Math.floor(Math.random() * components.length)];
       const oldOx = c.ox, oldOy = c.oy;
-      const oldW = c.w, oldH = c.h;
 
       // Try rotation in-place (1 to 3 times for 90, 180, 270 deg)
       let rotationSteps = 0;

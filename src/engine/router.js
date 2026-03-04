@@ -10,7 +10,7 @@ export const getAllNets = function (components) {
   }));
   return Object.entries(m).map(([net, pins]) => ({ net, pins }));
 }
-export const route = async function (components, cols, rows, onProg, debug = false, shouldCancel = null) {
+export const route = async function (components, cols, rows, onProg, shouldCancel = null) {
   const nets = getAllNets(components);
   const grid = new Grid(cols, rows);
   components.forEach(c => grid.registerComp(c));

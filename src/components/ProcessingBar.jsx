@@ -1,0 +1,178 @@
+import React, { useMemo, useEffect } from 'react';
+import { SP, netColor, renderCompSVG } from '../engine/render-utils.js';
+
+export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
+  const active = status.isProcessing || !!status.title;
+
+  // Hooks must always run before any early return
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e) => { if (e.key === 'Escape') onGoodEnough(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onGoodEnough, active]);
+
+  // Compute bounding box of current best board
+  const preview = useMemo(() => {
+    const comps = bestSnapshot?.components;
+    const wires = bestSnapshot?.wires ?? [];
+    if (!comps?.length) return null;
+
+    let minC = Infinity, maxC = -Infinity, minR = Infinity, maxR = -Infinity;
+    comps.forEach(c => {
+      if (!isFinite(c.ox) || !isFinite(c.oy)) return;
+      minC = Math.min(minC, c.ox);
+      maxC = Math.max(maxC, c.ox + c.w);
+      minR = Math.min(minR, c.oy);
+      maxR = Math.max(maxR, c.oy + c.h);
+    });
+    if (!isFinite(minC)) return null;
+
+    wires.forEach(w => w.path?.forEach(pt => {
+      minC = Math.min(minC, pt.col);
+      maxC = Math.max(maxC, pt.col + 1);
+      minR = Math.min(minR, pt.row);
+      maxR = Math.max(maxR, pt.row + 1);
+    }));
+
+    const pad = 1;
+    minC = Math.max(0, minC - pad); minR = Math.max(0, minR - pad);
+    maxC += pad; maxR += pad;
+
+    const W = Math.round((maxC - minC) * SP);
+    const H = Math.round((maxR - minR) * SP);
+    if (W <= 0 || H <= 0) return null;
+
+    let inner = '';
+    for (let c = minC; c < maxC; c++) for (let r = minR; r < maxR; r++) {
+      const cx = Math.round((c - minC) * SP + SP / 2);
+      const cy = Math.round((r - minR) * SP + SP / 2);
+      inner += `<circle cx="${cx}" cy="${cy}" r="${Math.round(SP * .22)}" fill="#b87333"/><circle cx="${cx}" cy="${cy}" r="${Math.round(SP * .09)}" fill="#0d0a06"/>`;
+    }
+    wires.forEach(w => {
+      if (!w.path?.length || w.failed) return;
+      const pts = w.path.map(pt => `${Math.round((pt.col - minC) * SP + SP / 2)},${Math.round((pt.row - minR) * SP + SP / 2)}`).join(' ');
+      inner += `<polyline points="${pts}" fill="none" stroke="${netColor(w.net)}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+    });
+    comps.forEach(c => {
+      const sc = { ...c, ox: c.ox - minC, oy: c.oy - minR, pins: c.pins.map(p => ({ ...p, col: p.col - minC, row: p.row - minR })) };
+      inner += renderCompSVG(sc, false);
+    });
+
+    return { W, H, svg: inner };
+  }, [bestSnapshot]);
+
+  if (!active) return null;
+
+  return (
+    <div id="proc-bar">
+      {/* LEFT: progress info */}
+      <div className="pb-left">
+        <div className="pb-title">{status.title || '…'}</div>
+        {status.best && <div className="pb-best">{status.best}</div>}
+        <div className="pb-track">
+          <div className="pb-fill" style={{ width: `${status.progress}%` }} />
+        </div>
+        <button className="btn grn pb-btn" onClick={onGoodEnough}>
+          ✓ Good Enough <span className="pb-esc">Esc</span>
+        </button>
+      </div>
+
+      {/* RIGHT: bounding-box SVG cutout of current best */}
+      {preview && (
+        <div className="pb-preview">
+          <div className="pb-preview-label">current best</div>
+          <div className="pb-preview-wrap">
+            <svg
+              viewBox={`0 0 ${preview.W} ${preview.H}`}
+              style={{ maxHeight: 90, maxWidth: '100%', display: 'block' }}
+              dangerouslySetInnerHTML={{ __html: `<rect width="${preview.W}" height="${preview.H}" fill="#1a1208"/>${preview.svg}` }}
+            />
+          </div>
+        </div>
+      )}
+
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        #proc-bar {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          padding: 8px 16px;
+          background: #0d1117;
+          border-top: 2px solid var(--grn);
+          flex-shrink: 0;
+          height: 120px;
+          box-shadow: 0 -4px 24px rgba(0,217,126,.12);
+        }
+        .pb-left {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          flex: 1;
+          min-width: 0;
+        }
+        .pb-title {
+          font-size: .75em;
+          color: var(--grn);
+          font-weight: 700;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .pb-best {
+          font-size: .7em;
+          color: var(--txt1);
+          white-space: nowrap;
+        }
+        .pb-track {
+          height: 4px;
+          background: var(--bg4);
+          border-radius: 2px;
+          overflow: hidden;
+        }
+        .pb-fill {
+          height: 100%;
+          background: var(--grn);
+          transition: width .06s linear;
+        }
+        .pb-btn {
+          width: fit-content;
+          padding: 4px 14px;
+          font-size: .75em;
+        }
+        .pb-esc {
+          font-size: .8em;
+          opacity: .6;
+          margin-left: 6px;
+          background: rgba(0,0,0,.3);
+          padding: 1px 5px;
+          border-radius: 3px;
+          border: 1px solid rgba(255,255,255,.2);
+        }
+        .pb-preview {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 3px;
+          flex-shrink: 0;
+        }
+        .pb-preview-label {
+          font-size: .6em;
+          color: var(--txt2);
+          text-transform: uppercase;
+          letter-spacing: .06em;
+        }
+        .pb-preview-wrap {
+          border: 1px solid var(--border);
+          border-radius: 4px;
+          overflow: hidden;
+          height: 90px;
+          display: flex;
+          align-items: center;
+          background: #1a1208;
+        }
+      `}} />
+    </div>
+  );
+}

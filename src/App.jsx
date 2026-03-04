@@ -1,150 +1,289 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { AutorouterEngine } from './engine/engine.js';
 import { PcbCanvas } from './components/PcbCanvas.jsx';
+import { Topbar } from './components/Topbar.jsx';
+import { SidebarLeft } from './components/SidebarLeft.jsx';
+import { SidebarRight } from './components/SidebarRight.jsx';
+import { ProcessingBar } from './components/ProcessingBar.jsx';
+import { Toast } from './components/Toast.jsx';
+import { LibraryOverlay } from './components/LibraryOverlay.jsx';
+import { CompEditorOverlay } from './components/CompEditorOverlay.jsx';
 import { TEMPLATE, processTemplate } from './engine/templates.js';
-import './App.css';
+import { getAllNets } from './engine/router.js';
+import { scoreState } from './engine/optimizer-algorithms.js';
 
 function App() {
-  const [engineState, setEngineState] = useState({
-    components: [],
-    wires: [],
-    cols: 22,
-    rows: 16
-  });
-  const [status, setStatus] = useState({ title: 'Idle', progress: 0, best: '' });
-  const [selectedId, setSelectedId] = useState(null);
-
-  // Create engine instance on mount and keep it stable
+  // --- ENGINE ---
   const engine = useMemo(() => new AutorouterEngine(22, 16), []);
 
-  useEffect(() => {
-    // Connect engine callbacks to React state
-    engine.onStateChange = (newState) => {
-      setEngineState({ ...newState });
-    };
-    engine.onProgress = (progress, title) => {
-      setStatus(prev => ({ ...prev, progress, title }));
-    };
-    engine.onStatusUpdate = (update) => {
-      if (update.title) setStatus(prev => ({ ...prev, title: update.title }));
-      if (update.best) setStatus(prev => ({ ...prev, best: update.best }));
-    };
-    engine.onToast = (msg, type) => {
-      console.log(`[TOAST ${type}] ${msg}`);
-      // In a real app, use a toast library or custom component
-    };
+  // --- STATE ---
+  const [board, setBoard] = useState({ components: [], wires: [], cols: 22, rows: 16 });
+  const [status, setStatus] = useState({ title: '', progress: 0, best: '', isProcessing: false });
+  const [toast, setToast] = useState({ msg: '', type: 'ok' });
+  const [selectedId, setSelectedId] = useState(null);
+  const [hoveredNet, setHoveredNet] = useState(null);
+  const [autoOptimize, setAutoOptimize] = useState(true);
+  const [tool, setTool] = useState('sel');
+  const [jsonInput, setJsonInput] = useState('');
+  const [bestSnapshot, setBestSnapshot] = useState(null);
 
-    // Initial setup
-    const initialComps = processTemplate(TEMPLATE);
-    engine.initializeBoard(initialComps);
+
+  // Modal states
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [editingComp, setEditingComp] = useState(null);
+
+  // History for Undo/Redo
+  const [history, setHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // --- ACTIONS ---
+  const saveHistory = useCallback(() => {
+    const snap = JSON.stringify({
+      components: engine.components,
+      wires: engine.wires,
+      cols: engine.cols,
+      rows: engine.rows
+    });
+    setHistory(prev => {
+      const next = prev.slice(0, historyIndex + 1);
+      next.push(snap);
+      if (next.length > 30) next.shift();
+      setHistoryIndex(next.length - 1);
+      return next;
+    });
+  }, [engine, historyIndex]);
+
+  const handleLoadTemplate = useCallback(() => {
+    setJsonInput(JSON.stringify(TEMPLATE, null, 2));
+    const defs = processTemplate(TEMPLATE);
+    engine.initializeBoard(defs);
+    saveHistory();
+  }, [engine, saveHistory]);
+
+  const handleLoadCircuit = useCallback(() => {
+    try {
+      const data = JSON.parse(jsonInput);
+      const cols = data.board?.cols || 22;
+      const rows = data.board?.rows || 16;
+      engine.setState({ cols, rows });
+      const defs = processTemplate(data);
+      if (defs) {
+        engine.initializeBoard(defs);
+        saveHistory();
+      }
+    } catch (e) {
+      setToast({ msg: 'Parse error: ' + e.message, type: 'err' });
+    }
+  }, [engine, jsonInput, saveHistory]);
+
+  const handlePlaceAndRoute = useCallback(async () => {
+    setStatus(prev => ({ ...prev, isProcessing: true }));
+    try {
+      const data = JSON.parse(jsonInput);
+      const defs = processTemplate(data);
+      await engine.placeAndRoute(defs, autoOptimize);
+    } catch (e) {
+      setToast({ msg: 'Error: ' + e.message, type: 'err' });
+    }
+    setStatus(prev => ({ ...prev, isProcessing: false, title: '' }));
+    saveHistory();
+  }, [engine, jsonInput, autoOptimize, saveHistory]);
+
+  const handleUndo = useCallback(() => {
+    if (historyIndex > 0) {
+      const prev = JSON.parse(history[historyIndex - 1]);
+      engine.setState(prev);
+      setHistoryIndex(historyIndex - 1);
+    }
+  }, [history, historyIndex, engine]);
+
+  const handleRedo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      const next = JSON.parse(history[historyIndex + 1]);
+      engine.setState(next);
+      setHistoryIndex(historyIndex + 1);
+    }
+  }, [history, historyIndex, engine]);
+
+  const handleCopyPrompt = useCallback(() => {
+    const prompt = `Act as an expert electronics designer. Generate a JSON circuit definition for the following request: "Simple ESP32 power controller with relay".
+Use this format:
+{
+  "board": { "cols": 24, "rows": 16 },
+  "components": [
+    { "id": "U1", "name": "ESP32", "pins": [{"offset": [0,0], "label": "GND", "net": "GND"}] }
+  ]
+}`;
+    navigator.clipboard.writeText(prompt);
+    setToast({ msg: 'Prompt template copied!', type: 'ok' });
+  }, []);
+
+  const handleRouteOnly = useCallback(async () => {
+    setStatus(prev => ({ ...prev, isProcessing: true }));
+    await engine.routeOnly();
+    setStatus(prev => ({ ...prev, isProcessing: false, title: '' }));
+    saveHistory();
+  }, [engine, saveHistory]);
+
+  const handleClearWires = useCallback(() => {
+    engine.setState({ wires: [] });
+    saveHistory();
+  }, [engine, saveHistory]);
+
+  const handleReset = useCallback(() => {
+    if (window.confirm('Reset everything?')) handleLoadTemplate();
+  }, [handleLoadTemplate]);
+
+  const handleAddFromLibrary = useCallback((compDef) => {
+    const newId = `C${board.components.length + 1}`;
+    let mw = 0, mh = 0;
+    compDef.pins.forEach(p => {
+      mw = Math.max(mw, p.offset[0] + 1);
+      mh = Math.max(mh, p.offset[1] + 1);
+    });
+    const newComp = {
+      id: newId, name: compDef.name, value: compDef.value, color: compDef.color,
+      w: mw, h: mh, ox: 5, oy: 5,
+      pins: compDef.pins.map(p => ({
+        dCol: p.offset[0], dRow: p.offset[1],
+        col: 5 + p.offset[0], row: 5 + p.offset[1],
+        lbl: p.label, net: ''
+      }))
+    };
+    engine.setState({ components: [...board.components, newComp], wires: [] });
+    setIsLibraryOpen(false);
+    setSelectedId(newId);
+    saveHistory();
+  }, [board.components, engine, saveHistory]);
+
+  const handleSaveEdit = useCallback((updated) => {
+    engine.setState({ components: board.components.map(c => c.id === updated.id ? updated : c), wires: [] });
+    setIsEditorOpen(false);
+    saveHistory();
+    setToast({ msg: 'Component saved', type: 'ok' });
+  }, [board.components, engine, saveHistory]);
+
+  const handleCutToBoundingBox = useCallback(() => {
+    engine.setState(engine.cutToBoundingBox());
+    saveHistory();
+  }, [engine, saveHistory]);
+
+  const handleExportState = useCallback(() => {
+    const state = { board: { cols: board.cols, rows: board.rows }, components: board.components, wires: board.wires };
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'pcb_state.json'; a.click();
+    URL.revokeObjectURL(url);
+  }, [board]);
+
+  // --- ENGINE SYNC ---
+  useEffect(() => {
+    engine.setCallbacks({
+      onStateChange: (newState) => setBoard(prev => ({ ...prev, ...newState })),
+      onProgress: (p, t) => setStatus(prev => ({ ...prev, progress: p, title: t })),
+      onStatusUpdate: (upd) => setStatus(prev => ({ ...prev, ...upd })),
+      onToast: (msg, type) => setToast({ msg, type }),
+      onBestSnapshot: (snapshot) => setBestSnapshot(snapshot)
+    });
   }, [engine]);
 
-  const handleLoadTemplate = () => {
-    const comps = processTemplate(TEMPLATE);
-    engine.initializeBoard(comps);
-  };
 
-  const handleClear = () => {
-    engine.setState({ components: [], wires: [] });
-  };
+  // --- KEYBOARD SHORTCUTS ---
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.ctrlKey && e.key === 'z') { e.preventDefault(); handleUndo(); }
+      if (e.ctrlKey && e.key === 'y') { e.preventDefault(); handleRedo(); }
+      if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); handlePlaceAndRoute(); }
+      if (e.shiftKey && e.key === 'R') { e.preventDefault(); handleRouteOnly(); }
+      if (e.key === 'v') { e.preventDefault(); setTool('sel'); }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo, handlePlaceAndRoute, handleRouteOnly]);
 
-  const handleOptimize = async () => {
-    await engine.optimize();
-  };
+  // --- INITIAL LOAD ---
+  useEffect(() => {
+    const timer = setTimeout(() => handleLoadTemplate(), 0);
+    return () => clearTimeout(timer);
+  }, [handleLoadTemplate]);
 
-  const handlePlateau = async () => {
-    await engine.plateau();
-  };
+  // --- DERIVED STATS ---
+  const stats = useMemo(() => {
+    const nets = getAllNets(board.components);
+    const score = scoreState(board.components, board.wires);
+    const routedNum = board.wires.filter(w => !w.failed).length;
+    const totalConns = nets.reduce((sum, n) => sum + n.pins.length - 1, 0);
+    return {
+      components: board.components.length,
+      nets: nets.length,
+      routed: routedNum,
+      failed: board.wires.filter(w => w.failed).length,
+      wireLength: score.wl,
+      footprint: `${score.width}×${score.height}`,
+      area: score.area,
+      completion: totalConns > 0 ? Math.round((routedNum / totalConns) * 100) : null
+    };
+  }, [board]);
 
-  const selectedComp = useMemo(() =>
-    engineState.components.find(c => c.id === selectedId),
-    [engineState.components, selectedId]
-  );
+  const netsMap = useMemo(() => {
+    const m = {};
+    board.components.forEach(c => c.pins.forEach(p => {
+      if (p.net) {
+        if (!m[p.net]) m[p.net] = [];
+        m[p.net].push(p);
+      }
+    }));
+    return m;
+  }, [board.components]);
+
+  const selectedComp = useMemo(() => board.components.find(c => c.id === selectedId), [board.components, selectedId]);
 
   return (
-    <div className="app-container">
-      {/* 1. Sidebar */}
-      <aside className="sidebar">
-        <header className="panel-header">Components</header>
-        <div className="scroll-container">
-          {engineState.components.length === 0 ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
-              No components loaded.
-            </div>
-          ) : (
-            engineState.components.map(c => (
-              <div
-                key={c.id}
-                className="comp-item"
-                onClick={() => setSelectedId(c.id)}
-                style={{
-                  padding: '12px',
-                  marginBottom: '8px',
-                  borderRadius: '6px',
-                  background: selectedId === c.id ? 'var(--bg-hover)' : 'var(--bg-elevated)',
-                  border: `1px solid ${selectedId === c.id ? c.color : 'var(--border)'}`,
-                  cursor: 'pointer'
-                }}
-              >
-                <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{c.id}: {c.value}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{c.name}</div>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Selected Component Details */}
-        {selectedComp && (
-          <div style={{ padding: '1rem', borderTop: '1px solid var(--border)', background: 'var(--bg-deep)' }}>
-            <div style={{ fontSize: '0.8rem', color: 'var(--accent-blue)', fontWeight: 700, marginBottom: 8 }}>EDIT SELECTION</div>
-            <div style={{ fontSize: '0.9rem', marginBottom: 4 }}>{selectedComp.id} Properties</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pos: {selectedComp.ox}, {selectedComp.oy}</div>
-          </div>
-        )}
-
-        {/* Stats Footer */}
-        <div style={{ padding: '1rem', borderTop: '1px solid var(--border)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-          {status.best || 'No stats yet'}
-        </div>
-      </aside>
-
-      {/* 2. Topbar */}
-      <header className="topbar">
-        <div style={{ fontWeight: 800, color: 'var(--accent-green)', letterSpacing: '-0.02em', marginRight: '2rem', fontSize: '1.1rem' }}>
-          PERFBOARD<span style={{ color: 'var(--text-main)', opacity: 0.6 }}>ROUTER</span>
-        </div>
-
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="button-primary" onClick={handleOptimize}>OPTIMIZE</button>
-          <button className="button-secondary" onClick={handlePlateau}>PLATEAU</button>
-          <button className="button-secondary" onClick={() => engine.cancel()}>CANCEL</button>
-          <div style={{ width: 1, background: 'var(--border)', height: '24px', alignSelf: 'center', margin: '0 4px' }}></div>
-          <button className="button-secondary" onClick={handleLoadTemplate}>TEMPLATE</button>
-          <button className="button-secondary" onClick={handleClear} style={{ color: 'var(--accent-red)' }}>CLEAR</button>
-        </div>
-
-        {/* Task Progress Inline */}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{status.title}</div>
-            <div style={{ height: '4px', width: '120px', background: 'var(--bg-deep)', borderRadius: '2px', overflow: 'hidden', marginTop: 4 }}>
-              <div style={{ width: `${status.progress}%`, height: '100%', background: 'var(--accent-blue)', transition: 'width 0.2s' }}></div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* 3. Canvas Area */}
-      <main className="canvas-area">
-        <PcbCanvas
-          components={engineState.components}
-          wires={engineState.wires}
-          cols={engineState.cols}
-          rows={engineState.rows}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
+    <div className="app-main">
+      <Topbar
+        tool={tool} setTool={setTool} autoOptimize={autoOptimize} setAutoOptimize={setAutoOptimize}
+        onPlaceAndRoute={handlePlaceAndRoute} onOptimizeFootprint={() => engine.optimize()}
+        onPlateauExplore={() => engine.plateau()} onRouteOnly={handleRouteOnly}
+        onClearWires={handleClearWires} onReset={handleReset} onUndo={handleUndo} onRedo={handleRedo}
+        onExportState={handleExportState} onExportSVG={() => {/* SVG Export Logic */ }}
+      />
+      <div id="layout">
+        <SidebarLeft
+          cols={board.cols} rows={board.rows} onApplyBoard={(c, r) => engine.setState({ cols: c, rows: r })}
+          onCutToBoundingBox={handleCutToBoundingBox}
+          onCopyPrompt={handleCopyPrompt}
+          jsonInput={jsonInput} setJsonInput={setJsonInput} onLoadCircuit={handleLoadCircuit}
+          onLoadTemplate={handleLoadTemplate} components={board.components} selectedId={selectedId}
+          onSelectComponent={setSelectedId} onOpenLibrary={() => setIsLibraryOpen(true)}
+          onAddNewComponent={() => { }} onEditComponent={(id) => { setEditingComp(board.components.find(x => x.id === id)); setIsEditorOpen(true); }}
         />
-      </main>
+        <div id="ca-col">
+          <main id="ca">
+            <PcbCanvas
+              components={board.components} wires={board.wires} cols={board.cols} rows={board.rows}
+              selectedId={selectedId} onSelect={setSelectedId} hoveredNet={hoveredNet}
+            />
+          </main>
+          <ProcessingBar
+            status={status}
+            bestSnapshot={bestSnapshot}
+            onGoodEnough={() => { engine.cancel(); setStatus({ title: '', progress: 0, best: '', isProcessing: false }); setBestSnapshot(null); }}
+          />
+        </div>
+        <SidebarRight stats={stats} selectedComp={selectedComp} nets={netsMap} hoveredNet={hoveredNet} setHoveredNet={setHoveredNet} />
+      </div>
+      <Toast key={toast.msg} msg={toast.msg} type={toast.type} onClear={() => setToast({ msg: '', type: 'ok' })} />
+      <LibraryOverlay isOpen={isLibraryOpen} onClose={() => setIsLibraryOpen(false)} onSelect={handleAddFromLibrary} />
+      <CompEditorOverlay key={editingComp?.id} isOpen={isEditorOpen} component={editingComp} onClose={() => setIsEditorOpen(false)} onSave={handleSaveEdit} />
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        .app-main { display: flex; flex-direction: column; height: 100vh; width: 100vw; overflow: hidden; background: var(--bg0); }
+        #layout { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+        #ca-col { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+        #ca { flex: 1; position: relative; background: #050706; overflow: hidden; border-radius: 4px; margin: 4px; box-shadow: inset 0 0 40px rgba(0,0,0,0.8); min-height: 0; }
+      `}} />
     </div>
   );
 }

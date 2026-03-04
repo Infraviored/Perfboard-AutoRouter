@@ -1,7 +1,9 @@
-import { doOptimizeFootprint, doPlateauExplore } from './optimizer.js';
 import { route } from './router.js';
-import { scoreState } from './optimizer-algorithms.js';
+import { doOptimizeFootprint, doPlateauExplore } from './optimizer.js';
+import { scoreState, doRecursivePushPacking } from './optimizer-algorithms.js';
 import { placeInitial } from './initial-placement.js';
+import { anneal } from './placer.js';
+import { saveComps, restoreComps, completion } from './state-utils.js';
 
 /**
  * AutorouterEngine - A "Headless" wrapper for the PCB autorouting logic.
@@ -29,13 +31,15 @@ export class AutorouterEngine {
         this.onProgress = null;
         this.onStatusUpdate = null;
         this.onToast = null;
+        this.onBestSnapshot = null;
     }
 
-    setCallbacks({ onStateChange, onProgress, onStatusUpdate, onToast }) {
+    setCallbacks({ onStateChange, onProgress, onStatusUpdate, onToast, onBestSnapshot }) {
         if (onStateChange) this.onStateChange = onStateChange;
         if (onProgress) this.onProgress = onProgress;
         if (onStatusUpdate) this.onStatusUpdate = onStatusUpdate;
         if (onToast) this.onToast = onToast;
+        if (onBestSnapshot) this.onBestSnapshot = onBestSnapshot;
     }
 
     setState(newState) {
@@ -70,7 +74,8 @@ export class AutorouterEngine {
                 this.components = state.components;
                 this.wires = state.wires;
                 this.notify();
-            }
+            },
+            onBestSnapshot: (snapshot) => { this.onBestSnapshot?.(snapshot); }
         };
 
         const res = await doOptimizeFootprint(
@@ -83,7 +88,6 @@ export class AutorouterEngine {
         );
 
         if (res.improved) {
-            this.components = this.components; // already updated by callback
             this.wires = res.wires;
             this.notify();
         }
@@ -124,12 +128,78 @@ export class AutorouterEngine {
             this.cols,
             this.rows,
             (p, m) => this.onProgress?.(p * 100, m),
-            false,
             () => this.gCancelRequested
         );
         this.wires = testWires;
         this.notify();
         return scoreState(this.components, testWires);
+    }
+
+    async placeAndRoute(compDefs, autoOptimize = true) {
+        if (!compDefs || compDefs.length === 0) {
+            this.onToast?.('No components to place', 'warn');
+            return;
+        }
+
+        this.gCancelRequested = false;
+        const maxAttempts = 100;
+        let bestWires = null;
+        let bestComps = null;
+        let bestCompletion = 0;
+
+        this.onStatusUpdate?.({ title: 'Initializing...' });
+        this.onProgress?.(0, 'Starting placement...');
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            if (this.gCancelRequested) break;
+
+            this.onStatusUpdate?.({ title: `Attempt ${attempt}/${maxAttempts}` });
+
+            // 1. Initial random placement
+            const currentComponents = placeInitial(compDefs, this.cols, this.rows);
+
+            // 2. Simulated Annealing
+            await anneal(currentComponents, this.cols, this.rows, (p, s) => {
+                this.onProgress?.(p * 100, `[${attempt}/${maxAttempts}] SA — ${s}`);
+            }, () => this.gCancelRequested);
+
+            if (this.gCancelRequested) break;
+
+            // 3. Routing
+            const candidateWires = await route(
+                currentComponents, this.cols, this.rows,
+                (p, s) => { this.onProgress?.(p * 100, `[${attempt}/${maxAttempts}] Route — ${s}`); },
+                () => this.gCancelRequested
+            );
+
+            const c = completion(candidateWires);
+            if (c > bestCompletion) {
+                bestCompletion = c;
+                bestWires = candidateWires;
+                bestComps = saveComps(currentComponents);
+            }
+
+            if (c === 1.0) break; // Found 100% solution
+        }
+
+        if (bestComps) {
+            this.components = placeInitial(compDefs, this.cols, this.rows); // Reset structure
+            restoreComps(this.components, bestComps);
+            this.wires = bestWires;
+
+            if (bestCompletion === 1.0 && autoOptimize) {
+                this.onProgress?.(0, 'Optimizing footprint...');
+                const res = await doRecursivePushPacking(this.components, this.wires, this.cols, this.rows, () => this.gCancelRequested);
+                this.wires = res.wires;
+            }
+
+            this.notify();
+            if (bestCompletion === 1.0) {
+                this.onToast?.('Perfect routing achieved!', 'ok');
+            } else {
+                this.onToast?.(`Best completion: ${Math.round(bestCompletion * 100)}%`, 'warn');
+            }
+        }
     }
 
     initializeBoard(compDefs) {

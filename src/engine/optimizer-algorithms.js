@@ -344,7 +344,7 @@ export async function postOptimizePlateauTree(components, wires, startBestScore,
 
       // Compute actual routing metrics before adopting
       restoreComps(components, n.comps);
-      const testWires = await route(components, cols, rows, () => { }, false, () => gCancelRequested);
+      const testWires = await route(components, cols, rows, () => { }, () => gCancelRequested);
       n.wires = testWires;
       n.score = scoreState(components, testWires);
 
@@ -437,14 +437,13 @@ export async function tryShrinkAlongWires(components, currentWires, bestScore, c
     const dirs = pickShrinkDirsForComp(c, components);
     for (const d of dirs) {
       restoreComps(components, original);
-      let wires = originalWires;
 
       const visited = new Set();
       const ok = tryTranslateWithPush(c, d.dx, d.dy, cols, rows, visited, 0, components);
       if (!ok) continue;
       if (anyOverlap(c, components)) continue;
 
-      const testWires = await route(components, cols, rows, () => { }, false, () => gCancelRequested);
+      const testWires = await route(components, cols, rows, () => { }, () => gCancelRequested);
       const testScore = scoreState(components, testWires);
 
       // Only allow moves that keep routing completion and improve score.
@@ -484,7 +483,6 @@ export async function explorePlateauStates(components, currentWires, bestScore, 
 
     for (let rot = 0; rot < 4; rot++) {
       restoreComps(components, original);
-      let wires = originalWires;
 
       const cc = components.find(x => x.id === c.id);
       const rotOrig = { w: cc.w, h: cc.h, pins: cc.pins.map(p => ({ dCol: p.dCol, dRow: p.dRow })) };
@@ -524,7 +522,7 @@ export async function explorePlateauStates(components, currentWires, bestScore, 
             testScore.wl < bestLocalScore.wl
           )) {
             // Need actual routing if we pretend we improved
-            const testWires = await route(components, cols, rows, () => { }, false, () => gCancelRequested);
+            const testWires = await route(components, cols, rows, () => { }, () => gCancelRequested);
             const realScore = scoreState(components, testWires);
             if (realScore.comp < bestScore.comp) continue;
 
@@ -571,7 +569,7 @@ export async function tryRotateOptimize(components, wires, cols, rows, gCancelRe
 
       if (anyOverlap(c, components)) continue;
 
-      const testWires = await route(components, cols, rows, () => { }, false, () => gCancelRequested);
+      const testWires = await route(components, cols, rows, () => { }, () => gCancelRequested);
       const testScore = scoreState(components, testWires);
 
       if (isScoreBetter(testScore, bestScore)) {
@@ -671,7 +669,7 @@ export async function doRecursivePushPacking(components, wires, cols, rows, gCan
     }
 
     if (moveOccurred) {
-      const testWires = await route(components, cols, rows, () => { }, false, () => gCancelRequested);
+      const testWires = await route(components, cols, rows, () => { }, () => gCancelRequested);
       const testScore = scoreState(components, testWires);
 
       if (isScoreBetter(testScore, bestScore) || (
@@ -715,7 +713,7 @@ export async function tryGlobalNudge(components, wires, bestScore, cols, rows, g
     // Apply the translation atomically.
     for (const c of components) moveComp(c, c.ox + d.dx, c.oy + d.dy);
 
-    const testWires = await route(components, cols, rows, () => { }, false, () => gCancelRequested);
+    const testWires = await route(components, cols, rows, () => { }, () => gCancelRequested);
     const testScore = scoreState(components, testWires);
     if (isScoreBetter(testScore, bestScore)) {
       return { improved: true, score: testScore, wires: testWires };

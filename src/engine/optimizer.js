@@ -15,10 +15,10 @@ import {
     tryGlobalNudge
 } from './optimizer-algorithms.js';
 import { saveComps, restoreComps } from './state-utils.js';
-import { moveComp, rotateComp90InPlace, anneal } from './placer.js';
+import { moveComp, rotateComp90InPlace, anneal, anyOverlap } from './placer.js';
 
 export async function doOptimizeFootprint(components, wires, cols, rows, config, options = {}) {
-    const { onProgress, onStatusUpdate, onStateChange, onToast } = options;
+    const { onProgress, onStatusUpdate, onStateChange, onBestSnapshot, onToast } = options;
     const toast = onToast;
     const setProg = onProgress;
     const setBestLine = (msg) => onStatusUpdate?.({ best: msg });
@@ -33,11 +33,22 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
         return gCancelRequested;
     };
 
-    const updateUIState = () => {
-        onStateChange?.({ components, wires: currentWires, cols: uiCols, rows: uiRows });
+    // Flash the main canvas with whatever intermediate state we're exploring
+    const flashUIState = () => {
+        // Spread each component so React sees new references and re-renders positions
+        onStateChange?.({ components: components.map(c => ({ ...c, pins: c.pins })), wires: currentWires, cols: uiCols, rows: uiRows });
+    };
+    // Push a new "best" snapshot to the bottom bar preview, using full component arrays
+    const pushHydratedBest = (liveComps, ws) => {
+        const hydratedComps = liveComps.map(c => ({
+            ...c,
+            pins: c.pins.map(p => ({ ...p, col: c.ox + p.dCol, row: c.oy + p.dRow }))
+        }));
+        onBestSnapshot?.({ components: hydratedComps, wires: ws });
     };
 
     if (!components.length) { toast?.('No components to optimize', 'warn'); return; }
+
 
     const MAX_EPOCHS = config.maxEpochs || 1;
     let MAX_ITERS = config.maxIters || 100;
@@ -55,7 +66,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
     setBestLine('');
 
     const startSnapshot = saveComps(components);
-    const startWires = await route(components, uiCols, uiRows, () => { }, false, checkCancel);
+    const startWires = await route(components, uiCols, uiRows, () => { }, checkCancel);
     const startScore = scoreState(components, startWires);
     currentWires = startWires;
 
@@ -85,6 +96,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
 
     let bestUiMsg = `Best: ${formatScore(globalBestScore)}`;
     setBestLine(bestUiMsg);
+    pushHydratedBest(components, globalBestWires);
 
     // Track Progress of Current Search Branch
     let localBestScore = globalBestScore;
@@ -138,7 +150,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
 
                 moveComp(c, nx, ny);
             }
-            currentWires = await route(components, vCols, vRows, () => { }, false, checkCancel);
+            currentWires = await route(components, vCols, vRows, () => { }, checkCancel);
             localBestScore = scoreState(components, currentWires);
             localBestComps = saveComps(components);
             stagnation = 0;
@@ -169,7 +181,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                         stagnation = 6;
                     }
 
-                    await anneal(components, vCols, vRows, (p, s) => {
+                    await anneal(components, vCols, vRows, (p) => {
                         setProg?.((iter / MAX_ITERS) * 100, `Iter ${iter}: SA Routing ${macroCount} — ${Math.round(p * 100)}%`);
                     }, checkCancel);
 
@@ -260,7 +272,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                 continue;
             }
 
-            const testWires = await route(components, uiCols, uiRows, () => { }, false, checkCancel);
+            const testWires = await route(components, uiCols, uiRows, () => { }, checkCancel);
             const testScore = scoreState(components, testWires);
 
             if (isScoreBetter(testScore, globalBestScore)) {
@@ -272,7 +284,9 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                 setBestLine(`Best: ${formatScore(testScore)}`);
                 if (isScoreBetter(testScore, startScore)) {
                     currentWires = globalBestWires;
-                    updateUIState();
+
+                    // Push best snapshot to bottom bar
+                    pushHydratedBest(components, globalBestWires);
                 }
             }
             else if (isScoreBetter(testScore, localBestScore)) {
@@ -284,6 +298,8 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                 stagnation++;
             }
 
+            // Flash the canvas so the user sees the AI "thinking"
+            flashUIState();
             await new Promise(r => setTimeout(r, 0));
             restoreComps(components, preEval);
         } // End Iter Loop
@@ -302,7 +318,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
     }
 
     setBestLine('');
-    updateUIState();
+    flashUIState();
     if (checkCancel()) toast?.('Optimization cancelled — kept best so far', 'inf');
     else toast?.(`Optimization complete!`, "ok");
 
@@ -323,7 +339,7 @@ export async function doPlateauExplore(components, wires, cols, rows, options = 
     if (!components.length) { toast('No components loaded', 'warn'); return; }
 
     const startSnapshot = saveComps(components);
-    let bestWires = await route(components, cols, rows, () => { }, false, checkCancel);
+    let bestWires = await route(components, cols, rows, () => { }, checkCancel);
     let bestScore = scoreState(components, bestWires);
     const startScore = bestScore;
     currentWires = bestWires;
@@ -381,7 +397,7 @@ export async function doPlateauExplore(components, wires, cols, rows, options = 
             if (checkCancel()) break;
 
             restoreComps(components, n.comps);
-            const testWires = await route(components, cols, rows, () => { }, false, checkCancel);
+            const testWires = await route(components, cols, rows, () => { }, checkCancel);
             n.wires = testWires;
             n.score = scoreState(components, testWires);
 

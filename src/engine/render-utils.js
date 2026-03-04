@@ -1,11 +1,13 @@
 import { getAllNets } from './router.js';
 
-const SP = 1.0; // Standard pitch
-const NET_PAL = {};
+export const SP = 28; // Standard pitch - 28px
+const NET_PAL = {
+  VCC: '#ff5252', GND: '#40c4ff', GATE: '#00e676',
+  DRAIN: '#e040fb', SOURCE: '#ff9800', CLK: '#ffea00',
+  DATA: '#9c27b0', ADDR: '#00bcd4', CTRL: '#4caf50',
+  RESET: '#f44336', CLKEN: '#ff5722', EN: '#795548'
+};
 const netColorCache = new Map();
-let hovNet = null;
-let dragging = false;
-let cachedRatsnest = null;
 
 export function netColor(n) {
   if (!n) return '#666';
@@ -24,8 +26,23 @@ export function netColor(n) {
   return color;
 }
 
+export function generateBackgroundSVG(cols, rows) {
+  const W = cols * SP;
+  const H = rows * SP;
+  return `
+    <defs>
+      <pattern id="perfPattern" patternUnits="userSpaceOnUse" width="${SP}" height="${SP}">
+        <rect width="${SP}" height="${SP}" fill="#1a1208"/>
+        <circle cx="${SP / 2}" cy="${SP / 2}" r="${SP * .22}" fill="#b87333"/>
+        <circle cx="${SP / 2}" cy="${SP / 2}" r="${SP * .09}" fill="#0d0a06"/>
+      </pattern>
+    </defs>
+    <rect width="${W}" height="${H}" fill="url(#perfPattern)"/>
+    <rect x="1" y="1" width="${W - 2}" height="${H - 2}" fill="none" stroke="#c8a800" stroke-width="2"/>
+  `;
+}
 
-export function generateWiresSVG(wires) {
+export function generateWiresSVG(wires, hoveredNet = null) {
   let out = '';
   wires.forEach(w => {
     if (w.failed) {
@@ -34,22 +51,20 @@ export function generateWiresSVG(wires) {
       return;
     }
 
-    const strokeW = hovNet === w.net ? 4.5 : 2.8;
+    const strokeW = hoveredNet === w.net ? 4.5 : 2.8;
     const pts = w.path.map(pt => `${pt.col * SP + SP / 2},${pt.row * SP + SP / 2}`).join(' ');
     out += `<polyline points="${pts}" fill="none" stroke="${netColor(w.net)}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round"/>`;
   });
   return out;
 }
 
-
 export function generateRatsnestSVG(components) {
-  if (dragging && cachedRatsnest) return cachedRatsnest;
-
   const nets = getAllNets(components);
   let out = '';
-  for (const net in nets) {
-    if (nets[net].length < 2) continue;
-    const pins = nets[net];
+  for (const netObj of nets) {
+    const { net, pins } = netObj;
+    if (pins.length < 2) continue;
+
     const conn = new Set([0]);
     while (conn.size < pins.length) {
       let bD = Infinity, bI = -1, bJ = -1;
@@ -59,46 +74,42 @@ export function generateRatsnestSVG(components) {
         if (d < bD) { bD = d; bI = i; bJ = j; }
       }));
       if (bJ === -1) break;
-      // FIX: Use opacity attribute instead of concatenating '55' to the color string!
       out += `<line x1="${pins[bI].col * SP + SP / 2}" y1="${pins[bI].row * SP + SP / 2}" x2="${pins[bJ].col * SP + SP / 2}" y2="${pins[bJ].row * SP + SP / 2}" stroke="${netColor(net)}" opacity="0.35" stroke-width="0.8" stroke-dasharray="2 5"/>`;
       conn.add(bJ);
     }
   }
-  cachedRatsnest = out;
   return out;
 }
 
-
-export function renderCompSVG(c, isSelected = false, isHovered = false) {
+export function renderCompSVG(c, isSelected = false) {
   const bx = c.ox * SP + SP * .08, by = c.oy * SP + SP * .08;
   const bw = c.w * SP - SP * .16, bh = c.h * SP - SP * .16;
 
-  let out = `<g transform="translate(0,0)">`;
+  let out = `<g class="pcb-comp" data-id="${c.id}">`;
 
-  // 1. Draw Component Base (Use the exact component color as thick rim, and a darker tinted fill)
+  // 1. Draw Component Base
   out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="#111" stroke="${c.color}" stroke-width="2.5"/>`;
-  // Add a slight colored tint to the background of the component
   out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="${c.color}" opacity="0.3"/>`;
 
-  // 2. Draw Pins First (so component labels can render over them if needed)
+  // 2. Draw Pins
   c.pins.forEach(p => {
     const px = p.col * SP + SP / 2, py = p.row * SP + SP / 2;
     out += `<circle cx="${px}" cy="${py}" r="${SP * .28}" fill="#b87333"/>`;
     out += `<circle cx="${px}" cy="${py}" r="${SP * .2}" fill="${netColor(p.net)}"/>`;
     out += `<circle cx="${px}" cy="${py}" r="${SP * .09}" fill="#0d0a06"/>`;
-
-    // Pin Labels moved down slightly to prevent overlapping the center hole
     out += `<text x="${px}" y="${py + SP * .42}" fill="rgba(230,230,230,.9)" font-family="monospace" font-size="${Math.min(SP * .25, 7)}" text-anchor="middle">${p.lbl}</text>`;
   });
 
-  // 3. Draw Component Labels Last (On Top)
-  // Shifted component name to the TOP of the component box instead of center/bottom
+  // 3. Draw Component Labels
   out += `<text x="${bx + 3}" y="${by + SP * 0.35}" fill="#fff" font-family="'Consolas',monospace" font-size="${Math.min(SP * .3, 9)}" font-weight="bold" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${c.id}: ${c.value}</text>`;
+
+  if (isSelected) {
+    out += `<rect x="${c.ox * SP - 4}" y="${c.oy * SP - 4}" width="${c.w * SP + 8}" height="${c.h * SP + 8}" fill="none" stroke="#3b82f6" stroke-width="2" stroke-dasharray="4 2"/>`;
+  }
 
   out += `</g>`;
   return out;
 }
-
 
 export function hitComp(col, row, components) {
   return components.find(c =>
