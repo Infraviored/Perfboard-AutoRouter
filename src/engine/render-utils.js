@@ -160,7 +160,7 @@ export function generateBoundingBoxSVG(components, wires = []) {
 
   if (!isFinite(minC)) return '';
 
-  const pad = 1;
+  const pad = 0;
   const x = (minC - pad) * SP;
   const y = (minR - pad) * SP;
   const w = (maxC - minC + pad * 2) * SP;
