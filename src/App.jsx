@@ -8,6 +8,7 @@ import { ProcessingBar } from './components/ProcessingBar.jsx';
 import { Toast } from './components/Toast.jsx';
 import { LibraryOverlay } from './components/LibraryOverlay.jsx';
 import { CompEditorOverlay } from './components/CompEditorOverlay.jsx';
+import { PromptOverlay } from './components/PromptOverlay.jsx';
 import { TEMPLATE, processTemplate } from './engine/templates.js';
 import { getAllNets } from './engine/router.js';
 import { scoreState } from './engine/optimizer-algorithms.js';
@@ -31,6 +32,7 @@ function App() {
   // Modal states
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isPromptOpen, setIsPromptOpen] = useState(false);
   const [editingComp, setEditingComp] = useState(null);
 
   // History for Undo/Redo
@@ -264,11 +266,12 @@ Use this format:
         <SidebarLeft
           cols={board.cols} rows={board.rows} onApplyBoard={(c, r) => engine.setState({ cols: c, rows: r })}
           onCutToBoundingBox={handleCutToBoundingBox}
-          onCopyPrompt={handleCopyPrompt}
+          onOpenPrompt={() => setIsPromptOpen(true)}
           jsonInput={jsonInput} setJsonInput={setJsonInput} onLoadCircuit={handleLoadCircuit}
           onLoadTemplate={handleLoadTemplate} components={board.components} selectedId={selectedId}
           onSelectComponent={setSelectedId} onOpenLibrary={() => setIsLibraryOpen(true)}
-          onAddNewComponent={() => { }} onEditComponent={(id) => { setEditingComp(board.components.find(x => x.id === id)); setIsEditorOpen(true); }}
+          onAddNewComponent={() => { setEditingComp(null); setIsEditorOpen(true); }}
+          onEditComponent={(id) => { setEditingComp(board.components.find(x => x.id === id)); setIsEditorOpen(true); }}
         />
         <div id="ca-col">
           <main id="ca">
@@ -290,6 +293,7 @@ Use this format:
       <Toast key={toast.msg} msg={toast.msg} type={toast.type} onClear={() => setToast({ msg: '', type: 'ok' })} />
       <LibraryOverlay isOpen={isLibraryOpen} onClose={() => setIsLibraryOpen(false)} onSelect={handleAddFromLibrary} />
       <CompEditorOverlay key={editingComp?.id} isOpen={isEditorOpen} component={editingComp} onClose={() => setIsEditorOpen(false)} onSave={handleSaveEdit} />
+      <PromptOverlay isOpen={isPromptOpen} onClose={() => setIsPromptOpen(false)} />
       <style dangerouslySetInnerHTML={{
         __html: `
         .app-main { display: flex; flex-direction: column; height: 100vh; width: 100vw; overflow: hidden; background: var(--bg0); }

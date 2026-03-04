@@ -16,7 +16,7 @@ export function SidebarLeft({
     onOpenLibrary,
     onAddNewComponent,
     onEditComponent,
-    onCopyPrompt
+    onOpenPrompt
 }) {
     const [localCols, setLocalCols] = useState(cols);
     const [localRows, setLocalRows] = useState(rows);
@@ -59,9 +59,6 @@ export function SidebarLeft({
             {/* 2. Circuit Definition Section */}
             <div className="ph">
                 <span><span className="sbadge">2</span>Circuit Definition</span>
-                <div style={{ display: 'flex', gap: '4px' }}>
-                    <button className="tplbtn" onClick={onCopyPrompt} title="Copy instructions for LLM">🤖 Prompt</button>
-                </div>
             </div>
             <div className="lbody">
                 <textarea
@@ -71,6 +68,13 @@ export function SidebarLeft({
                     spellCheck="false"
                 />
                 <button className="btn blu" onClick={onLoadCircuit}>▶ Load Circuit</button>
+                <button
+                    className="btn"
+                    style={{ background: '#1a1a1a', border: '1px solid #333', color: 'var(--txt1)', marginTop: '2px' }}
+                    onClick={onOpenPrompt}
+                >
+                    💡 How do I get this?
+                </button>
             </div>
 
             {/* 3. Components Section */}
@@ -81,7 +85,7 @@ export function SidebarLeft({
                     <button className="tplbtn grn-bg" onClick={onAddNewComponent}>+ New</button>
                 </div>
             </div>
-            <div className="scroll-container lbody" style={{ gap: '4px' }}>
+            <div className="scroll-container lbody" style={{ gap: '8px' }}>
                 {components.length === 0 ? (
                     <div style={{ fontSize: '.7em', color: 'var(--txt2)', textAlign: 'center', padding: '10px' }}>Load components first.</div>
                 ) : (
