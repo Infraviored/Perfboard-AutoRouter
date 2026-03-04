@@ -11,7 +11,7 @@ import { saveComps, restoreComps, completion } from './state-utils.js';
  * This class encapsulates state and provides a clean API for the UI.
  */
 export class AutorouterEngine {
-    constructor(cols = 22, rows = 16) {
+    constructor(cols = 30, rows = 20) {
         this.components = [];
         this.wires = [];
         this.cols = cols;

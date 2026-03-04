@@ -21,7 +21,6 @@ To connect two or more pins, assign them the EXACT same string in their "net" fi
 
 ### 3. JSON STRUCTURE
 {
-  "board": { "cols": 30, "rows": 20 },
   "components": [
     {
       "id": "U1",

@@ -15,17 +15,72 @@ import { scoreState } from './engine/optimizer-algorithms.js';
 
 function App() {
   // --- ENGINE ---
-  const engine = useMemo(() => new AutorouterEngine(22, 16), []);
+  const engine = useMemo(() => {
+    const saved = localStorage.getItem('pcb_board_state');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return new AutorouterEngine(parsed.cols || 30, parsed.rows || 20);
+      } catch (e) { }
+    }
+    return new AutorouterEngine(30, 20);
+  }, []);
 
   // --- STATE ---
-  const [board, setBoard] = useState({ components: [], wires: [], cols: 22, rows: 16, tick: 0 });
+  const [board, setBoard] = useState(() => {
+    const saved = localStorage.getItem('pcb_board_state');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return {
+          components: parsed.components || [],
+          wires: parsed.wires || [],
+          cols: parsed.cols || 30,
+          rows: parsed.rows || 20,
+          tick: 0
+        };
+      } catch (e) { }
+    }
+    return { components: [], wires: [], cols: 30, rows: 20, tick: 0 };
+  });
+
+  const [jsonInput, setJsonInput] = useState(() => {
+    return localStorage.getItem('pcb_json_input') || '';
+  });
+
+  // Sync board to engine on first load if engine was initialized with defaults but localStorage had values
+  useEffect(() => {
+    engine.setState({
+      components: board.components,
+      wires: board.wires,
+      cols: board.cols,
+      rows: board.rows
+    });
+  }, []);
+
+  // Persist to localStorage
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      localStorage.setItem('pcb_board_state', JSON.stringify({
+        components: board.components,
+        wires: board.wires,
+        cols: board.cols,
+        rows: board.rows
+      }));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [board.components, board.wires, board.cols, board.rows]);
+
+  useEffect(() => {
+    localStorage.setItem('pcb_json_input', jsonInput);
+  }, [jsonInput]);
+
   const [status, setStatus] = useState({ title: '', progress: 0, best: '', isProcessing: false });
   const [toast, setToast] = useState({ msg: '', type: 'ok' });
   const [selectedId, setSelectedId] = useState(null);
   const [hoveredNet, setHoveredNet] = useState(null);
   const [autoOptimize, setAutoOptimize] = useState(true);
   const [tool, setTool] = useState('sel');
-  const [jsonInput, setJsonInput] = useState('');
   const [bestSnapshot, setBestSnapshot] = useState(null);
 
 
@@ -66,9 +121,6 @@ function App() {
   const handleLoadCircuit = useCallback(() => {
     try {
       const data = JSON.parse(jsonInput);
-      const cols = data.board?.cols || 22;
-      const rows = data.board?.rows || 16;
-      engine.setState({ cols, rows });
       const defs = processTemplate(data);
       if (defs) {
         engine.initializeBoard(defs);
@@ -113,7 +165,6 @@ function App() {
     const prompt = `Act as an expert electronics designer. Generate a JSON circuit definition for the following request: "Simple ESP32 power controller with relay".
 Use this format:
 {
-  "board": { "cols": 24, "rows": 16 },
   "components": [
     { "id": "U1", "name": "ESP32", "pins": [{"offset": [0,0], "label": "GND", "net": "GND"}] }
   ]
@@ -182,11 +233,11 @@ Use this format:
   }, [engine, saveHistory]);
 
   const handleExportState = useCallback(() => {
-    const state = { board: { cols: board.cols, rows: board.rows }, components: board.components, wires: board.wires };
+    const state = { components: board.components, wires: board.wires };
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'pcb_state.json'; a.click();
+    a.href = url; a.download = 'pcb_circuit.json'; a.click();
     URL.revokeObjectURL(url);
   }, [board]);
 
@@ -217,8 +268,10 @@ Use this format:
 
   // --- INITIAL LOAD ---
   useEffect(() => {
-    const timer = setTimeout(() => handleLoadTemplate(), 0);
-    return () => clearTimeout(timer);
+    if (!localStorage.getItem('pcb_board_state')) {
+      const timer = setTimeout(() => handleLoadTemplate(), 0);
+      return () => clearTimeout(timer);
+    }
   }, [handleLoadTemplate]);
 
   // --- DERIVED STATS ---

@@ -1,8 +1,4 @@
 {
-    "board": {
-        "cols": 22,
-        "rows": 16
-    },
     "components": [
         {
             "id": "U1",

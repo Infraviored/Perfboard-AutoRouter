@@ -1,5 +1,4 @@
 export const TEMPLATE = {
-    board: { cols: 22, rows: 16 },
     components: [
         {
             id: 'J1', name: 'Power', value: '2-pin', color: '#2a2808',
