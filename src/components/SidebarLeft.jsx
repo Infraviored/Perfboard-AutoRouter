@@ -61,7 +61,6 @@ export function SidebarLeft({
                 <span><span className="sbadge">2</span>Circuit Definition</span>
                 <div style={{ display: 'flex', gap: '4px' }}>
                     <button className="tplbtn" onClick={onCopyPrompt} title="Copy instructions for LLM">🤖 Prompt</button>
-                    <button className="tplbtn" onClick={onLoadTemplate}>📋 Template</button>
                 </div>
             </div>
             <div className="lbody">
@@ -146,13 +145,14 @@ export function SidebarLeft({
         .sbadge.act { background: var(--grn); color: #000; border-color: var(--grn); }
         
         .tplbtn {
-          padding: 3px 7px;
+          padding: 4px 10px;
           border-radius: 4px;
           cursor: pointer;
-          font-size: .7em;
+          font-size: .85em;
           background: var(--bg4);
           border: 1px solid var(--border2);
           color: var(--txt1);
+          transition: all 0.1s ease;
         }
         .tplbtn:hover { color: var(--txt0); }
         .tplbtn.blu-bg { background: var(--blu); color: #fff; border-color: var(--blu); }

@@ -82,8 +82,8 @@ export function SidebarRight({
                         <span className="pk">
                             <span className="net-dot" style={{ background: netColor(name) }}></span>
                         </span>
-                        <span className="pv" style={{ fontSize: '.75em' }}>{name}</span>
-                        <span style={{ fontSize: '.65em', color: 'var(--txt2)' }}>{pins.length}p</span>
+                        <span className="pv" style={{ fontSize: '.95em' }}>{name}</span>
+                        <span style={{ fontSize: '.85em', color: 'var(--txt2)', fontWeight: 600 }}>{pins.length}P</span>
                     </div>
                 ))}
             </div>
@@ -120,22 +120,25 @@ export function SidebarRight({
           font-variant-numeric: tabular-nums;
         }
         .sl {
-          font-size: .6em;
-          color: var(--txt2);
-          margin-top: 2px;
+          font-size: .7em;
+          color: var(--txt1);
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          margin-top: 4px;
         }
 
         .prop-row {
           display: flex;
           align-items: center;
-          padding: 5px 11px;
-          gap: 6px;
+          padding: 8px 12px;
+          gap: 8px;
           border-bottom: 1px solid var(--border);
-          font-size: .71em;
+          font-size: .84em;
         }
         .prop-row.hov { background: var(--bg4); }
-        .pk { color: var(--txt2); width: 58px; flex-shrink: 0; }
-        .pv { color: var(--txt0); flex: 1; font-family: monospace; font-size: .92em; overflow: hidden; text-overflow: ellipsis; }
+        .pk { color: var(--txt2); width: 64px; flex-shrink: 0; font-weight: 500; font-size: .85em; }
+        .pv { color: var(--txt0); flex: 1; font-family: monospace; font-size: 1em; overflow: hidden; text-overflow: ellipsis; }
         
         .net-dot {
           display: inline-block;
