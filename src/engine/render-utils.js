@@ -58,12 +58,16 @@ export function generateWiresSVG(wires, hoveredNet = null) {
   return out;
 }
 
-export function generateRatsnestSVG(components) {
+export function generateRatsnestSVG(components, wires = []) {
   const nets = getAllNets(components);
   let out = '';
   for (const netObj of nets) {
     const { net, pins } = netObj;
     if (pins.length < 2) continue;
+
+    // If this net has a successful (non-failed) wire, hide the ratsnest
+    const isRouted = wires.some(w => w.net === net && !w.failed);
+    if (isRouted) continue;
 
     const conn = new Set([0]);
     while (conn.size < pins.length) {
@@ -74,7 +78,7 @@ export function generateRatsnestSVG(components) {
         if (d < bD) { bD = d; bI = i; bJ = j; }
       }));
       if (bJ === -1) break;
-      out += `<line x1="${pins[bI].col * SP + SP / 2}" y1="${pins[bI].row * SP + SP / 2}" x2="${pins[bJ].col * SP + SP / 2}" y2="${pins[bJ].row * SP + SP / 2}" stroke="${netColor(net)}" opacity="0.35" stroke-width="0.8" stroke-dasharray="2 5"/>`;
+      out += `<line x1="${pins[bI].col * SP + SP / 2}" y1="${pins[bI].row * SP + SP / 2}" x2="${pins[bJ].col * SP + SP / 2}" y2="${pins[bJ].row * SP + SP / 2}" stroke="${netColor(net)}" opacity="0.4" stroke-width="1.2" stroke-dasharray="2 5"/>`;
       conn.add(bJ);
     }
   }

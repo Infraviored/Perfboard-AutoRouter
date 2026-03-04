@@ -68,7 +68,7 @@ export function PcbCanvas({
     // Memoize SVG parts for performance
     const background = useMemo(() => generateBackgroundSVG(cols, rows), [cols, rows]);
     const wiresSvg = useMemo(() => generateWiresSVG(wires, hoveredNet), [wires, hoveredNet]);
-    const ratsnestSvg = useMemo(() => generateRatsnestSVG(components), [components]);
+    const ratsnestSvg = useMemo(() => generateRatsnestSVG(components, wires), [components, wires]);
     const componentsSvg = useMemo(() =>
         components.map(c => renderCompSVG(c, c.id === selectedId)).join(''),
         [components, selectedId]

@@ -39,27 +39,41 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
     minC = Math.max(0, minC - pad); minR = Math.max(0, minR - pad);
     maxC += pad; maxR += pad;
 
+    // Ensure all metrics are valid numbers
+    if (![minC, maxC, minR, maxR].every(isFinite)) return null;
+
     const W = Math.round((maxC - minC) * SP);
     const H = Math.round((maxR - minR) * SP);
     if (W <= 0 || H <= 0) return null;
 
     let inner = '';
-    for (let c = minC; c < maxC; c++) for (let r = minR; r < maxR; r++) {
-      const cx = Math.round((c - minC) * SP + SP / 2);
-      const cy = Math.round((r - minR) * SP + SP / 2);
-      inner += `<circle cx="${cx}" cy="${cy}" r="${Math.round(SP * .22)}" fill="#b87333"/><circle cx="${cx}" cy="${cy}" r="${Math.round(SP * .09)}" fill="#0d0a06"/>`;
+    // Background drill holes
+    for (let c = minC; c < maxC; c++) {
+      for (let r = minR; r < maxR; r++) {
+        const cx = Math.round((c - minC) * SP + SP / 2);
+        const cy = Math.round((r - minR) * SP + SP / 2);
+        inner += `<circle cx="${cx}" cy="${cy}" r="${Math.round(SP * .22)}" fill="#b87333"/><circle cx="${cx}" cy="${cy}" r="${Math.round(SP * .09)}" fill="#0d0a06"/>`;
+      }
     }
+    // Wires
     wires.forEach(w => {
       if (!w.path?.length || w.failed) return;
       const pts = w.path.map(pt => `${Math.round((pt.col - minC) * SP + SP / 2)},${Math.round((pt.row - minR) * SP + SP / 2)}`).join(' ');
       inner += `<polyline points="${pts}" fill="none" stroke="${netColor(w.net)}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
     });
+    // Components
     comps.forEach(c => {
-      const sc = { ...c, ox: c.ox - minC, oy: c.oy - minR, pins: c.pins.map(p => ({ ...p, col: p.col - minC, row: p.row - minR })) };
+      // Shift component origin and pins by minC/minR
+      const sc = {
+        ...c,
+        ox: c.ox - minC,
+        oy: c.oy - minR,
+        pins: c.pins.map(p => ({ ...p, col: p.col - minC, row: p.row - minR }))
+      };
       inner += renderCompSVG(sc, false);
     });
 
-    return { W, H, svg: inner };
+    return { W, H, inner };
   }, [bestSnapshot]);
 
   if (!active) return null;
@@ -85,9 +99,11 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
           <div className="pb-preview-wrap">
             <svg
               viewBox={`0 0 ${preview.W} ${preview.H}`}
-              style={{ maxHeight: 90, maxWidth: '100%', display: 'block' }}
-              dangerouslySetInnerHTML={{ __html: `<rect width="${preview.W}" height="${preview.H}" fill="#1a1208"/>${preview.svg}` }}
-            />
+              style={{ height: '100%', maxWidth: '100%', display: 'block' }}
+            >
+              <rect width={preview.W} height={preview.H} fill="#1a1208" />
+              <g dangerouslySetInnerHTML={{ __html: preview.inner }} />
+            </svg>
           </div>
         </div>
       )}

@@ -177,6 +177,16 @@ export class AutorouterEngine {
                 bestCompletion = c;
                 bestWires = candidateWires;
                 bestComps = saveComps(currentComponents);
+
+                // Push status message and snapshot to bottom bar
+                const currentScore = scoreState(currentComponents, candidateWires);
+                this.onStatusUpdate?.({ best: `Best: ${Math.round(bestCompletion * 100)}% (WL ${currentScore.wl})` });
+
+                const snapshotComps = currentComponents.map(comp => ({
+                    ...comp,
+                    pins: comp.pins.map(p => ({ ...p, col: comp.ox + p.dCol, row: comp.oy + p.dRow }))
+                }));
+                this.onBestSnapshot?.({ components: snapshotComps, wires: [...candidateWires] });
             }
 
             if (c === 1.0) break; // Found 100% solution

@@ -42,9 +42,12 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
     const pushHydratedBest = (liveComps, ws) => {
         const hydratedComps = liveComps.map(c => ({
             ...c,
+            // Recompute pins based strictly on ox/oy to avoid stale pin data
             pins: c.pins.map(p => ({ ...p, col: c.ox + p.dCol, row: c.oy + p.dRow }))
         }));
-        onBestSnapshot?.({ components: hydratedComps, wires: ws });
+        // Clone wires too
+        const wsClone = ws ? JSON.parse(JSON.stringify(ws)) : [];
+        onBestSnapshot?.({ components: hydratedComps, wires: wsClone });
     };
 
     if (!components.length) { toast?.('No components to optimize', 'warn'); return; }
