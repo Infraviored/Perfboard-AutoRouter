@@ -111,8 +111,16 @@ export function PcbCanvas({
         }
     };
 
-    // We add a 'forceCenterToggle' state to allow manual recentering via button click
+    // We add a 'forceCenterToggle' state to allow manual recentering via button click or resize events
     const [forceCenterToggle, setForceCenterToggle] = useState(false);
+
+    // Watch for actual container dimension changes (e.g. ProcessingBar sliding up/down)
+    useEffect(() => {
+        if (!svgRef.current) return;
+        const resizeObs = new ResizeObserver(() => setForceCenterToggle(true));
+        resizeObs.observe(svgRef.current);
+        return () => resizeObs.disconnect();
+    }, []);
 
     // Continuous smooth camera tracking during processing, or instant snap on load/manual
     useEffect(() => {

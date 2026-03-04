@@ -256,7 +256,19 @@ Use this format:
       onProgress: (p, t) => setStatus(prev => ({ ...prev, progress: p, title: t })),
       onStatusUpdate: (upd) => setStatus(prev => ({ ...prev, ...upd })),
       onToast: (msg, type) => setToast({ msg, type }),
-      onBestSnapshot: (snapshot) => setBestSnapshot(snapshot)
+      onBestSnapshot: (snapshot) => {
+        // Deep clone the snapshot so the treadmill doesn't mutate its path points!
+        const safeWires = snapshot.wires.map(w => ({
+          ...w,
+          path: w.path ? w.path.map(pt => ({ ...pt })) : null
+        }));
+        // Components are typically saved via saveComps() which clones, but let's be safe
+        const safeComps = snapshot.components.map(c => ({
+          ...c,
+          pins: c.pins ? c.pins.map(p => ({ ...p })) : []
+        }));
+        setBestSnapshot({ components: safeComps, wires: safeWires });
+      }
     });
   }, [engine]);
 
@@ -344,7 +356,16 @@ Use this format:
           <ProcessingBar
             status={status}
             bestSnapshot={bestSnapshot}
-            onGoodEnough={() => { engine.cancel(); setStatus({ title: '', progress: 0, best: '', isProcessing: false }); setBestSnapshot(null); }}
+            onGoodEnough={() => {
+              engine.cancel(true);
+              if (bestSnapshot) {
+                setBoard({ components: bestSnapshot.components, wires: bestSnapshot.wires });
+                setStatus({ progress: 0, title: '', isProcessing: false }); // clear processing
+              } else {
+                setStatus({ title: '', progress: 0, best: '', isProcessing: false });
+              }
+              setBestSnapshot(null);
+            }}
           />
         </div>
         <SidebarRight stats={stats} selectedComp={selectedComp} nets={netsMap} hoveredNet={hoveredNet} setHoveredNet={setHoveredNet} />
