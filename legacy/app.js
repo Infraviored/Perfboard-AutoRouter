@@ -289,7 +289,6 @@ async function doPlaceAndRoute() {
       ostep(3); setProg(0, 'Optimizing footprint…');
       await doRecursivePushPacking();
     }
-    toast(`Perfect routing achieved!`, 'ok');
     // REMOVED saveState() from here so it saves regardless of success
   } else {
     toast(`No perfect routing found. Best completion: ${Math.round(bestCompletion * 100)}%`, 'warn');

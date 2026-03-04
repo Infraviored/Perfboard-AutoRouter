@@ -2,7 +2,7 @@ import { route } from './router.js';
 import { doOptimizeFootprint, doPlateauExplore } from './optimizer.js';
 import { scoreState, doRecursivePushPacking } from './optimizer-algorithms.js';
 import { placeInitial } from './initial-placement.js';
-import { anneal } from './placer.js';
+import { anneal, moveComp, rotateComp90InPlace } from './placer.js';
 import { saveComps, restoreComps, completion } from './state-utils.js';
 
 /**
@@ -32,6 +32,7 @@ export class AutorouterEngine {
         this.onStatusUpdate = null;
         this.onToast = null;
         this.onBestSnapshot = null;
+        this.tick = 0;
     }
 
     setCallbacks({ onStateChange, onProgress, onStatusUpdate, onToast, onBestSnapshot }) {
@@ -47,6 +48,7 @@ export class AutorouterEngine {
         if (newState.wires) this.wires = newState.wires;
         if (newState.cols) this.cols = newState.cols;
         if (newState.rows) this.rows = newState.rows;
+        this.tick++;
         this.notify();
     }
 
@@ -55,7 +57,8 @@ export class AutorouterEngine {
             components: this.components,
             wires: this.wires,
             cols: this.cols,
-            rows: this.rows
+            rows: this.rows,
+            tick: this.tick
         });
     }
 
@@ -73,6 +76,7 @@ export class AutorouterEngine {
             onStateChange: (state) => {
                 this.components = state.components;
                 this.wires = state.wires;
+                this.tick++;
                 this.notify();
             },
             onBestSnapshot: (snapshot) => { this.onBestSnapshot?.(snapshot); }
@@ -204,11 +208,30 @@ export class AutorouterEngine {
             }
 
             this.notify();
-            if (bestCompletion === 1.0) {
-                this.onToast?.('Perfect routing achieved!', 'ok');
-            } else {
+            if (bestCompletion < 1.0) {
                 this.onToast?.(`Best completion: ${Math.round(bestCompletion * 100)}%`, 'warn');
             }
+        }
+    }
+
+    moveComponent(id, ox, oy) {
+        const c = this.components.find(x => x.id === id);
+        if (c) {
+            // Use moveComp from placer.js which also updates pins
+            moveComp(c, ox, oy);
+            this.components = [...this.components];
+            this.tick++;
+            this.notify();
+        }
+    }
+
+    rotateComponent(id) {
+        const c = this.components.find(x => x.id === id);
+        if (c) {
+            rotateComp90InPlace(c);
+            this.components = [...this.components];
+            this.tick++;
+            this.notify();
         }
     }
 

@@ -17,7 +17,7 @@ function App() {
   const engine = useMemo(() => new AutorouterEngine(22, 16), []);
 
   // --- STATE ---
-  const [board, setBoard] = useState({ components: [], wires: [], cols: 22, rows: 16 });
+  const [board, setBoard] = useState({ components: [], wires: [], cols: 22, rows: 16, tick: 0 });
   const [status, setStatus] = useState({ title: '', progress: 0, best: '', isProcessing: false });
   const [toast, setToast] = useState({ msg: '', type: 'ok' });
   const [selectedId, setSelectedId] = useState(null);
@@ -128,6 +128,15 @@ Use this format:
 
   const handleClearWires = useCallback(() => {
     engine.setState({ wires: [] });
+    saveHistory();
+  }, [engine, saveHistory]);
+
+  const handleMoveComp = useCallback((id, ox, oy) => {
+    engine.moveComponent(id, ox, oy);
+  }, [engine]);
+
+  const handleRotateComp = useCallback((id) => {
+    engine.rotateComponent(id);
     saveHistory();
   }, [engine, saveHistory]);
 
@@ -248,6 +257,7 @@ Use this format:
         onPlateauExplore={() => engine.plateau()} onRouteOnly={handleRouteOnly}
         onClearWires={handleClearWires} onReset={handleReset} onUndo={handleUndo} onRedo={handleRedo}
         onExportState={handleExportState} onExportSVG={() => {/* SVG Export Logic */ }}
+        hasWires={board.wires.length > 0}
       />
       <div id="layout">
         <SidebarLeft
@@ -264,6 +274,8 @@ Use this format:
             <PcbCanvas
               components={board.components} wires={board.wires} cols={board.cols} rows={board.rows}
               selectedId={selectedId} onSelect={setSelectedId} hoveredNet={hoveredNet}
+              onMove={handleMoveComp} onRotate={handleRotateComp} onMoveEnd={saveHistory}
+              tick={board.tick}
             />
           </main>
           <ProcessingBar

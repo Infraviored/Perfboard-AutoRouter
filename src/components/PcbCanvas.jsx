@@ -15,13 +15,21 @@ export function PcbCanvas({
     rows,
     selectedId,
     onSelect,
-    hoveredNet
+    hoveredNet,
+    onMove,
+    onRotate,
+    onMoveEnd,
+    tick
 }) {
     const svgRef = useRef(null);
     const [zoom, setZoom] = useState(1.0);
     const [pan, setPan] = useState({ x: 20, y: 20 });
     const [isPanning, setIsPanning] = useState(false);
     const lastPos = useRef({ x: 0, y: 0 });
+
+    const [draggingId, setDraggingId] = useState(null);
+    const [dragOffset, setDragOffset] = useState({ dc: 0, dr: 0 });
+    const moveRaf = useRef(null);
 
     // Handle Wheel Zoom
     const handleWheel = useCallback((e) => {
@@ -31,24 +39,35 @@ export function PcbCanvas({
     }, []);
 
     const handlePointerDown = (e) => {
-        // Middle click (1) or Right click (2) or Alt+Left (altKey)
-        const isPanAction = e.button === 1 || e.button === 2 || (e.button === 0 && e.altKey);
+        const isRight = e.button === 2;
+        const isPanAction = e.button === 1 || isRight || (e.button === 0 && e.altKey);
+
+        const rect = svgRef.current.getBoundingClientRect();
+        const x = (e.clientX - rect.left - pan.x) / zoom;
+        const y = (e.clientY - rect.top - pan.y) / zoom;
+        const gc = Math.floor(x / SP);
+        const gr = Math.floor(y / SP);
+
+        if (isRight && draggingId) {
+            onRotate?.(draggingId);
+            e.preventDefault();
+            return;
+        }
 
         if (isPanAction) {
             setIsPanning(true);
             lastPos.current = { x: e.clientX, y: e.clientY };
             e.preventDefault();
         } else if (e.button === 0) {
-            // Selection logic
-            const rect = svgRef.current.getBoundingClientRect();
-            const x = (e.clientX - rect.left - pan.x) / zoom;
-            const y = (e.clientY - rect.top - pan.y) / zoom;
-
-            const gc = Math.floor(x / SP);
-            const gr = Math.floor(y / SP);
-
             const hit = hitComp(gc, gr, components);
-            onSelect?.(hit ? hit.id : null);
+            if (hit) {
+                onSelect?.(hit.id);
+                setDraggingId(hit.id);
+                setDragOffset({ dc: gc - hit.ox, dr: gr - hit.oy });
+                e.target.setPointerCapture(e.pointerId);
+            } else {
+                onSelect?.(null);
+            }
         }
     };
 
@@ -58,20 +77,45 @@ export function PcbCanvas({
             const dy = e.clientY - lastPos.current.y;
             setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
             lastPos.current = { x: e.clientX, y: e.clientY };
+        } else if (draggingId) {
+            const rect = svgRef.current.getBoundingClientRect();
+            const x = (e.clientX - rect.left - pan.x) / zoom;
+            const y = (e.clientY - rect.top - pan.y) / zoom;
+            const gc = Math.floor(x / SP);
+            const gr = Math.floor(y / SP);
+
+            if (moveRaf.current) cancelAnimationFrame(moveRaf.current);
+            moveRaf.current = requestAnimationFrame(() => {
+                onMove?.(draggingId, gc - dragOffset.dc, gr - dragOffset.dr);
+            });
         }
     };
 
-    const handlePointerUp = () => {
+    const handlePointerUp = (e) => {
+        if (draggingId) {
+            if (moveRaf.current) cancelAnimationFrame(moveRaf.current);
+            onMoveEnd?.();
+            setDraggingId(null);
+        }
         setIsPanning(false);
+    };
+
+    // Right-click rotation during drag often needs mousedown for multi-button mouse reliability
+    const handleMouseDown = (e) => {
+        if (e.button === 2 && draggingId) {
+            onRotate?.(draggingId);
+            e.preventDefault();
+            e.stopPropagation();
+        }
     };
 
     // Memoize SVG parts for performance
     const background = useMemo(() => generateBackgroundSVG(cols, rows), [cols, rows]);
-    const wiresSvg = useMemo(() => generateWiresSVG(wires, hoveredNet), [wires, hoveredNet]);
-    const ratsnestSvg = useMemo(() => generateRatsnestSVG(components, wires), [components, wires]);
+    const wiresSvg = useMemo(() => generateWiresSVG(wires, hoveredNet), [wires, hoveredNet, tick]);
+    const ratsnestSvg = useMemo(() => generateRatsnestSVG(components, wires, !!draggingId), [components, wires, draggingId, tick]);
     const componentsSvg = useMemo(() =>
         components.map(c => renderCompSVG(c, c.id === selectedId)).join(''),
-        [components, selectedId]
+        [components, selectedId, tick]
     );
 
     return (
@@ -81,6 +125,7 @@ export function PcbCanvas({
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerUp}
+            onMouseDown={handleMouseDown}
             onWheel={handleWheel}
             onContextMenu={(e) => e.preventDefault()}
             style={{
@@ -88,7 +133,7 @@ export function PcbCanvas({
                 height: '100%',
                 position: 'relative',
                 overflow: 'hidden',
-                cursor: isPanning ? 'grabbing' : 'crosshair',
+                cursor: (isPanning || draggingId) ? 'grabbing' : 'crosshair',
                 background: '#050706'
             }}
         >
@@ -115,6 +160,10 @@ export function PcbCanvas({
 
             <style dangerouslySetInnerHTML={{
                 __html: `
+        .canvas-container {
+            user-select: none;
+            -webkit-user-select: none;
+        }
         .zbx {
           position: absolute;
           right: 10px;

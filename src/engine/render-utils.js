@@ -58,7 +58,10 @@ export function generateWiresSVG(wires, hoveredNet = null) {
   return out;
 }
 
-export function generateRatsnestSVG(components, wires = []) {
+let cachedRatsnest = '';
+let lastComponents = null;
+
+export function generateRatsnestSVG(components, wires = [], isDragging = false) {
   const nets = getAllNets(components);
   let out = '';
   for (const netObj of nets) {
@@ -78,10 +81,11 @@ export function generateRatsnestSVG(components, wires = []) {
         if (d < bD) { bD = d; bI = i; bJ = j; }
       }));
       if (bJ === -1) break;
-      out += `<line x1="${pins[bI].col * SP + SP / 2}" y1="${pins[bI].row * SP + SP / 2}" x2="${pins[bJ].col * SP + SP / 2}" y2="${pins[bJ].row * SP + SP / 2}" stroke="${netColor(net)}" opacity="0.4" stroke-width="1.2" stroke-dasharray="2 5"/>`;
+      out += `<line x1="${pins[bI].col * SP + SP / 2}" y1="${pins[bI].row * SP + SP / 2}" x2="${pins[bJ].col * SP + SP / 2}" y2="${pins[bJ].row * SP + SP / 2}" stroke="${netColor(net)}" opacity="0.75" stroke-width="2" stroke-dasharray="6 4"/>`;
       conn.add(bJ);
     }
   }
+  cachedRatsnest = out;
   return out;
 }
 
@@ -101,11 +105,11 @@ export function renderCompSVG(c, isSelected = false) {
     out += `<circle cx="${px}" cy="${py}" r="${SP * .28}" fill="#b87333"/>`;
     out += `<circle cx="${px}" cy="${py}" r="${SP * .2}" fill="${netColor(p.net)}"/>`;
     out += `<circle cx="${px}" cy="${py}" r="${SP * .09}" fill="#0d0a06"/>`;
-    out += `<text x="${px}" y="${py + SP * .42}" fill="rgba(230,230,230,.9)" font-family="monospace" font-size="${Math.min(SP * .25, 7)}" text-anchor="middle">${p.lbl}</text>`;
+    out += `<text x="${px}" y="${py + SP * .42}" fill="rgba(230,230,230,.9)" font-family="monospace" font-size="${Math.min(SP * .25, 7)}" text-anchor="middle" style="pointer-events:none;user-select:none">${p.lbl}</text>`;
   });
 
   // 3. Draw Component Labels
-  out += `<text x="${bx + 3}" y="${by + SP * 0.35}" fill="#fff" font-family="'Consolas',monospace" font-size="${Math.min(SP * .3, 9)}" font-weight="bold" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${c.id}: ${c.value}</text>`;
+  out += `<text x="${bx + 3}" y="${by + SP * 0.35}" fill="#fff" font-family="'Consolas',monospace" font-size="${Math.min(SP * .3, 9)}" font-weight="bold" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${c.id}: ${c.value}</text>`;
 
   if (isSelected) {
     out += `<rect x="${c.ox * SP - 4}" y="${c.oy * SP - 4}" width="${c.w * SP + 8}" height="${c.h * SP + 8}" fill="none" stroke="#3b82f6" stroke-width="2" stroke-dasharray="4 2"/>`;

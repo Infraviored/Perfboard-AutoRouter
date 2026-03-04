@@ -72,6 +72,18 @@ body,
   font-weight: 700;
 }
 
+.tbtn.blu {
+  background: #0d1f3a;
+  border-color: var(--blu);
+  color: var(--blu);
+}
+
+.tbtn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  filter: grayscale(0.8);
+}
+
 .tbtn.red {
   background: #2a0d0d;
   border-color: var(--red);

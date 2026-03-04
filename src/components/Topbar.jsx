@@ -14,27 +14,20 @@ export function Topbar({
     autoOptimize,
     setAutoOptimize,
     tool,
-    setTool
+    setTool,
+    hasWires
 }) {
     return (
         <header id="topbar">
             <div className="logo">Perfboard<em>Designer</em></div>
             <div className="sep"></div>
 
-            <button
-                className={`tbtn ${tool === 'sel' ? 'act' : ''}`}
-                onClick={() => setTool('sel')}
-            >
-                ↖ Select <kbd>V</kbd>
-            </button>
-
-            <div className="sep"></div>
 
             <button className="tbtn grn" onClick={onPlaceAndRoute}>
                 ⚡ Place & Route <kbd>Ctrl+↵</kbd>
             </button>
-            <button className="tbtn" onClick={onOptimizeFootprint}>🔧 Optimize Footprint</button>
-            <button className="tbtn" onClick={onPlateauExplore}>🧭 Plateau Explore</button>
+            <button className="tbtn blu" onClick={onOptimizeFootprint} disabled={!hasWires}>🔧 Optimize Footprint</button>
+            <button className="tbtn blu" onClick={onPlateauExplore} disabled={!hasWires}>🧭 Plateau Explore</button>
 
             <div className="sep"></div>
 

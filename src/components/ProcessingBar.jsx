@@ -93,7 +93,7 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
       </div>
 
       {/* RIGHT: bounding-box SVG cutout of current best */}
-      {preview && (
+      {preview && !status.title?.includes('Attempt') && (
         <div className="pb-preview">
           <div className="pb-preview-label">current best</div>
           <div className="pb-preview-wrap">
@@ -113,23 +113,23 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
         #proc-bar {
           display: flex;
           align-items: center;
-          gap: 16px;
-          padding: 8px 16px;
+          gap: 20px;
+          padding: 12px 24px;
           background: #0d1117;
           border-top: 2px solid var(--grn);
           flex-shrink: 0;
-          height: 120px;
-          box-shadow: 0 -4px 24px rgba(0,217,126,.12);
+          height: 220px;
+          box-shadow: 0 -8px 32px rgba(0,217,126,.15);
         }
         .pb-left {
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 10px;
           flex: 1;
           min-width: 0;
         }
         .pb-title {
-          font-size: .75em;
+          font-size: .9em;
           color: var(--grn);
           font-weight: 700;
           white-space: nowrap;
@@ -137,14 +137,14 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
           text-overflow: ellipsis;
         }
         .pb-best {
-          font-size: .7em;
+          font-size: .8em;
           color: var(--txt1);
           white-space: nowrap;
         }
         .pb-track {
-          height: 4px;
+          height: 6px;
           background: var(--bg4);
-          border-radius: 2px;
+          border-radius: 3px;
           overflow: hidden;
         }
         .pb-fill {
@@ -154,15 +154,15 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
         }
         .pb-btn {
           width: fit-content;
-          padding: 4px 14px;
-          font-size: .75em;
+          padding: 6px 20px;
+          font-size: .85em;
         }
         .pb-esc {
           font-size: .8em;
           opacity: .6;
-          margin-left: 6px;
+          margin-left: 8px;
           background: rgba(0,0,0,.3);
-          padding: 1px 5px;
+          padding: 2px 6px;
           border-radius: 3px;
           border: 1px solid rgba(255,255,255,.2);
         }
@@ -170,23 +170,29 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
           display: flex;
           flex-direction: column;
           align-items: flex-end;
-          gap: 3px;
+          gap: 6px;
           flex-shrink: 0;
+          height: 100%;
+          justify-content: center;
         }
         .pb-preview-label {
-          font-size: .6em;
-          color: var(--txt2);
+          font-size: .7em;
+          color: var(--txt1);
           text-transform: uppercase;
-          letter-spacing: .06em;
+          letter-spacing: .1em;
+          font-weight: 700;
         }
         .pb-preview-wrap {
-          border: 1px solid var(--border);
-          border-radius: 4px;
+          border: 1px solid var(--border2);
+          border-radius: 6px;
           overflow: hidden;
-          height: 90px;
+          height: 180px;
+          min-width: 180px;
           display: flex;
           align-items: center;
+          justify-content: center;
           background: #1a1208;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.5);
         }
       `}} />
     </div>
