@@ -1,20 +1,5 @@
 import { route } from './router.js';
-import {
-    scoreState,
-    formatScore,
-    isScoreBetter,
-    calculateFootprintArea,
-    calculateComponentBounds,
-    footprintBoxMetrics,
-    stateKeyForPlateau,
-    enumeratePlateauNeighbors,
-    tryShrinkAlongWires,
-    explorePlateauStates,
-    tryRotateOptimize,
-    doRecursivePushPacking,
-    tryGlobalNudge,
-    recenterComponents
-} from './optimizer-algorithms.js';
+import { scoreState, formatScore, calculateFootprintArea, footprintBoxMetrics, calculateComponentBounds, doRecursivePushPacking, tryRotateOptimize, explorePlateauStates, tryGlobalNudge, tryShrinkAlongWires, isScoreBetter, recenterComponents, stateKeyForPlateau, enumeratePlateauNeighbors } from './optimizer-algorithms.js';
 import { saveComps, restoreComps } from './state-utils.js';
 import { moveComp, rotateComp90InPlace, anneal, anyOverlap } from './placer.js';
 
@@ -116,15 +101,19 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
         if (currentEpoch > 1) {
             console.log(`[Epoch ${currentEpoch}] Triggering full random scramble...`);
             setProg?.(0, `Epoch ${currentEpoch} / ${MAX_EPOCHS} (Randomizing...)`);
+            const b = calculateComponentBounds(components);
+            const spanX = Math.max(20, b.maxCol - b.minCol + 10);
+            const spanY = Math.max(20, b.maxRow - b.minRow + 10);
+            const cx = Math.floor((b.minCol + b.maxCol) / 2);
+            const cy = Math.floor((b.minRow + b.maxRow) / 2);
+
             for (let c of components) {
-                const nx = Math.max(0, Math.min(vCols - c.w, Math.floor(Math.random() * (vCols - c.w))));
-                const ny = Math.max(0, Math.min(vRows - c.h, Math.floor(Math.random() * (vRows - c.h))));
+                const nx = cx + Math.floor(Math.random() * spanX - spanX / 2);
+                const ny = cy + Math.floor(Math.random() * spanY - spanY / 2);
 
                 const rotations = Math.floor(Math.random() * 4);
                 // Simple placeholder for multi-rotation logic in placer.js if needed
                 for (let i = 0; i < rotations; i++) rotateComp90InPlace(c);
-                if (c.ox + c.w >= vCols) c.ox = vCols - c.w - 1;
-                if (c.oy + c.h >= vRows) c.oy = vRows - c.h - 1;
 
                 moveComp(c, nx, ny);
             }
@@ -150,8 +139,8 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                         const cx = Math.floor((b.minCol + b.maxCol) / 2);
                         const cy = Math.floor((b.minRow + b.maxRow) / 2);
                         for (const c of components) {
-                            const nx = Math.max(0, Math.min(vCols - c.w, cx + Math.floor(Math.random() * 7) - 3));
-                            const ny = Math.max(0, Math.min(vRows - c.h, cy + Math.floor(Math.random() * 7) - 3));
+                            const nx = cx + Math.floor(Math.random() * 7) - 3;
+                            const ny = cy + Math.floor(Math.random() * 7) - 3;
                             moveComp(c, nx, ny);
                         }
                         stagnation = 6;
@@ -163,6 +152,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
 
                     // Re-route after SA since positions changed
                     currentWires = await route(components, vCols, vRows, () => { }, checkCancel);
+                    recenterComponents(components, currentWires);
 
                     if (stagnation >= deepThresh) stagnation = 0;
                 }
@@ -187,8 +177,8 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                     let dx = (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 2) + 1);
                     let dy = (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 2) + 1);
 
-                    const nx = Math.max(0, Math.min(vCols - c.w, c.ox + dx));
-                    const ny = Math.max(0, Math.min(vRows - c.h, c.oy + dy));
+                    const nx = c.ox + dx;
+                    const ny = c.oy + dy;
 
                     moveComp(c, nx, ny);
                     if (anyOverlap(c, components)) {
@@ -204,6 +194,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                 }
                 // Re-route after micro-mutations so wires aren't "detached"
                 currentWires = await route(components, vCols, vRows, () => { }, checkCancel);
+                recenterComponents(components, currentWires);
             }
 
             if (checkCancel()) break;
@@ -248,6 +239,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
             const preEval = saveComps(components);
 
             const testWires = await route(components, vCols, vRows, () => { }, checkCancel);
+            recenterComponents(components, testWires);
             const testScore = scoreState(components, testWires);
 
             if (isScoreBetter(testScore, globalBestScore)) {

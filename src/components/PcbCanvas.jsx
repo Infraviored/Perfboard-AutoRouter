@@ -111,41 +111,47 @@ export function PcbCanvas({
         }
     };
 
-    const [hasCentered, setHasCentered] = useState(false);
+    // We add a 'forceCenterToggle' state to allow manual recentering via button click
+    const [forceCenterToggle, setForceCenterToggle] = useState(false);
 
-    // Center camera on components when they are first added or during optimization
+    // Continuous smooth camera tracking during processing, or instant snap on load/manual
     useEffect(() => {
         if (components.length === 0) return;
-        if (!isProcessing && hasCentered) return;
 
-        // Auto-center view on current circuit every tick during processing
-        let minC = Infinity, maxC = -Infinity, minR = Infinity, maxR = -Infinity;
+        let minC = Infinity, maxC = -Infinity, minRow = Infinity, maxRow = -Infinity;
         components.forEach(c => {
             minC = Math.min(minC, c.ox);
             maxC = Math.max(maxC, c.ox + c.w);
-            minR = Math.min(minR, c.oy);
-            maxR = Math.max(maxR, c.oy + c.h);
+            minRow = Math.min(minRow, c.oy);
+            maxRow = Math.max(maxRow, c.oy + c.h);
         });
 
-        // Center on that area
         const rect = svgRef.current?.getBoundingClientRect();
         if (!rect) return;
+
         const cx = (minC + maxC) / 2 * SP;
-        const cy = (minR + maxR) / 2 * SP;
+        const cy = (minRow + maxRow) / 2 * SP;
 
         const targetX = rect.width / 2 - cx * zoom;
         const targetY = rect.height / 2 - cy * zoom;
 
-        if (!hasCentered) {
+        // If 'pan' hasn't been initialized (0,0) or manual button triggered, instantly snap
+        if ((pan.x === 0 && pan.y === 0) || forceCenterToggle) {
             setPan({ x: targetX, y: targetY });
-            setHasCentered(true);
-        } else {
-            setPan(prev => ({
-                x: prev.x + (targetX - prev.x) * 0.1,
-                y: prev.y + (targetY - prev.y) * 0.1
-            }));
+            if (forceCenterToggle) setForceCenterToggle(false);
+        } else if (isProcessing) {
+            // Smooth drift only when processing
+            setPan(prev => {
+                const dx = targetX - prev.x;
+                const dy = targetY - prev.y;
+                if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return prev;
+                return {
+                    x: prev.x + dx * 0.05,
+                    y: prev.y + dy * 0.05
+                };
+            });
         }
-    }, [isProcessing, tick, components, zoom, hasCentered]);
+    }, [isProcessing, tick, components, zoom, pan.x, pan.y, forceCenterToggle]);
 
     // Bounding box for background fading
     const bounds = useMemo(() => {
@@ -232,11 +238,11 @@ export function PcbCanvas({
                 </g>
             </svg>
 
-            {/* Legacy Zoom Controls */}
+            {/* Zoom & Recenter Controls */}
             <div className="zbx">
                 <button className="zbtn" onClick={() => setZoom(z => z * 1.15)}>+</button>
                 <button className="zbtn" onClick={() => setZoom(z => z * 0.87)}>−</button>
-                <button className="zbtn" onClick={() => { setPan({ x: 20, y: 20 }); setZoom(1.0); }}>⊞</button>
+                <button className="zbtn" onClick={() => setForceCenterToggle(true)}>⊞</button>
             </div>
 
             <style dangerouslySetInnerHTML={{

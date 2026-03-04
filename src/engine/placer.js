@@ -162,8 +162,8 @@ export async function anneal(components, cols, rows, onProgress, shouldCancel) {
       else if (randDir < 0.75) doy = mag;
       else doy = -mag;
 
-      const nox = Math.max(1, Math.min(cols - c.w - 1, c.ox + dox));
-      const noy = Math.max(1, Math.min(rows - c.h - 1, c.oy + doy));
+      const nox = Math.max(-50000, Math.min(50000, c.ox + dox));
+      const noy = Math.max(-50000, Math.min(50000, c.oy + doy));
 
       moveComp(c, nox, noy);
 

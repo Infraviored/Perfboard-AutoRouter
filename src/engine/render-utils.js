@@ -56,12 +56,15 @@ export function generateBackgroundSVG(cols, rows, bounds = null) {
     const cy = ((bounds.minRow + bounds.maxRow + 1) / 2) * SP;
     const rw = (bounds.maxCol - bounds.minCol + 10) * SP / 2;
     const rh = (bounds.maxRow - bounds.minRow + 10) * SP / 2;
-    const r = Math.max(rw, rh, 300);
+    // 3x radius for massive visible glow area
+    const r = Math.max(rw, rh, 300) * 3;
 
     maskContent = `
       <radialGradient id="fadeGrad" cx="${cx}" cy="${cy}" r="${r}" gradientUnits="userSpaceOnUse">
         <stop offset="0%" stop-color="white" stop-opacity="1"/>
-        <stop offset="60%" stop-color="white" stop-opacity="0.3"/>
+        <stop offset="40%" stop-color="white" stop-opacity="1"/>     <!-- 2x larger inner bright circle -->
+        <stop offset="60%" stop-color="white" stop-opacity="0.8"/>
+        <stop offset="80%" stop-color="white" stop-opacity="0.3"/>   <!-- Smoother, softer falloff -->
         <stop offset="100%" stop-color="white" stop-opacity="0"/>
       </radialGradient>
       <mask id="fadeMask">

@@ -725,20 +725,24 @@ export async function tryGlobalNudge(components, wires, bestScore, cols, rows, g
 }
 
 
-export function recenterComponents(components, wires, cols, rows) {
+export function recenterComponents(components, wires) {
   if (components.length === 0) return;
   const b = calculateComponentBounds(components);
   const cx = Math.floor((b.minCol + b.maxCol + 1) / 2);
   const cy = Math.floor((b.minRow + b.maxRow + 1) / 2);
-  const dx = Math.floor(cols / 2) - cx;
-  const dy = Math.floor(rows / 2) - cy;
+
+  // We want the center of the bounding box to be exactly at 0,0
+  const dx = -cx;
+  const dy = -cy;
 
   if (dx === 0 && dy === 0) return;
 
   components.forEach(c => moveComp(c, c.ox + dx, c.oy + dy));
-  wires.forEach(w => {
-    if (w.path) w.path.forEach(pt => { pt.col += dx; pt.row += dy; });
-  });
+  if (wires) {
+    wires.forEach(w => {
+      if (w.path) w.path.forEach(pt => { pt.col += dx; pt.row += dy; });
+    });
+  }
 }
 
 export function cutToBoundingBox(components, wires) {
