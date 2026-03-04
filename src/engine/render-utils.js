@@ -25,6 +25,23 @@ export function netColor(n) {
   netColorCache.set(n, color);
   return color;
 }
+/**
+ * boostColor - Takes a potentially dark component color and makes it more vibrant 
+ * so it pops against the dark perforated board.
+ */
+export function boostColor(hex) {
+  if (!hex || hex.length < 6) return '#555';
+  // Simple hex to RGB boosting
+  let r = parseInt(hex.slice(1, 3), 16);
+  let g = parseInt(hex.slice(3, 5), 16);
+  let b = parseInt(hex.slice(5, 7), 16);
+
+  // Boost values: ensure a minimum brightness and saturation-like lift
+  const lift = (v) => Math.min(255, Math.max(v * 1.8, v + 40));
+  r = lift(r); g = lift(g); b = lift(b);
+
+  return `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
+}
 
 export function generateBackgroundSVG(cols, rows) {
   const W = cols * SP;
@@ -92,12 +109,13 @@ export function generateRatsnestSVG(components, wires = [], isDragging = false) 
 export function renderCompSVG(c, isSelected = false) {
   const bx = c.ox * SP + SP * .08, by = c.oy * SP + SP * .08;
   const bw = c.w * SP - SP * .16, bh = c.h * SP - SP * .16;
+  const mainColor = boostColor(c.color);
 
   let out = `<g class="pcb-comp" data-id="${c.id}">`;
 
   // 1. Draw Component Base
-  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="#111" stroke="${c.color}" stroke-width="2.5"/>`;
-  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="${c.color}" opacity="0.3"/>`;
+  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="#111" stroke="${mainColor}" stroke-width="2.5"/>`;
+  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="${mainColor}" opacity="0.3"/>`;
 
   // 2. Draw Pins
   c.pins.forEach(p => {

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { boostColor } from '../engine/render-utils.js';
 
 export function SidebarLeft({
     cols,
@@ -85,24 +86,35 @@ export function SidebarLeft({
                 {components.length === 0 ? (
                     <div style={{ fontSize: '.7em', color: 'var(--txt2)', textAlign: 'center', padding: '10px' }}>Load components first.</div>
                 ) : (
-                    components.map(c => (
-                        <div
-                            key={c.id}
-                            className={`comp-card ${selectedId === c.id ? 'sel' : ''}`}
-                            onClick={() => onSelectComponent(c.id)}
-                            style={{ borderLeft: `4px solid ${c.color}` }}
-                        >
-                            <span style={{ fontWeight: 600 }}>{c.id}</span>
-                            <span style={{ color: 'var(--txt2)', fontSize: '.88em' }}>{c.value}</span>
-                            <span style={{ color: 'var(--txt2)', fontSize: '.78em' }}>{c.pins.length}p</span>
-                            <button
-                                className="edit-mini-btn"
-                                onClick={(e) => { e.stopPropagation(); onEditComponent(c.id); }}
+                    components.map(c => {
+                        const boosted = boostColor(c.color);
+                        return (
+                            <div
+                                key={c.id}
+                                className={`comp-card ${selectedId === c.id ? 'sel' : ''}`}
+                                onClick={() => onSelectComponent(c.id)}
+                                style={{
+                                    '--comp-color': boosted,
+                                }}
                             >
-                                Edit
-                            </button>
-                        </div>
-                    ))
+                                <div className="comp-id-tag">{c.id}</div>
+                                <div className="comp-info">
+                                    <div className="comp-name">{c.name}</div>
+                                    <div className="comp-value">{c.value}</div>
+                                </div>
+                                <div className="comp-actions">
+                                    <div className="comp-pins-tag">{c.pins.length}P</div>
+                                    <button
+                                        className="edit-mini-btn"
+                                        onClick={(e) => { e.stopPropagation(); onEditComponent(c.id); }}
+                                        title="Edit Component"
+                                    >
+                                        🔧
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })
                 )}
             </div>
 
@@ -147,29 +159,106 @@ export function SidebarLeft({
         .tplbtn.grn-bg { background: var(--grn); color: #000; border-color: var(--grn); }
 
         .comp-card {
-          background: var(--bg3);
-          border: 1px solid var(--border);
-          border-radius: 5px;
-          padding: 6px 9px;
+          position: relative;
+          background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), var(--comp-color);
+          background-blend-mode: multiply;
+          border: 1px solid rgba(255,255,255,0.08);
+          border-left: 3px solid var(--comp-color);
+          border-radius: 6px;
+          padding: 10px 12px;
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          font-size: .72em;
+          gap: 12px;
           cursor: pointer;
-          transition: .12s;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          overflow: hidden;
         }
-        .comp-card:hover { background: var(--bg4); border-color: var(--border2); }
-        .comp-card.sel { border-color: var(--blu); background: #0d1f3a; }
+
+        /* The tinted background similar to the board */
+        .comp-card::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: var(--comp-color);
+          opacity: 0.15;
+          pointer-events: none;
+        }
+
+        .comp-card:hover { 
+          transform: translateX(2px);
+          filter: brightness(1.2);
+          border-color: rgba(255,255,255,0.2);
+        }
+        
+        .comp-card.sel { 
+          background: linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), var(--comp-color);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3), 0 0 0 1px var(--blu);
+          border-color: var(--blu);
+        }
+
+        .comp-id-tag {
+          font-family: 'Consolas', monospace;
+          font-weight: 800;
+          font-size: 0.9em;
+          color: var(--txt0);
+          min-width: 24px;
+        }
+
+        .comp-info {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .comp-name {
+          font-size: 0.75em;
+          font-weight: 600;
+          color: var(--txt1);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .comp-value {
+          font-size: 0.65em;
+          color: var(--txt2);
+          font-family: 'Consolas', monospace;
+        }
+
+        .comp-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .comp-pins-tag {
+          font-size: 0.6em;
+          background: rgba(0,0,0,0.3);
+          color: var(--txt2);
+          padding: 2px 5px;
+          border-radius: 4px;
+          border: 1px solid rgba(255,255,255,0.05);
+          font-weight: 700;
+        }
 
         .edit-mini-btn {
-          margin-left: auto;
-          background: var(--blu);
-          border: 1px solid var(--blu);
-          color: #fff;
-          padding: 2px 6px;
-          border-radius: 3px;
-          font-size: .7em;
+          background: none;
+          border: none;
+          color: var(--txt2);
+          padding: 4px;
+          border-radius: 4px;
+          font-size: 0.9em;
           cursor: pointer;
+          transition: 0.2s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .edit-mini-btn:hover { 
+          color: var(--txt0); 
+          background: rgba(255,255,255,0.1);
+          transform: rotate(15deg); 
         }
       `}} />
         </aside>

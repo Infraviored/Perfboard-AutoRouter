@@ -81,16 +81,16 @@ export function CompEditorOverlay({ component, isOpen, onClose, onSave }) {
 
             <style dangerouslySetInnerHTML={{
                 __html: `
-        .modal.editor { max-width: 600px; width: 95%; }
+        .modal.editor { max-width: 600px; width: 95%; height: auto; max-height: 90vh; }
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .pin-list-area { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+        .pin-list-area { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
         .pin-scroller { flex: 1; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; background: var(--bg3); padding: 5px; }
         .pin-edit-row { display: flex; align-items: center; gap: 8px; padding: 4px; border-bottom: 1px solid var(--border); }
         .p-idx { font-size: .7em; color: var(--txt2); width: 15px; }
         .p-lbl { width: 80px; }
         .p-net { flex: 1; color: var(--blu); }
         .p-off { font-size: .65em; color: var(--txt2); width: 50px; text-align: right; }
-        .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 5px; }
+        .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
       `}} />
         </div>
     );

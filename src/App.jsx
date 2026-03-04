@@ -78,6 +78,7 @@ function App() {
   }, [engine, jsonInput, saveHistory]);
 
   const handlePlaceAndRoute = useCallback(async () => {
+    setBestSnapshot(null);
     setStatus(prev => ({ ...prev, isProcessing: true }));
     try {
       const data = JSON.parse(jsonInput);

@@ -47,31 +47,6 @@ export function LibraryOverlay({ isOpen, onClose, onSelect }) {
 
             <style dangerouslySetInnerHTML={{
                 __html: `
-        .overlay-bg {
-          position: absolute;
-          inset: 0;
-          background: rgba(0,0,0,.85);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 200;
-        }
-        .modal {
-          background: var(--bg2);
-          border: 1px solid var(--border);
-          border-radius: 8px;
-          width: 90%;
-          max-width: 500px;
-          max-height: 80vh;
-          display: flex;
-          flex-direction: column;
-          padding: 20px;
-          gap: 15px;
-        }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; }
-        .modal-header h3 { font-size: 1.1em; color: var(--txt0); }
-        .close-btn { background: none; border: none; color: var(--txt1); font-size: 1.3em; cursor: pointer; }
-        
         .lib-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
         .lib-item {
           display: flex;

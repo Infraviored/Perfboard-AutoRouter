@@ -140,7 +140,7 @@ export class AutorouterEngine {
         return scoreState(this.components, testWires);
     }
 
-    async placeAndRoute(compDefs, autoOptimize = true) {
+    async placeAndRoute(compDefs, autoOptimize = false) {
         if (!compDefs || compDefs.length === 0) {
             this.onToast?.('No components to place', 'warn');
             return;
@@ -182,16 +182,6 @@ export class AutorouterEngine {
                 bestCompletion = c;
                 bestWires = candidateWires;
                 bestComps = saveComps(currentComponents);
-
-                // Push status message and snapshot to bottom bar
-                const currentScore = scoreState(currentComponents, candidateWires);
-                this.onStatusUpdate?.({ best: `Best: ${Math.round(bestCompletion * 100)}% (WL ${currentScore.wl})` });
-
-                const snapshotComps = currentComponents.map(comp => ({
-                    ...comp,
-                    pins: comp.pins.map(p => ({ ...p, col: comp.ox + p.dCol, row: comp.oy + p.dRow }))
-                }));
-                this.onBestSnapshot?.({ components: snapshotComps, wires: [...candidateWires] });
             }
 
             if (c === 1.0) break; // Found 100% solution
@@ -201,12 +191,6 @@ export class AutorouterEngine {
             this.components = placeInitial(compDefs, this.cols, this.rows); // Reset structure
             restoreComps(this.components, bestComps);
             this.wires = bestWires;
-
-            if (bestCompletion === 1.0 && autoOptimize) {
-                this.onProgress?.(0, 'Optimizing footprint...');
-                const res = await doRecursivePushPacking(this.components, this.wires, this.cols, this.rows, () => this.gCancelRequested);
-                this.wires = res.wires;
-            }
 
             this.notify();
             if (bestCompletion < 1.0) {
