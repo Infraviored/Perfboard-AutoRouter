@@ -1,4 +1,4 @@
-import { getAllNets, route } from './router.js';
+import { getAllNets, route, incrementalReroute } from './router.js';
 import { moveComp, anyOverlap, rotateComp90InPlace } from './placer.js';
 import { saveComps, restoreComps, completion } from './state-utils.js';
 
@@ -438,12 +438,22 @@ export async function tryShrinkAlongWires(components, currentWires, bestScore, c
     for (const d of dirs) {
       restoreComps(components, original);
 
+      // Save positions before push to detect which components actually moved
+      const posBefore = components.map(comp => ({ ox: comp.ox, oy: comp.oy, w: comp.w, h: comp.h }));
+
       const visited = new Set();
       const ok = tryTranslateWithPush(c, d.dx, d.dy, cols, rows, visited, 0, components);
       if (!ok) continue;
       if (anyOverlap(c, components)) continue;
 
-      const testWires = await route(components, cols, rows, () => { }, () => gCancelRequested);
+      // Find which components actually moved (tryTranslateWithPush can chain-push multiple)
+      const movedComps = components.filter((comp, i) => {
+        const before = posBefore[i];
+        return comp.ox !== before.ox || comp.oy !== before.oy || comp.w !== before.w || comp.h !== before.h;
+      });
+
+      const { success, wires: testWires } = incrementalReroute(components, originalWires, movedComps);
+      if (!success) continue;
       const testScore = scoreState(components, testWires);
 
       // Only allow moves that keep routing completion and improve score.
@@ -521,8 +531,9 @@ export async function explorePlateauStates(components, currentWires, bestScore, 
             testScore.perim === bestLocalScore.perim &&
             testScore.wl < bestLocalScore.wl
           )) {
-            // Need actual routing if we pretend we improved
-            const testWires = await route(components, cols, rows, () => { }, () => gCancelRequested);
+            // Use incremental routing — only re-route nets touching the moved component
+            const { success, wires: testWires } = incrementalReroute(components, originalWires, cc);
+            if (!success) continue;
             const realScore = scoreState(components, testWires);
             if (realScore.comp < bestScore.comp) continue;
 
@@ -569,7 +580,8 @@ export async function tryRotateOptimize(components, wires, cols, rows, gCancelRe
 
       if (anyOverlap(c, components)) continue;
 
-      const testWires = await route(components, cols, rows, () => { }, () => gCancelRequested);
+      const { success, wires: testWires } = incrementalReroute(components, bestWires, c);
+      if (!success) continue;
       const testScore = scoreState(components, testWires);
 
       if (isScoreBetter(testScore, bestScore)) {
@@ -639,7 +651,8 @@ export async function doRecursivePushPacking(components, wires, cols, rows, gCan
     });
 
     const oldStates = saveComps(components);
-    let moveOccurred = false;
+    const posBefore = components.map(c => ({ ox: c.ox, oy: c.oy, w: c.w, h: c.h }));
+    const movedSet = [];
 
     for (let c of sorted) {
       const target = compTargets.get(c);
@@ -664,22 +677,26 @@ export async function doRecursivePushPacking(components, wires, cols, rows, gCan
 
       // Try moving diagonally first, then slide horizontally or vertically
       if (tryMove(dx, dy) || tryMove(dx, 0) || tryMove(0, dy)) {
-        moveOccurred = true;
+        movedSet.push(c);
       }
     }
 
-    if (moveOccurred) {
-      const testWires = await route(components, cols, rows, () => { }, () => gCancelRequested);
-      const testScore = scoreState(components, testWires);
-
-      if (isScoreBetter(testScore, bestScore) || (
-        testScore.comp === bestScore.comp && testScore.area === bestScore.area && testScore.perim === bestScore.perim
-      )) {
-        if (isScoreBetter(testScore, bestScore)) bestScore = testScore;
-        bestWires = testWires;
-        changed = true;
+    if (movedSet.length > 0) {
+      const { success, wires: testWires } = incrementalReroute(components, bestWires, movedSet);
+      if (!success) {
+        restoreComps(components, oldStates);
       } else {
-        restoreComps(components, oldStates); // Revert if topological move broke a wire
+        const testScore = scoreState(components, testWires);
+
+        if (isScoreBetter(testScore, bestScore) || (
+          testScore.comp === bestScore.comp && testScore.area === bestScore.area && testScore.perim === bestScore.perim
+        )) {
+          if (isScoreBetter(testScore, bestScore)) bestScore = testScore;
+          bestWires = testWires;
+          changed = true;
+        } else {
+          restoreComps(components, oldStates); // Revert if topological move broke a wire
+        }
       }
     }
   }
