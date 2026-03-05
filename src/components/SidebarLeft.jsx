@@ -107,133 +107,158 @@ export function SidebarLeft({
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 17px;
-          height: 17px;
-          border-radius: 50%;
+          width: 18px;
+          height: 18px;
+          border-radius: 6px;
           background: var(--bg4);
           border: 1px solid var(--border2);
-          font-size: .63em;
-          font-weight: 700;
-          color: var(--txt2);
-          margin-right: 6px;
+          font-size: .6em;
+          font-weight: 800;
+          color: var(--txt1);
+          margin-right: 8px;
+          font-family: 'Inter', sans-serif;
         }
-        .sbadge.act { background: var(--grn); color: #000; border-color: var(--grn); }
+        .sbadge.act { background: var(--grn-bright); color: #000; border-color: var(--grn-bright); }
         
         .tplbtn {
-          padding: 4px 10px;
-          border-radius: 4px;
+          padding: 6px 12px;
+          border-radius: 8px;
           cursor: pointer;
-          font-size: .85em;
+          font-size: .75em;
+          font-weight: 600;
           background: var(--bg4);
-          border: 1px solid var(--border2);
-          color: var(--txt1);
-          transition: all 0.1s ease;
+          border: 1px solid var(--border);
+          color: var(--txt0);
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          display: flex;
+          align-items: center;
+          gap: 6px;
         }
-        .tplbtn:hover { color: var(--txt0); }
-        .tplbtn.blu-bg { background: var(--blu); color: #fff; border-color: var(--blu); }
-        .tplbtn.grn-bg { background: var(--grn); color: #000; border-color: var(--grn); }
+        .tplbtn:hover { 
+          background: var(--bg3);
+          border-color: var(--txt1);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .tplbtn.blu-bg { 
+          background: var(--blu); 
+          color: #fff; 
+          border-color: rgba(255,255,255,0.1); 
+          box-shadow: 0 2px 8px rgba(31, 111, 235, 0.3);
+        }
+        .tplbtn.blu-bg:hover { background: #388bfd; box-shadow: 0 4px 16px rgba(31, 111, 235, 0.5); }
+
+        .tplbtn.grn-bg { 
+          background: var(--grn); 
+          color: #fff; 
+          border-color: rgba(255,255,255,0.1);
+          box-shadow: 0 2px 8px rgba(35, 134, 54, 0.3);
+        }
+        .tplbtn.grn-bg:hover { background: #2ea043; box-shadow: 0 4px 16px rgba(35, 134, 54, 0.5); }
 
         .comp-card {
           position: relative;
-          background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), var(--comp-color);
-          background-blend-mode: multiply;
-          border: 1px solid rgba(255,255,255,0.08);
-          border-left: 3px solid var(--comp-color);
-          border-radius: 6px;
-          padding: 10px 12px;
+          background: var(--bg3);
+          border: 1px solid var(--border);
+          border-left: 4px solid var(--comp-color);
+          border-radius: 10px;
+          padding: 12px;
           display: flex;
           align-items: center;
           gap: 12px;
           cursor: pointer;
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
           overflow: hidden;
-        }
-
-        /* The tinted background similar to the board */
-        .comp-card::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background: var(--comp-color);
-          opacity: 0.15;
-          pointer-events: none;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .comp-card:hover { 
-          transform: translateX(2px);
-          filter: brightness(1.2);
-          border-color: rgba(255,255,255,0.2);
+          transform: translateX(4px);
+          border-color: var(--border2);
+          background: var(--bg4);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
         
         .comp-card.sel { 
-          background: linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), var(--comp-color);
-          box-shadow: 0 4px 12px rgba(0,0,0,0.3), 0 0 0 1px var(--blu);
+          background: var(--bg4);
           border-color: var(--blu);
+          box-shadow: 0 0 0 1px var(--blu), 0 8px 24px rgba(0,0,0,0.4);
         }
 
         .comp-id-tag {
           font-family: 'Consolas', monospace;
           font-weight: 800;
-          font-size: 0.9em;
+          font-size: 0.95em;
           color: var(--txt0);
-          min-width: 24px;
+          min-width: 28px;
+          background: rgba(255,255,255,0.05);
+          padding: 2px 4px;
+          border-radius: 4px;
+          text-align: center;
         }
 
         .comp-info {
           flex: 1;
           display: flex;
           flex-direction: column;
-          gap: 2px;
+          gap: 1px;
+          min-width: 0; /* CRITICAL for truncation */
         }
 
         .comp-name {
-          font-size: 0.75em;
+          font-size: 0.8em;
           font-weight: 600;
-          color: var(--txt1);
+          color: var(--txt0);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
         .comp-value {
-          font-size: 0.65em;
-          color: var(--txt2);
+          font-size: 0.7em;
+          color: var(--txt1);
           font-family: 'Consolas', monospace;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .comp-actions {
           display: flex;
           align-items: center;
           gap: 8px;
+          flex-shrink: 0; /* Don't squash the icons */
         }
 
         .comp-pins-tag {
-          font-size: 0.6em;
-          background: rgba(0,0,0,0.3);
-          color: var(--txt2);
-          padding: 2px 5px;
-          border-radius: 4px;
-          border: 1px solid rgba(255,255,255,0.05);
+          font-size: 0.65em;
+          background: var(--bg0);
+          color: var(--txt1);
+          padding: 2px 6px;
+          border-radius: 100px;
+          border: 1px solid var(--border);
           font-weight: 700;
         }
 
         .edit-mini-btn {
-          background: none;
-          border: none;
-          color: var(--txt2);
-          padding: 4px;
-          border-radius: 4px;
-          font-size: 0.9em;
+          background: var(--bg2);
+          border: 1px solid var(--border);
+          color: var(--txt1);
+          width: 24px;
+          height: 24px;
+          border-radius: 6px;
+          font-size: 0.8em;
           cursor: pointer;
-          transition: 0.2s;
+          transition: all 0.2s;
           display: flex;
           align-items: center;
           justify-content: center;
         }
         .edit-mini-btn:hover { 
           color: var(--txt0); 
-          background: rgba(255,255,255,0.1);
-          transform: rotate(15deg); 
+          background: var(--blu);
+          border-color: var(--blu);
+          transform: rotate(45deg); 
         }
       `}} />
     </aside>

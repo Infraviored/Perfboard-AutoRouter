@@ -113,86 +113,110 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
         #proc-bar {
           display: flex;
           align-items: center;
-          gap: 20px;
-          padding: 12px 24px;
-          background: #0d1117;
-          border-top: 2px solid var(--grn);
+          gap: 32px;
+          padding: 20px 32px;
+          background: var(--glass-bg);
+          backdrop-filter: blur(16px);
+          border-top: 2px solid var(--grn-bright);
           flex-shrink: 0;
-          height: 220px;
-          box-shadow: 0 -8px 32px rgba(0,217,126,.15);
+          height: 240px;
+          box-shadow: var(--shadow-premium), 0 -4px 32px rgba(35, 134, 54, 0.2);
+          z-index: 50;
         }
         .pb-left {
           display: flex;
           flex-direction: column;
-          gap: 10px;
+          gap: 16px;
           flex: 1;
           min-width: 0;
         }
         .pb-title {
-          font-size: .9em;
-          color: var(--grn);
-          font-weight: 700;
+          font-family: 'Outfit', sans-serif;
+          font-size: 1.1em;
+          color: var(--grn-bright);
+          font-weight: 800;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          letter-spacing: -0.01em;
         }
         .pb-best {
-          font-size: .8em;
+          font-size: .85em;
           color: var(--txt1);
           white-space: nowrap;
+          font-family: 'Consolas', monospace;
+          background: rgba(255,255,255,0.03);
+          padding: 4px 8px;
+          border-radius: 4px;
+          width: fit-content;
         }
         .pb-track {
-          height: 6px;
+          height: 8px;
           background: var(--bg4);
-          border-radius: 3px;
+          border-radius: 100px;
           overflow: hidden;
+          border: 1px solid var(--border);
         }
         .pb-fill {
           height: 100%;
-          background: var(--grn);
+          background: linear-gradient(90deg, var(--grn), var(--grn-bright));
           transition: width .06s linear;
+          box-shadow: 0 0 12px var(--grn);
         }
         .pb-btn {
           width: fit-content;
-          padding: 6px 20px;
-          font-size: .85em;
+          padding: 10px 24px;
+          font-size: .9em;
+          border-radius: 10px;
         }
         .pb-esc {
-          font-size: .8em;
-          opacity: .6;
-          margin-left: 8px;
-          background: rgba(0,0,0,.3);
-          padding: 2px 6px;
-          border-radius: 3px;
-          border: 1px solid rgba(255,255,255,.2);
+          font-size: .75em;
+          opacity: .8;
+          margin-left: 10px;
+          background: rgba(0,0,0,.4);
+          padding: 2px 8px;
+          border-radius: 6px;
+          border: 1px solid rgba(255,255,255,.1);
+          font-family: 'Inter', sans-serif;
+          font-weight: 600;
         }
         .pb-preview {
           display: flex;
           flex-direction: column;
           align-items: flex-end;
-          gap: 6px;
+          gap: 10px;
           flex-shrink: 0;
           height: 100%;
           justify-content: center;
         }
         .pb-preview-label {
-          font-size: .7em;
+          font-family: 'Inter', sans-serif;
+          font-size: .65em;
           color: var(--txt1);
           text-transform: uppercase;
-          letter-spacing: .1em;
-          font-weight: 700;
+          letter-spacing: .15em;
+          font-weight: 800;
         }
         .pb-preview-wrap {
           border: 1px solid var(--border2);
-          border-radius: 6px;
+          border-radius: 12px;
           overflow: hidden;
           height: 180px;
-          min-width: 180px;
+          min-width: 220px;
           display: flex;
           align-items: center;
           justify-content: center;
-          background: #1a1208;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+          background: #0d0a06;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.6), inset 0 0 40px rgba(0,0,0,0.8);
+          position: relative;
+        }
+        .pb-preview-wrap::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          border-radius: 12px;
+          box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+          pointer-events: none;
         }
       `}} />
     </div>

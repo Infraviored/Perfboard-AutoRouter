@@ -102,50 +102,61 @@ export function SidebarRight({
         .sgrid {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 5px;
-          padding: 8px;
+          gap: 8px;
+          padding: 12px;
         }
         .scard {
           background: var(--bg3);
           border: 1px solid var(--border);
-          border-radius: 6px;
-          padding: 8px 6px;
+          border-radius: 10px;
+          padding: 12px 8px;
           text-align: center;
+          transition: transform 0.2s, background 0.2s;
+        }
+        .scard:hover {
+          transform: translateY(-2px);
+          background: var(--bg4);
+          border-color: var(--border2);
         }
         .scard.w2 { grid-column: span 2; }
         .sv {
-          font-size: 1.1em;
-          font-weight: 700;
-          color: var(--grn);
+          font-family: 'Outfit', sans-serif;
+          font-size: 1.2em;
+          font-weight: 800;
+          color: var(--blu-bright);
           font-variant-numeric: tabular-nums;
+          letter-spacing: -0.02em;
         }
         .sl {
-          font-size: .7em;
+          font-size: .65em;
           color: var(--txt1);
-          font-weight: 600;
+          font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.05em;
-          margin-top: 4px;
+          letter-spacing: 0.1em;
+          margin-top: 6px;
         }
 
         .prop-row {
           display: flex;
           align-items: center;
-          padding: 8px 12px;
-          gap: 8px;
+          padding: 10px 16px;
+          gap: 12px;
           border-bottom: 1px solid var(--border);
-          font-size: .84em;
+          font-size: .82em;
+          transition: background 0.1s;
         }
-        .prop-row.hov { background: var(--bg4); }
-        .pk { color: var(--txt2); width: 64px; flex-shrink: 0; font-weight: 500; font-size: .85em; }
-        .pv { color: var(--txt0); flex: 1; font-family: monospace; font-size: 1em; overflow: hidden; text-overflow: ellipsis; }
+        .prop-row:hover { background: rgba(255,255,255,0.02); }
+        .prop-row.hov { background: rgba(31, 111, 235, 0.1); }
+        .pk { color: var(--txt1); width: 70px; flex-shrink: 0; font-weight: 600; font-size: .8em; text-transform: uppercase; letter-spacing: 0.05em; }
+        .pv { color: var(--txt0); flex: 1; font-family: 'Consolas', monospace; font-size: 1em; overflow: hidden; text-overflow: ellipsis; }
         
         .net-dot {
           display: inline-block;
-          width: 9px;
-          height: 9px;
+          width: 10px;
+          height: 10px;
           border-radius: 50%;
           vertical-align: middle;
+          box-shadow: 0 0 6px rgba(0,0,0,0.5);
         }
       `}} />
         </aside>

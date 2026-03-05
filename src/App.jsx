@@ -267,6 +267,36 @@ Use this format:
     URL.revokeObjectURL(url);
   }, [board]);
 
+  const handleImportState = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const parsed = JSON.parse(e.target.result);
+          if (parsed.components) {
+            engine.setState({
+              components: parsed.components,
+              wires: parsed.wires || [],
+              cols: parsed.cols || board.cols,
+              rows: parsed.rows || board.rows
+            });
+            saveHistory();
+            setToast({ msg: 'State imported successfully', type: 'ok' });
+          }
+        } catch (err) {
+          setToast({ msg: 'Import error: ' + err.message, type: 'err' });
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }, [engine, board.cols, board.rows, saveHistory]);
+
   // --- ENGINE SYNC ---
   useEffect(() => {
     engine.setCallbacks({
@@ -350,7 +380,8 @@ Use this format:
         onPlaceAndRoute={handlePlaceAndRoute} onOptimizeFootprint={handleOptimizeFootprint}
         onPlateauExplore={handlePlateauExplore} onRouteOnly={handleRouteOnly}
         onClearWires={handleClearWires} onReset={handleReset} onUndo={handleUndo} onRedo={handleRedo}
-        onExportState={handleExportState} onExportSVG={() => {/* SVG Export Logic */ }}
+        onExportState={handleExportState} onImportState={handleImportState}
+        onExportSVG={() => { /* SVG Export Logic */ }}
         hasWires={board.wires.length > 0}
       />
       <div id="layout">
