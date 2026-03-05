@@ -469,6 +469,206 @@ export async function tryShrinkAlongWires(components, currentWires, bestScore, c
 }
 
 
+/**
+ * Generate candidate positions for relocating a blocker component.
+ * Positions within the current BB are prioritized; +1 outside is allowed
+ * (temporary growth to enable future shrink).
+ */
+function generateBlockerCandidates(blocker, bounds) {
+  const candidates = [];
+  const seen = new Set();
+  const compArea = blocker.w * blocker.h;
+  const radius = compArea <= 4 ? 5 : 3;
+
+  for (let dx = -radius; dx <= radius; dx++) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      if (dx === 0 && dy === 0) continue;
+      const ox = blocker.ox + dx;
+      const oy = blocker.oy + dy;
+      // Allow positions within BB + 1 margin (temporary growth)
+      if (ox + blocker.w - 1 < bounds.minCol - 1 || ox > bounds.maxCol + 1) continue;
+      if (oy + blocker.h - 1 < bounds.minRow - 1 || oy > bounds.maxRow + 1) continue;
+      const key = `${ox},${oy}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      candidates.push({ ox, oy });
+    }
+  }
+
+  // Sort: within-BB first, then closer to center
+  const cx = (bounds.minCol + bounds.maxCol) / 2;
+  const cy = (bounds.minRow + bounds.maxRow) / 2;
+
+  candidates.sort((a, b) => {
+    const aIn = a.ox >= bounds.minCol && a.ox + blocker.w - 1 <= bounds.maxCol &&
+      a.oy >= bounds.minRow && a.oy + blocker.h - 1 <= bounds.maxRow;
+    const bIn = b.ox >= bounds.minCol && b.ox + blocker.w - 1 <= bounds.maxCol &&
+      b.oy >= bounds.minRow && b.oy + blocker.h - 1 <= bounds.maxRow;
+    if (aIn !== bIn) return aIn ? -1 : 1;
+    const dA = Math.abs(a.ox + blocker.w / 2 - cx) + Math.abs(a.oy + blocker.h / 2 - cy);
+    const dB = Math.abs(b.ox + blocker.w / 2 - cx) + Math.abs(b.oy + blocker.h / 2 - cy);
+    return dA - dB;
+  });
+
+  return candidates;
+}
+
+/**
+ * Recursive search: finds a sequence of component relocations that allows
+ * `target` to be placed at (goalX, goalY). If a blocker is in the way,
+ * it tries relocating the blocker to valid nearby positions and recurses.
+ *
+ * Returns an array of {id, ox, oy} move steps (blocker moves first), or null.
+ */
+function findChainSequence(target, goalX, goalY, components, bounds, maxDepth, budget) {
+  if (budget.calls++ > budget.max) return null;
+
+  // Simulate target at goal, find blocker
+  const origOx = target.ox, origOy = target.oy;
+  moveComp(target, goalX, goalY);
+  const blocker = findFirstOverlap(target, components);
+  moveComp(target, origOx, origOy);
+
+  if (!blocker) {
+    return [{ id: target.id, ox: goalX, oy: goalY }];
+  }
+
+  if (maxDepth <= 0) return null;
+
+  const candidates = generateBlockerCandidates(blocker, bounds);
+
+  for (const cand of candidates) {
+    if (budget.calls > budget.max) break;
+
+    // Save full state, move blocker to candidate
+    const saved = saveComps(components);
+    moveComp(blocker, cand.ox, cand.oy);
+
+    if (anyOverlap(blocker, components)) {
+      restoreComps(components, saved);
+      continue;
+    }
+
+    // Recurse: with blocker relocated, can target reach goalPos now?
+    const subSeq = findChainSequence(target, goalX, goalY, components, bounds, maxDepth - 1, budget);
+
+    restoreComps(components, saved);
+
+    if (subSeq) {
+      return [{ id: blocker.id, ox: cand.ox, oy: cand.oy }, ...subSeq];
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Targeted Chain Compaction (TCC):
+ * For each boundary component (small first, few-nets first), try to find
+ * a multi-step sequence of component relocations that lets it move inward
+ * and shrink the bounding box. Blockers are recursively relocated to
+ * nearby free positions (air gaps). Routing is checked only once at the
+ * end of a successful sequence.
+ */
+export function tryChainedCompaction(components, currentWires, bestScore, cols, rows, gCancelRequested = false) {
+  const bounds = calculateComponentBounds(components);
+  const bbW = bounds.maxCol - bounds.minCol + 1;
+  const bbH = bounds.maxRow - bounds.minRow + 1;
+  const currentArea = bbW * bbH;
+
+  const original = saveComps(components);
+
+  // Boundary components: small footprint first, then few-nets first
+  const onBoundary = (c) =>
+    c.ox === bounds.minCol || (c.ox + c.w - 1) === bounds.maxCol ||
+    c.oy === bounds.minRow || (c.oy + c.h - 1) === bounds.maxRow;
+
+  const boundary = components.filter(onBoundary).sort((a, b) => {
+    const aArea = a.w * a.h, bArea = b.w * b.h;
+    if (aArea !== bArea) return aArea - bArea;
+    const aNets = new Set(a.pins.map(p => p.net).filter(Boolean)).size;
+    const bNets = new Set(b.pins.map(p => p.net).filter(Boolean)).size;
+    return aNets - bNets;
+  });
+
+  for (const c of boundary) {
+    if (gCancelRequested) break;
+
+    // Find inward directions that would actually shrink BB
+    const dirs = [];
+    if (c.ox === bounds.minCol) dirs.push({ dx: 1, dy: 0 });
+    if ((c.ox + c.w - 1) === bounds.maxCol) dirs.push({ dx: -1, dy: 0 });
+    if (c.oy === bounds.minRow) dirs.push({ dx: 0, dy: 1 });
+    if ((c.oy + c.h - 1) === bounds.maxRow) dirs.push({ dx: 0, dy: -1 });
+
+    for (const dir of dirs) {
+      for (let delta = 1; delta <= 3; delta++) {
+        restoreComps(components, original);
+
+        const comp = components.find(x => x.id === c.id);
+        const goalX = comp.ox + dir.dx * delta;
+        const goalY = comp.oy + dir.dy * delta;
+
+        const budget = { calls: 0, max: 500 };
+        const seq = findChainSequence(comp, goalX, goalY, components, bounds, 2, budget);
+
+        if (!seq || seq.length === 0) continue;
+
+        // Apply all moves atomically
+        restoreComps(components, original);
+        const movedComps = [];
+        for (const step of seq) {
+          const mc = components.find(x => x.id === step.id);
+          moveComp(mc, step.ox, step.oy);
+          movedComps.push(mc);
+        }
+
+        // Verify BB actually shrank
+        const newBounds = calculateComponentBounds(components);
+        const newArea = (newBounds.maxCol - newBounds.minCol + 1) *
+          (newBounds.maxRow - newBounds.minRow + 1);
+        if (newArea >= currentArea) {
+          restoreComps(components, original);
+          continue;
+        }
+
+        // Verify no overlaps in the final state
+        let hasOverlapFinal = false;
+        for (const mc of movedComps) {
+          if (anyOverlap(mc, components)) { hasOverlapFinal = true; break; }
+        }
+        if (hasOverlapFinal) {
+          restoreComps(components, original);
+          continue;
+        }
+
+        // One incremental route for the entire sequence
+        const { success, wires: testWires } = incrementalReroute(components, currentWires, movedComps);
+        if (!success) {
+          restoreComps(components, original);
+          continue;
+        }
+
+        const testScore = scoreState(components, testWires);
+        if (testScore.comp < bestScore.comp) {
+          restoreComps(components, original);
+          continue;
+        }
+
+        if (isScoreBetter(testScore, bestScore)) {
+          return { improved: true, score: testScore, wires: testWires };
+        }
+
+        restoreComps(components, original);
+      }
+    }
+  }
+
+  restoreComps(components, original);
+  return { improved: false, score: bestScore, wires: currentWires };
+}
+
+
 export async function explorePlateauStates(components, currentWires, bestScore, cols, rows, gCancelRequested = false) {
   const baseBounds = calculateComponentBounds(components);
   const baseW = (baseBounds.maxCol - baseBounds.minCol + 1);

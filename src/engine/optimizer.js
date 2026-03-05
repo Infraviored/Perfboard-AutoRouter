@@ -1,5 +1,5 @@
 import { route } from './router.js';
-import { scoreState, formatScore, calculateFootprintArea, footprintBoxMetrics, calculateComponentBounds, doRecursivePushPacking, tryRotateOptimize, explorePlateauStates, tryGlobalNudge, tryShrinkAlongWires, isScoreBetter, recenterComponents, stateKeyForPlateau, enumeratePlateauNeighbors } from './optimizer-algorithms.js';
+import { scoreState, formatScore, calculateFootprintArea, footprintBoxMetrics, calculateComponentBounds, doRecursivePushPacking, tryRotateOptimize, explorePlateauStates, tryGlobalNudge, tryShrinkAlongWires, tryChainedCompaction, isScoreBetter, recenterComponents, stateKeyForPlateau, enumeratePlateauNeighbors } from './optimizer-algorithms.js';
 import { saveComps, restoreComps } from './state-utils.js';
 import { moveComp, rotateComp90InPlace, anneal, anyOverlap } from './placer.js';
 
@@ -218,6 +218,16 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                 localBestComps = saveComps(components);
                 currentWires = shrinkRes.wires;
                 stagnation = 0;
+            }
+
+            if (!checkCancel()) {
+                const chainRes = tryChainedCompaction(components, currentWires, localBestScore, vCols, vRows, checkCancel());
+                if (chainRes.improved) {
+                    localBestScore = chainRes.score;
+                    localBestComps = saveComps(components);
+                    currentWires = chainRes.wires;
+                    stagnation = 0;
+                }
             }
 
             if (!checkCancel() && stagnation >= platThresh) {
