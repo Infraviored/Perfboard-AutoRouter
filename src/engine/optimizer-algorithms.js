@@ -470,9 +470,133 @@ export async function tryShrinkAlongWires(components, currentWires, bestScore, c
 
 
 /**
+ * Topological Wire Absorption:
+ * Iteratively pulls components along their connected wire paths toward
+ * their connections. For each pin, follows the wire path direction and
+ * moves the component 1 step along it. The cell was already occupied by
+ * the wire, so the move is provably safe and wirelength monotonically
+ * improves. Repeats until no more progress, creating free space for
+ * subsequent TCC and plateau passes.
+ */
+export function tryWireAbsorption(components, currentWires, bestScore, cols, rows, gCancelRequested = false) {
+  const startComps = saveComps(components);
+  let latestWires = currentWires;
+  let latestScore = bestScore;
+
+  let madeProgress = true;
+  let passes = 0;
+  const MAX_PASSES = 30;
+
+  while (madeProgress && passes++ < MAX_PASSES && !gCancelRequested) {
+    madeProgress = false;
+
+    const bounds = calculateComponentBounds(components);
+    const bbArea = (bounds.maxCol - bounds.minCol + 1) * (bounds.maxRow - bounds.minRow + 1);
+
+    // Sort: small components first, then few pins first
+    const sorted = [...components].sort((a, b) => {
+      const aSize = a.w * a.h, bSize = b.w * b.h;
+      if (aSize !== bSize) return aSize - bSize;
+      return a.pins.length - b.pins.length;
+    });
+
+    for (const c of sorted) {
+      if (gCancelRequested) break;
+
+      // Collect unique move directions from wire paths connected to this component's pins
+      const triedDirs = new Set();
+
+      for (const pin of c.pins) {
+        if (!pin.net) continue;
+
+        for (const w of latestWires) {
+          if (w.failed || w.net !== pin.net || !w.path || w.path.length < 2) continue;
+
+          let dx = 0, dy = 0;
+          const first = w.path[0];
+          const last = w.path[w.path.length - 1];
+
+          if (first.col === pin.col && first.row === pin.row) {
+            // Pin is at start of path — follow toward second cell
+            dx = w.path[1].col - first.col;
+            dy = w.path[1].row - first.row;
+          } else if (last.col === pin.col && last.row === pin.row) {
+            // Pin is at end of path — follow toward second-to-last cell
+            const sl = w.path[w.path.length - 2];
+            dx = sl.col - last.col;
+            dy = sl.row - last.row;
+          } else {
+            continue;
+          }
+
+          // Normalize to unit step
+          if (dx !== 0) dx = dx > 0 ? 1 : -1;
+          if (dy !== 0) dy = dy > 0 ? 1 : -1;
+
+          const dirKey = `${dx},${dy}`;
+          if (triedDirs.has(dirKey)) continue;
+          triedDirs.add(dirKey);
+
+          // Try moving the component 1 step along this wire direction
+          const origOx = c.ox, origOy = c.oy;
+          moveComp(c, c.ox + dx, c.oy + dy);
+
+          if (anyOverlap(c, components)) {
+            moveComp(c, origOx, origOy);
+            continue;
+          }
+
+          // BB must not increase
+          const nb = calculateComponentBounds(components);
+          const nArea = (nb.maxCol - nb.minCol + 1) * (nb.maxRow - nb.minRow + 1);
+          if (nArea > bbArea) {
+            moveComp(c, origOx, origOy);
+            continue;
+          }
+
+          // Incremental reroute (only affected nets)
+          const { success, wires: testWires } = incrementalReroute(components, latestWires, c);
+          if (!success) {
+            moveComp(c, origOx, origOy);
+            continue;
+          }
+
+          const testScore = scoreState(components, testWires);
+          if (testScore.comp < latestScore.comp) {
+            moveComp(c, origOx, origOy);
+            continue;
+          }
+
+          // Accept if score strictly improved (area, perim, or wirelength)
+          if (isScoreBetter(testScore, latestScore)) {
+            latestScore = testScore;
+            latestWires = testWires;
+            madeProgress = true;
+            break;
+          }
+
+          moveComp(c, origOx, origOy);
+        }
+        if (madeProgress) break;
+      }
+      if (madeProgress) break;
+    }
+  }
+
+  const finalImproved = isScoreBetter(latestScore, bestScore);
+  if (!finalImproved) {
+    restoreComps(components, startComps);
+    return { improved: false, score: bestScore, wires: currentWires };
+  }
+
+  return { improved: true, score: latestScore, wires: latestWires };
+}
+
+
+/**
  * Generate candidate positions for relocating a blocker component.
  * Positions within the current BB are prioritized; +1 outside is allowed
- * (temporary growth to enable future shrink).
+  * (temporary growth to enable future shrink).
  */
 function generateBlockerCandidates(blocker, bounds) {
   const candidates = [];
