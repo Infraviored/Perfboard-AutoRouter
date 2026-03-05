@@ -59,18 +59,27 @@ Routing is fundamentally an execution of the discrete A* search algorithm combin
 
 ---
 
-## 4. Advanced Geometric Solvers
+## 4. Advanced Geometric & Topological Solvers
 
-Between placement and routing steps, the engine applies specialized geometric algorithms directly to the topological structure.
+Between placement and routing steps, the engine applies specialized algorithms directly to the topological structure. All passes that move individual components use **incremental routing** — only the nets touching moved components are ripped up and re-routed, rather than re-routing the entire board from scratch.
 
 ### Recursive Push Packing
 As the layout routes successfully, it inherently holds "slack" space. The Push Packer greedily analyzes the centroid of the board and systematically applies inward gravity vectors to outer components. If moving a component inward causes an overlap, it uses a recursive push pattern, effectively shifting columns or rows of components simultaneously toward the center to tightly compress the physical footprint.
 
-### Wire-Driven Shrink (`tryShrinkAlongWires`)
-Instead of blind push-packing, this algorithm calculates the mathematical vectors of the physical wire paths. It evaluates the tension/distance between connected components and attempts to translate the components directly along the axis of their traces, reeling them in to eliminate unnecessary zig-zag geometries.
+### Affinity Packing (Wire Loop Resolution)
+Detects component pairs sharing ≥2 nets (high topological affinity) that ended up far apart. When two tightly-connected components are separated, their shared-net wires must route long detours ("loops") around obstacles. This pass generates candidate positions by targeting pin-to-pin proximity (Manhattan distance 1-2) for shared nets, and moves the smaller component adjacent to the larger one. This resolves wire loops early so subsequent geometric passes work on a better topology.
 
 ### Orthogonal Rotate Optimize (`tryRotateOptimize`)
 Iterates sequentially over every component and tests all four 90-degree orthogonal orientations. It permanently commits to the orientation that locally maximizes the successful wire completion and minimizes wire length.
+
+### Wire-Driven Shrink (`tryShrinkAlongWires`)
+Instead of blind push-packing, this algorithm calculates the mathematical vectors of the physical wire paths. It evaluates the tension/distance between connected components and attempts to translate the components directly along the axis of their traces, reeling them in to eliminate unnecessary zig-zag geometries.
+
+### Topological Wire Absorption
+Iteratively pulls components along their connected wire paths toward their connections. For each pin, follows the actual wire path direction and moves the component 1 step along it. The cell was already occupied by the wire, so the move is provably safe and wirelength monotonically improves. Repeats until no more progress, "peeling the onion" from the outside in — creating internal free space for subsequent compaction passes.
+
+### Targeted Chain Compaction (TCC)
+A sliding-puzzle-style optimizer that finds multi-step component relocations to shrink the bounding box. For each boundary component (small first, few-nets first), it tries to move it inward. If a blocker is in the way, it recursively searches for positions to relocate the blocker (and the blocker's blocker, up to depth 2) into nearby free space or air gaps. Routing is checked only once at the end of a successful sequence. Can temporarily grow the BB by +1 for a blocker if the net result is still a BB reduction.
 
 ---
 
@@ -90,14 +99,24 @@ Standard gradient descent algorithms fail on plateaus because there is no define
 ## Summary of the Optimization Loop
 
 1. **Initialize:** `placeInitial` populates the board around `(0,0)`.
-2. **Anneal:** Fast HPWL placement estimation.
-3. **Primary Route:** Full A* execution.
-4. **Search Loop (Epochs & Iters):**
-   - Execute Micro Search / Macro Scrambles.
-   - Re-route.
-   - Execute Recursive Push Packing.
-   - Execute Rotate Optimize.
-   - Execute Global Nudge (cardinal bumping).
-   - Execute Wire-Driven Shrink.
-5. **Evaluate:** If `scoreState()` mathematically beats the globally cached optimal state (based on routing % -> area -> perimeter -> wire length), cache the new state map.
+2. **Anneal:** Fast HPWL placement estimation via Simulated Annealing.
+3. **Primary Route:** Full A* execution across all nets.
+4. **Search Loop (Epochs × Iterations):**
+
+   | # | Pass | Trigger | Routing |
+   |---|------|---------|---------|
+   | 1 | **Micro Search** — nudge/rotate ~15% of components randomly | Every iteration | Full re-route |
+   | 2 | **Deep Scramble** — randomize all positions within ±3 | `stagnation ≥ 12` | Full re-route |
+   | 3 | **Simulated Annealing** — HPWL-based placement pass | Every 10th iter or `stagnation ≥ 8` | Full re-route |
+   | 4 | **Recursive Push Packing** — inward gravity with chain-push | Every iteration | Incremental |
+   | 5 | **Affinity Packing** — pair up components sharing ≥2 nets | Every iteration | Incremental |
+   | 6 | **Rotate Optimize** — test all 4 orientations per component | Every iteration | Incremental |
+   | 7 | **Global Nudge** — translate all components ±1 in each direction | Every iteration | Full re-route |
+   | 8 | **Wire-Driven Shrink** — pull boundary components along wire tension vectors | Every iteration | Incremental |
+   | 9 | **Wire Absorption** — slide components along their actual wire paths | Every iteration | Incremental |
+   | 10 | **Chained Compaction (TCC)** — sliding-puzzle boundary shrink | Every iteration | Incremental |
+   | 11 | **Plateau Exploration** — BFS over equal-area states | `stagnation ≥ threshold` | Incremental |
+
+5. **Evaluate:** If `scoreState()` mathematically beats the globally cached optimal state (based on routing % → area → perimeter → wire length), cache the new state map.
 6. **Plateau / Break:** If stagnation triggers, execute Plateau Exploration to traverse the flat energy topology. Return the absolute best state discovered.
+

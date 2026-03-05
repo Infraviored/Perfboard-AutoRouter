@@ -1,5 +1,5 @@
 import { route } from './router.js';
-import { scoreState, formatScore, calculateFootprintArea, footprintBoxMetrics, calculateComponentBounds, doRecursivePushPacking, tryRotateOptimize, explorePlateauStates, tryGlobalNudge, tryShrinkAlongWires, tryWireAbsorption, tryChainedCompaction, isScoreBetter, recenterComponents, stateKeyForPlateau, enumeratePlateauNeighbors } from './optimizer-algorithms.js';
+import { scoreState, formatScore, calculateFootprintArea, footprintBoxMetrics, calculateComponentBounds, doRecursivePushPacking, tryRotateOptimize, explorePlateauStates, tryGlobalNudge, tryShrinkAlongWires, tryWireAbsorption, tryAffinityPacking, tryChainedCompaction, isScoreBetter, recenterComponents, stateKeyForPlateau, enumeratePlateauNeighbors } from './optimizer-algorithms.js';
 import { saveComps, restoreComps } from './state-utils.js';
 import { moveComp, rotateComp90InPlace, anneal, anyOverlap } from './placer.js';
 
@@ -202,6 +202,16 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
             if (checkCancel()) break;
             const pushRes = await doRecursivePushPacking(components, currentWires, vCols, vRows, checkCancel());
             currentWires = pushRes.wires;
+
+            if (!checkCancel()) {
+                const affinityRes = tryAffinityPacking(components, currentWires, localBestScore, vCols, vRows, checkCancel());
+                if (affinityRes.improved) {
+                    localBestScore = affinityRes.score;
+                    localBestComps = saveComps(components);
+                    currentWires = affinityRes.wires;
+                    stagnation = 0;
+                }
+            }
 
             const rotRes = await tryRotateOptimize(components, currentWires, vCols, vRows, checkCancel());
             currentWires = rotRes.wires;

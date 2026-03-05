@@ -594,6 +594,131 @@ export function tryWireAbsorption(components, currentWires, bestScore, cols, row
 
 
 /**
+ * Generate candidate positions for placing `mover` so that its shared-net
+ * pins land within Manhattan distance 1-2 of `anchor`'s shared-net pins.
+ */
+function generateAffinityPositions(mover, anchor, sharedNets) {
+  const seen = new Set();
+  const candidates = [];
+
+  // Manhattan distance deltas for dist 1 and 2
+  const deltas = [
+    [1, 0], [-1, 0], [0, 1], [0, -1],
+    [2, 0], [-2, 0], [0, 2], [0, -2],
+    [1, 1], [1, -1], [-1, 1], [-1, -1]
+  ];
+
+  for (const net of sharedNets) {
+    const moverPins = mover.pins.filter(p => p.net === net);
+    const anchorPins = anchor.pins.filter(p => p.net === net);
+
+    for (const mp of moverPins) {
+      for (const ap of anchorPins) {
+        for (const [dx, dy] of deltas) {
+          // Place mover so mp lands at (ap.col+dx, ap.row+dy)
+          const ox = ap.col + dx - mp.dCol;
+          const oy = ap.row + dy - mp.dRow;
+          const key = `${ox},${oy}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          candidates.push({ ox, oy });
+        }
+      }
+    }
+  }
+
+  return candidates;
+}
+
+/**
+ * Affinity Packing (Wire Loop Resolution):
+ * Detects component pairs sharing ≥2 nets and tries to place the smaller
+ * one directly adjacent to the larger one. This resolves "wire loops"
+ * where two tightly-connected components ended up far apart, forcing
+ * shared-net wires to route long detours around obstacles.
+ *
+ * Candidate positions are computed by targeting pin-to-pin proximity
+ * for shared nets (Manhattan distance 1-2), producing a small focused
+ * set of ~20 candidates per pair. Only the best-scoring valid position
+ * is accepted.
+ */
+export function tryAffinityPacking(components, currentWires, bestScore, cols, rows, gCancelRequested = false) {
+  // 1. Build affinity pairs: component pairs sharing ≥2 nets
+  const affinityPairs = [];
+  for (let i = 0; i < components.length; i++) {
+    const aNets = new Set(components[i].pins.map(p => p.net).filter(Boolean));
+    for (let j = i + 1; j < components.length; j++) {
+      const uniqueShared = [...new Set(
+        components[j].pins.map(p => p.net).filter(n => n && aNets.has(n))
+      )];
+      if (uniqueShared.length >= 2) {
+        affinityPairs.push({ ai: i, bi: j, shared: uniqueShared, count: uniqueShared.length });
+      }
+    }
+  }
+
+  if (affinityPairs.length === 0) {
+    return { improved: false, score: bestScore, wires: currentWires };
+  }
+
+  // Sort: most shared nets first
+  affinityPairs.sort((x, y) => y.count - x.count);
+
+  const original = saveComps(components);
+  const bounds = calculateComponentBounds(components);
+  const currentArea = (bounds.maxCol - bounds.minCol + 1) * (bounds.maxRow - bounds.minRow + 1);
+
+  for (const pair of affinityPairs) {
+    if (gCancelRequested) break;
+
+    const a = components[pair.ai], b = components[pair.bi];
+
+    // Move the smaller component toward the larger one
+    const [mover, anchor] = (a.w * a.h <= b.w * b.h) ? [a, b] : [b, a];
+
+    const candidates = generateAffinityPositions(mover, anchor, pair.shared);
+
+    let bestCandidate = null;
+    let bestCandScore = bestScore;
+
+    for (const pos of candidates) {
+      restoreComps(components, original);
+      const comp = components.find(c => c.id === mover.id);
+      moveComp(comp, pos.ox, pos.oy);
+
+      if (anyOverlap(comp, components)) continue;
+
+      // BB must not increase
+      const nb = calculateComponentBounds(components);
+      const nArea = (nb.maxCol - nb.minCol + 1) * (nb.maxRow - nb.minRow + 1);
+      if (nArea > currentArea) continue;
+
+      const { success, wires: testWires } = incrementalReroute(components, currentWires, comp);
+      if (!success) continue;
+
+      const testScore = scoreState(components, testWires);
+      if (testScore.comp < bestScore.comp) continue;
+
+      if (isScoreBetter(testScore, bestCandScore)) {
+        bestCandidate = { ox: pos.ox, oy: pos.oy, score: testScore, wires: testWires };
+        bestCandScore = testScore;
+      }
+    }
+
+    if (bestCandidate) {
+      restoreComps(components, original);
+      const comp = components.find(c => c.id === mover.id);
+      moveComp(comp, bestCandidate.ox, bestCandidate.oy);
+      return { improved: true, score: bestCandidate.score, wires: bestCandidate.wires };
+    }
+  }
+
+  restoreComps(components, original);
+  return { improved: false, score: bestScore, wires: currentWires };
+}
+
+
+/**
  * Generate candidate positions for relocating a blocker component.
  * Positions within the current BB are prioritized; +1 outside is allowed
   * (temporary growth to enable future shrink).
