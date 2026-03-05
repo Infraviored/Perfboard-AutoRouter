@@ -1,24 +1,23 @@
 import { getAllNets } from './router.js';
 
+import { NET_PAL, compColor } from './colors.js';
+
 export const SP = 28; // Standard pitch - 28px
-const NET_PAL = {
-  VCC: '#ff5252', '+5V': '#ff5252', '+3V3': '#ff5252', 'VCC_BAR': '#ff5252',
-  GND: '#40c4ff', '0V': '#40c4ff',
-  GATE: '#00e676', DRAIN: '#e040fb', SOURCE: '#ff9800',
-  CLK: '#ffea00', DATA: '#9c27b0', ADDR: '#00bcd4', CTRL: '#4caf50',
-  RESET: '#ff0a99ff', EN: '#795548'
-};
 
 const hashString = (n) => {
   const str = String(n || '');
-  let h = 5381;
-  for (const c of str) h = ((h << 5) + h) + c.charCodeAt(0);
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
   return Math.abs(h);
 };
 
 const getGoldenHue = (hash) => {
-  const goldenRatio = 0.618033988749895;
-  return Math.floor(((hash / 10000 + goldenRatio) % 1) * 360);
+  const phi = 0.618033988749895;
+  const h = (hash * phi + 0.25) % 1;
+  return Math.floor(h * 360);
 };
 
 export function netColor(n) {
@@ -30,13 +29,7 @@ export function netColor(n) {
   return `hsl(${h}, 95%, 60%)`; // Vibrant for wires
 }
 
-export function compColor(c) {
-  if (!c) return '#555';
-  if (c.color) return c.color;
-  const name = c.name || c.id || 'Unknown';
-  const h = getGoldenHue(hashString(name));
-  return `hsl(${h}, 50%, 40%)`; // Faint/muted for components
-}
+export { compColor };
 
 /**
  * boostColor - For components manually assigned color, make them pop.
