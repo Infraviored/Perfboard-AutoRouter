@@ -2,41 +2,57 @@ import { getAllNets } from './router.js';
 
 export const SP = 28; // Standard pitch - 28px
 const NET_PAL = {
-  VCC: '#ff5252', GND: '#40c4ff', GATE: '#00e676',
-  DRAIN: '#e040fb', SOURCE: '#ff9800', CLK: '#ffea00',
-  DATA: '#9c27b0', ADDR: '#00bcd4', CTRL: '#4caf50',
-  RESET: '#f44336', CLKEN: '#ff5722', EN: '#795548'
+  VCC: '#ff5252', '+5V': '#ff5252', '+3V3': '#ff5252', 'VCC_BAR': '#ff5252',
+  GND: '#40c4ff', '0V': '#40c4ff',
+  GATE: '#00e676', DRAIN: '#e040fb', SOURCE: '#ff9800',
+  CLK: '#ffea00', DATA: '#9c27b0', ADDR: '#00bcd4', CTRL: '#4caf50',
+  RESET: '#ff0a99ff', EN: '#795548'
 };
-const netColorCache = new Map();
+
+const hashString = (n) => {
+  const str = String(n || '');
+  let h = 5381;
+  for (const c of str) h = ((h << 5) + h) + c.charCodeAt(0);
+  return Math.abs(h);
+};
+
+const getGoldenHue = (hash) => {
+  const goldenRatio = 0.618033988749895;
+  return Math.floor(((hash / 10000 + goldenRatio) % 1) * 360);
+};
 
 export function netColor(n) {
   if (!n) return '#666';
-  if (NET_PAL[n]) return NET_PAL[n];
-  if (netColorCache.has(n)) return netColorCache.get(n);
+  const uname = n.toUpperCase();
+  if (NET_PAL[uname]) return NET_PAL[uname];
 
-  let h = 5381;
-  for (const c of n) h = ((h << 5) + h) + c.charCodeAt(0);
-
-  const goldenRatio = 0.618033988749895;
-  const hue = (Math.abs(h) / 10000 + goldenRatio) % 1;
-  const hueDegrees = Math.floor(hue * 360);
-  const color = `hsl(${hueDegrees}, 75%, 55%)`;
-
-  netColorCache.set(n, color);
-  return color;
+  const h = getGoldenHue(hashString(n));
+  return `hsl(${h}, 95%, 60%)`; // Vibrant for wires
 }
+
+export function compColor(c) {
+  if (!c) return '#555';
+  if (c.color) return c.color;
+  const name = c.name || c.id || 'Unknown';
+  const h = getGoldenHue(hashString(name));
+  return `hsl(${h}, 50%, 40%)`; // Faint/muted for components
+}
+
 /**
- * boostColor - Takes a potentially dark component color and makes it more vibrant 
- * so it pops against the dark perforated board.
+ * boostColor - For components manually assigned color, make them pop.
+ * For auto-colored ones, we already have our HSL targets.
  */
-export function boostColor(hex) {
-  if (!hex || hex.length < 6) return '#555';
-  // Simple hex to RGB boosting
+export function boostColor(hexOrHsl) {
+  if (!hexOrHsl) return '#555';
+  if (hexOrHsl.startsWith('hsl')) return hexOrHsl; // Already processed
+
+  const hex = hexOrHsl;
+  if (hex.length < 6) return hex;
+
   let r = parseInt(hex.slice(1, 3), 16);
   let g = parseInt(hex.slice(3, 5), 16);
   let b = parseInt(hex.slice(5, 7), 16);
 
-  // Boost values: ensure a minimum brightness and saturation-like lift
   const lift = (v) => Math.min(255, Math.max(v * 1.8, v + 40));
   r = lift(r); g = lift(g); b = lift(b);
 
@@ -136,13 +152,19 @@ export function generateRatsnestSVG(components, wires = [], isDragging = false) 
 export function renderCompSVG(c, isSelected = false) {
   const bx = c.ox * SP + SP * .08, by = c.oy * SP + SP * .08;
   const bw = c.w * SP - SP * .16, bh = c.h * SP - SP * .16;
-  const mainColor = boostColor(c.color);
+  const mainColor = boostColor(compColor(c));
 
   let out = `<g class="pcb-comp" data-id="${c.id}">`;
 
-  // 1. Draw Component Base
-  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="#111" stroke="${mainColor}" stroke-width="2.5"/>`;
-  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="${mainColor}" opacity="0.3"/>`;
+  // 1. Draw Component Base (balanced shine-through, solid rim)
+  const sw = 2.2; // stroke width
+  const half = sw / 2;
+  // Body: Inset by half the stroke width so it doesn't overlap the inner stroke half
+  out += `<rect x="${bx + half}" y="${by + half}" width="${bw - sw}" height="${bh - sw}" rx="3" fill="#080808" fill-opacity="0.8"/>`;
+  // Rim: Drawn with fill="none" to ensure uniform wire visibility through the stroke
+  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="none" stroke="${mainColor}" stroke-width="${sw}" stroke-opacity="0.8"/>`;
+  // subtle tint overlay (entire area)
+  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="${mainColor}" opacity="0.08" style="pointer-events:none"/>`;
 
   // 2. Draw Pins
   c.pins.forEach(p => {

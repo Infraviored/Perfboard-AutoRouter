@@ -236,7 +236,7 @@ Use this format:
     }
 
     const newComp = {
-      id: newId, name: compDef.name, value: compDef.value, color: compDef.color,
+      id: newId, name: compDef.name, value: compDef.value, color: compDef.color || null,
       w: mw, h: mh, ox: cx, oy: cy,
       pins: compDef.pins.map(p => ({
         dCol: p.offset[0], dRow: p.offset[1],

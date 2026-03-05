@@ -4,7 +4,6 @@
       "id": "U1",
       "name": "ESP32-C3",
       "value": "SuperMini",
-      "color": "#1a3320",
       "pins": [
         {
           "offset": [
@@ -140,7 +139,6 @@
       "id": "J_12V",
       "name": "Power Connector",
       "value": "12V Input",
-      "color": "#8b0000",
       "pins": [
         {
           "offset": [
@@ -156,7 +154,6 @@
       "id": "J_3V3",
       "name": "Power Connector",
       "value": "3.3V Input",
-      "color": "#b8860b",
       "pins": [
         {
           "offset": [
@@ -172,7 +169,6 @@
       "id": "J_GND",
       "name": "Power Connector",
       "value": "Ground",
-      "color": "#000000",
       "pins": [
         {
           "offset": [
@@ -188,7 +184,6 @@
       "id": "Rg",
       "name": "Gate Resistor",
       "value": "220Ω",
-      "color": "#2e1a08",
       "pins": [
         {
           "offset": [
@@ -212,7 +207,6 @@
       "id": "Rpd",
       "name": "Pull-down",
       "value": "47kΩ",
-      "color": "#2e1a08",
       "pins": [
         {
           "offset": [
@@ -236,7 +230,6 @@
       "id": "Q1",
       "name": "MOSFET",
       "value": "IRLB8721",
-      "color": "#1a3320",
       "pins": [
         {
           "offset": [
@@ -268,7 +261,6 @@
       "id": "L1",
       "name": "Door Strike",
       "value": "12V Coil",
-      "color": "#1a1a2e",
       "pins": [
         {
           "offset": [
@@ -292,7 +284,6 @@
       "id": "D1",
       "name": "Flyback Diode",
       "value": "SS54",
-      "color": "#2a0a18",
       "pins": [
         {
           "offset": [

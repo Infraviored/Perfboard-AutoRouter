@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { compColor } from '../engine/render-utils.js';
 
 export function LibraryOverlay({ isOpen, onClose, onSelect }) {
     const [db, setDb] = useState([]);
@@ -35,7 +36,7 @@ export function LibraryOverlay({ isOpen, onClose, onSelect }) {
                 <div className="lib-list">
                     {filtered.map((c, i) => (
                         <div key={i} className="lib-item" onClick={() => onSelect(c)}>
-                            <div className="lib-swatch" style={{ background: c.color }}></div>
+                            <div className="lib-swatch" style={{ background: compColor(c) }}></div>
                             <div className="lib-info">
                                 <div className="lib-name">{c.name}</div>
                                 <div className="lib-val">{c.value} • {c.pins.length} pins</div>

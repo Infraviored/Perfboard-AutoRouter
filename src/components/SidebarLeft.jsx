@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { boostColor } from '../engine/render-utils.js';
+import { boostColor, compColor } from '../engine/render-utils.js';
 
 export function SidebarLeft({
   cols,
@@ -61,7 +61,7 @@ export function SidebarLeft({
           <div style={{ fontSize: '.7em', color: 'var(--txt2)', textAlign: 'center', padding: '10px' }}>Load components first.</div>
         ) : (
           components.map(c => {
-            const boosted = boostColor(c.color);
+            const boosted = boostColor(compColor(c));
             return (
               <div
                 key={c.id}

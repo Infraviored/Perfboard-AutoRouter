@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { compColor } from '../engine/render-utils.js';
 
 export function CompEditorOverlay({ component, isOpen, onClose, onSave }) {
     const [data, setData] = useState(() => component ? JSON.parse(JSON.stringify(component)) : null);
@@ -32,10 +33,21 @@ export function CompEditorOverlay({ component, isOpen, onClose, onSave }) {
                         <input type="text" value={data.value} onChange={e => handleUpdate('value', e.target.value)} />
                     </div>
                     <div>
-                        <label>Color</label>
+                        <label>Color (Override)</label>
                         <div style={{ display: 'flex', gap: 10 }}>
-                            <input type="color" value={data.color} onChange={e => handleUpdate('color', e.target.value)} style={{ width: 40, padding: 0, height: 32 }} />
-                            <input type="text" value={data.color} onChange={e => handleUpdate('color', e.target.value)} style={{ flex: 1 }} />
+                            <input
+                                type="color"
+                                value={data.color || '#333333'}
+                                onChange={e => handleUpdate('color', e.target.value)}
+                                style={{ width: 40, padding: 0, height: 32 }}
+                            />
+                            <input
+                                type="text"
+                                placeholder="Auto-generated if empty"
+                                value={data.color || ''}
+                                onChange={e => handleUpdate('color', e.target.value)}
+                                style={{ flex: 1 }}
+                            />
                         </div>
                     </div>
                 </div>

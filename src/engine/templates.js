@@ -1,29 +1,29 @@
 export const TEMPLATE = {
     components: [
         {
-            id: 'J1', name: 'Power', value: '2-pin', color: '#2a2808',
+            id: 'J1', name: 'Power', value: '2-pin',
             pins: [{ offset: [0, 0], net: 'VCC', label: '+' }, { offset: [0, 1], net: 'GND', label: '-' }]
         },
         {
-            id: 'R1', name: 'Resistor', value: '10k', color: '#2e1a08',
+            id: 'R1', name: 'Resistor', value: '10k',
             pins: [{ offset: [0, 0], net: 'VCC', label: '1' }, { offset: [2, 0], net: 'GATE', label: '2' }]
         },
         {
-            id: 'Q1', name: 'N-MOSFET', value: 'IRLZ44N', color: '#1a3320',
+            id: 'Q1', name: 'N-MOSFET', value: 'IRLZ44N',
             pins: [{ offset: [0, 0], net: 'GATE', label: 'G' },
             { offset: [1, 0], net: 'DRAIN', label: 'D' },
             { offset: [2, 0], net: 'SOURCE', label: 'S' }]
         },
         {
-            id: 'RL1', name: 'Relay', value: '5V coil', color: '#1a1a2e',
+            id: 'RL1', name: 'Relay', value: '5V coil',
             pins: [{ offset: [0, 0], net: 'VCC', label: 'A' }, { offset: [0, 1], net: 'DRAIN', label: 'B' }]
         },
         {
-            id: 'C1', name: 'Cap', value: '100uF', color: '#0e2222',
+            id: 'C1', name: 'Cap', value: '100uF',
             pins: [{ offset: [0, 0], net: 'VCC', label: '+' }, { offset: [1, 0], net: 'GND', label: '-' }]
         },
         {
-            id: 'D1', name: 'Diode', value: '1N4007', color: '#2a0a18',
+            id: 'D1', name: 'Diode', value: '1N4007',
             pins: [{ offset: [0, 0], net: 'SOURCE', label: 'K' }, { offset: [1, 0], net: 'GND', label: 'A' }]
         }
     ],
@@ -57,7 +57,6 @@ export function processTemplate(data) {
             id: cd.id || ('C' + (idx + 1)),
             name: cd.name || '?',
             value: cd.value || '',
-            color: cd.color || '#222a22',
             routeUnder: !!cd.routeUnder,
             offsets: normalizedOffsets,
             pinNets: cd.pins.map(p => p.net || null),

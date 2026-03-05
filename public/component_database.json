@@ -1,63 +1,987 @@
 [
   {
-    "name": "ESP32 DevKit V1", "value": "30-pin", "color": "#1a3320",
+    "name": "ESP32 DevKit V1",
+    "value": "30-pin",
     "pins": [
-      {"offset": [0,0], "label": "EN"}, {"offset": [0,1], "label": "VP"}, {"offset": [0,2], "label": "VN"}, {"offset": [0,3], "label": "34"}, {"offset": [0,4], "label": "35"}, {"offset": [0,5], "label": "32"}, {"offset": [0,6], "label": "33"}, {"offset": [0,7], "label": "25"}, {"offset": [0,8], "label": "26"}, {"offset": [0,9], "label": "27"}, {"offset": [0,10], "label": "14"}, {"offset": [0,11], "label": "12"}, {"offset": [0,12], "label": "13"}, {"offset": [0,13], "label": "GND"}, {"offset": [0,14], "label": "VIN"},
-      {"offset": [9,0], "label": "D22"}, {"offset": [9,1], "label": "TX0"}, {"offset": [9,2], "label": "RX0"}, {"offset": [9,3], "label": "D21"}, {"offset": [9,4], "label": "D19"}, {"offset": [9,5], "label": "D18"}, {"offset": [9,6], "label": "D5"}, {"offset": [9,7], "label": "TX2"}, {"offset": [9,8], "label": "RX2"}, {"offset": [9,9], "label": "D4"}, {"offset": [9,10], "label": "D2"}, {"offset": [9,11], "label": "D15"}, {"offset": [9,12], "label": "GND"}, {"offset": [9,13], "label": "3V3"}, {"offset": [9,14], "label": "3V3"}
+      {
+        "offset": [
+          0,
+          0
+        ],
+        "label": "EN"
+      },
+      {
+        "offset": [
+          0,
+          1
+        ],
+        "label": "VP"
+      },
+      {
+        "offset": [
+          0,
+          2
+        ],
+        "label": "VN"
+      },
+      {
+        "offset": [
+          0,
+          3
+        ],
+        "label": "34"
+      },
+      {
+        "offset": [
+          0,
+          4
+        ],
+        "label": "35"
+      },
+      {
+        "offset": [
+          0,
+          5
+        ],
+        "label": "32"
+      },
+      {
+        "offset": [
+          0,
+          6
+        ],
+        "label": "33"
+      },
+      {
+        "offset": [
+          0,
+          7
+        ],
+        "label": "25"
+      },
+      {
+        "offset": [
+          0,
+          8
+        ],
+        "label": "26"
+      },
+      {
+        "offset": [
+          0,
+          9
+        ],
+        "label": "27"
+      },
+      {
+        "offset": [
+          0,
+          10
+        ],
+        "label": "14"
+      },
+      {
+        "offset": [
+          0,
+          11
+        ],
+        "label": "12"
+      },
+      {
+        "offset": [
+          0,
+          12
+        ],
+        "label": "13"
+      },
+      {
+        "offset": [
+          0,
+          13
+        ],
+        "label": "GND"
+      },
+      {
+        "offset": [
+          0,
+          14
+        ],
+        "label": "VIN"
+      },
+      {
+        "offset": [
+          9,
+          0
+        ],
+        "label": "D22"
+      },
+      {
+        "offset": [
+          9,
+          1
+        ],
+        "label": "TX0"
+      },
+      {
+        "offset": [
+          9,
+          2
+        ],
+        "label": "RX0"
+      },
+      {
+        "offset": [
+          9,
+          3
+        ],
+        "label": "D21"
+      },
+      {
+        "offset": [
+          9,
+          4
+        ],
+        "label": "D19"
+      },
+      {
+        "offset": [
+          9,
+          5
+        ],
+        "label": "D18"
+      },
+      {
+        "offset": [
+          9,
+          6
+        ],
+        "label": "D5"
+      },
+      {
+        "offset": [
+          9,
+          7
+        ],
+        "label": "TX2"
+      },
+      {
+        "offset": [
+          9,
+          8
+        ],
+        "label": "RX2"
+      },
+      {
+        "offset": [
+          9,
+          9
+        ],
+        "label": "D4"
+      },
+      {
+        "offset": [
+          9,
+          10
+        ],
+        "label": "D2"
+      },
+      {
+        "offset": [
+          9,
+          11
+        ],
+        "label": "D15"
+      },
+      {
+        "offset": [
+          9,
+          12
+        ],
+        "label": "GND"
+      },
+      {
+        "offset": [
+          9,
+          13
+        ],
+        "label": "3V3"
+      },
+      {
+        "offset": [
+          9,
+          14
+        ],
+        "label": "3V3"
+      }
     ]
   },
   {
-    "name": "Wemos D1 Mini", "value": "ESP8266", "color": "#1c2b36",
+    "name": "Wemos D1 Mini",
+    "value": "ESP8266",
     "pins": [
-      {"offset": [0,0], "label": "RST"}, {"offset": [0,1], "label": "A0"}, {"offset": [0,2], "label": "D0"}, {"offset": [0,3], "label": "D5"}, {"offset": [0,4], "label": "D6"}, {"offset": [0,5], "label": "D7"}, {"offset": [0,6], "label": "D8"}, {"offset": [0,7], "label": "3V3"},
-      {"offset": [8,0], "label": "TX"}, {"offset": [8,1], "label": "RX"}, {"offset": [8,2], "label": "D1"}, {"offset": [8,3], "label": "D2"}, {"offset": [8,4], "label": "D3"}, {"offset": [8,5], "label": "D4"}, {"offset": [8,6], "label": "GND"}, {"offset": [8,7], "label": "5V"}
+      {
+        "offset": [
+          0,
+          0
+        ],
+        "label": "RST"
+      },
+      {
+        "offset": [
+          0,
+          1
+        ],
+        "label": "A0"
+      },
+      {
+        "offset": [
+          0,
+          2
+        ],
+        "label": "D0"
+      },
+      {
+        "offset": [
+          0,
+          3
+        ],
+        "label": "D5"
+      },
+      {
+        "offset": [
+          0,
+          4
+        ],
+        "label": "D6"
+      },
+      {
+        "offset": [
+          0,
+          5
+        ],
+        "label": "D7"
+      },
+      {
+        "offset": [
+          0,
+          6
+        ],
+        "label": "D8"
+      },
+      {
+        "offset": [
+          0,
+          7
+        ],
+        "label": "3V3"
+      },
+      {
+        "offset": [
+          8,
+          0
+        ],
+        "label": "TX"
+      },
+      {
+        "offset": [
+          8,
+          1
+        ],
+        "label": "RX"
+      },
+      {
+        "offset": [
+          8,
+          2
+        ],
+        "label": "D1"
+      },
+      {
+        "offset": [
+          8,
+          3
+        ],
+        "label": "D2"
+      },
+      {
+        "offset": [
+          8,
+          4
+        ],
+        "label": "D3"
+      },
+      {
+        "offset": [
+          8,
+          5
+        ],
+        "label": "D4"
+      },
+      {
+        "offset": [
+          8,
+          6
+        ],
+        "label": "GND"
+      },
+      {
+        "offset": [
+          8,
+          7
+        ],
+        "label": "5V"
+      }
     ]
   },
   {
-    "name": "ESP32-C3 SuperMini", "value": "ESP32-C3", "color": "#2a1538",
+    "name": "ESP32-C3 SuperMini",
+    "value": "ESP32-C3",
     "pins": [
-      {"offset": [0,0], "label": "5V"}, {"offset": [0,1], "label": "GND"}, {"offset": [0,2], "label": "3V3"}, {"offset": [0,3], "label": "0"}, {"offset": [0,4], "label": "1"}, {"offset": [0,5], "label": "2"}, {"offset": [0,6], "label": "3"}, {"offset": [0,7], "label": "4"},
-      {"offset": [7,0], "label": "RST"}, {"offset": [7,1], "label": "21"}, {"offset": [7,2], "label": "20"}, {"offset": [7,3], "label": "10"}, {"offset": [7,4], "label": "9"}, {"offset": [7,5], "label": "8"}, {"offset": [7,6], "label": "7"}, {"offset": [7,7], "label": "6"}
+      {
+        "offset": [
+          0,
+          0
+        ],
+        "label": "5V"
+      },
+      {
+        "offset": [
+          0,
+          1
+        ],
+        "label": "GND"
+      },
+      {
+        "offset": [
+          0,
+          2
+        ],
+        "label": "3V3"
+      },
+      {
+        "offset": [
+          0,
+          3
+        ],
+        "label": "0"
+      },
+      {
+        "offset": [
+          0,
+          4
+        ],
+        "label": "1"
+      },
+      {
+        "offset": [
+          0,
+          5
+        ],
+        "label": "2"
+      },
+      {
+        "offset": [
+          0,
+          6
+        ],
+        "label": "3"
+      },
+      {
+        "offset": [
+          0,
+          7
+        ],
+        "label": "4"
+      },
+      {
+        "offset": [
+          7,
+          0
+        ],
+        "label": "RST"
+      },
+      {
+        "offset": [
+          7,
+          1
+        ],
+        "label": "21"
+      },
+      {
+        "offset": [
+          7,
+          2
+        ],
+        "label": "20"
+      },
+      {
+        "offset": [
+          7,
+          3
+        ],
+        "label": "10"
+      },
+      {
+        "offset": [
+          7,
+          4
+        ],
+        "label": "9"
+      },
+      {
+        "offset": [
+          7,
+          5
+        ],
+        "label": "8"
+      },
+      {
+        "offset": [
+          7,
+          6
+        ],
+        "label": "7"
+      },
+      {
+        "offset": [
+          7,
+          7
+        ],
+        "label": "6"
+      }
     ]
   },
   {
-    "name": "ESP32-S2 Mini", "value": "ESP32-S2", "color": "#1c362b",
+    "name": "ESP32-S2 Mini",
+    "value": "ESP32-S2",
     "pins": [
-      {"offset": [0,0], "label": "VBUS"}, {"offset": [0,1], "label": "3V3"}, {"offset": [0,2], "label": "3V3"}, {"offset": [0,3], "label": "1"}, {"offset": [0,4], "label": "2"}, {"offset": [0,5], "label": "3"}, {"offset": [0,6], "label": "4"}, {"offset": [0,7], "label": "5"}, {"offset": [0,8], "label": "6"}, {"offset": [0,9], "label": "7"},
-      {"offset": [7,0], "label": "GND"}, {"offset": [7,1], "label": "18"}, {"offset": [7,2], "label": "17"}, {"offset": [7,3], "label": "16"}, {"offset": [7,4], "label": "15"}, {"offset": [7,5], "label": "14"}, {"offset": [7,6], "label": "13"}, {"offset": [7,7], "label": "12"}, {"offset": [7,8], "label": "11"}, {"offset": [7,9], "label": "10"}
+      {
+        "offset": [
+          0,
+          0
+        ],
+        "label": "VBUS"
+      },
+      {
+        "offset": [
+          0,
+          1
+        ],
+        "label": "3V3"
+      },
+      {
+        "offset": [
+          0,
+          2
+        ],
+        "label": "3V3"
+      },
+      {
+        "offset": [
+          0,
+          3
+        ],
+        "label": "1"
+      },
+      {
+        "offset": [
+          0,
+          4
+        ],
+        "label": "2"
+      },
+      {
+        "offset": [
+          0,
+          5
+        ],
+        "label": "3"
+      },
+      {
+        "offset": [
+          0,
+          6
+        ],
+        "label": "4"
+      },
+      {
+        "offset": [
+          0,
+          7
+        ],
+        "label": "5"
+      },
+      {
+        "offset": [
+          0,
+          8
+        ],
+        "label": "6"
+      },
+      {
+        "offset": [
+          0,
+          9
+        ],
+        "label": "7"
+      },
+      {
+        "offset": [
+          7,
+          0
+        ],
+        "label": "GND"
+      },
+      {
+        "offset": [
+          7,
+          1
+        ],
+        "label": "18"
+      },
+      {
+        "offset": [
+          7,
+          2
+        ],
+        "label": "17"
+      },
+      {
+        "offset": [
+          7,
+          3
+        ],
+        "label": "16"
+      },
+      {
+        "offset": [
+          7,
+          4
+        ],
+        "label": "15"
+      },
+      {
+        "offset": [
+          7,
+          5
+        ],
+        "label": "14"
+      },
+      {
+        "offset": [
+          7,
+          6
+        ],
+        "label": "13"
+      },
+      {
+        "offset": [
+          7,
+          7
+        ],
+        "label": "12"
+      },
+      {
+        "offset": [
+          7,
+          8
+        ],
+        "label": "11"
+      },
+      {
+        "offset": [
+          7,
+          9
+        ],
+        "label": "10"
+      }
     ]
   },
   {
-    "name": "NE555 Timer", "value": "DIP-8", "color": "#0d0a06",
+    "name": "NE555 Timer",
+    "value": "DIP-8",
     "pins": [
-      {"offset": [0,0], "label": "1:GN"}, {"offset": [0,1], "label": "2:TR"}, {"offset": [0,2], "label": "3:OU"}, {"offset": [0,3], "label": "4:RS"},
-      {"offset": [3,0], "label": "8:VC"}, {"offset": [3,1], "label": "7:DI"}, {"offset": [3,2], "label": "6:TH"}, {"offset": [3,3], "label": "5:CV"}
+      {
+        "offset": [
+          0,
+          0
+        ],
+        "label": "1:GN"
+      },
+      {
+        "offset": [
+          0,
+          1
+        ],
+        "label": "2:TR"
+      },
+      {
+        "offset": [
+          0,
+          2
+        ],
+        "label": "3:OU"
+      },
+      {
+        "offset": [
+          0,
+          3
+        ],
+        "label": "4:RS"
+      },
+      {
+        "offset": [
+          3,
+          0
+        ],
+        "label": "8:VC"
+      },
+      {
+        "offset": [
+          3,
+          1
+        ],
+        "label": "7:DI"
+      },
+      {
+        "offset": [
+          3,
+          2
+        ],
+        "label": "6:TH"
+      },
+      {
+        "offset": [
+          3,
+          3
+        ],
+        "label": "5:CV"
+      }
     ]
   },
   {
-    "name": "LM358 Op-Amp", "value": "DIP-8", "color": "#0d0a06",
+    "name": "LM358 Op-Amp",
+    "value": "DIP-8",
     "pins": [
-      {"offset": [0,0], "label": "OU1"}, {"offset": [0,1], "label": "IN1-"}, {"offset": [0,2], "label": "IN1+"}, {"offset": [0,3], "label": "GND"},
-      {"offset": [3,0], "label": "VCC"}, {"offset": [3,1], "label": "OU2"}, {"offset": [3,2], "label": "IN2-"}, {"offset": [3,3], "label": "IN2+"}
+      {
+        "offset": [
+          0,
+          0
+        ],
+        "label": "OU1"
+      },
+      {
+        "offset": [
+          0,
+          1
+        ],
+        "label": "IN1-"
+      },
+      {
+        "offset": [
+          0,
+          2
+        ],
+        "label": "IN1+"
+      },
+      {
+        "offset": [
+          0,
+          3
+        ],
+        "label": "GND"
+      },
+      {
+        "offset": [
+          3,
+          0
+        ],
+        "label": "VCC"
+      },
+      {
+        "offset": [
+          3,
+          1
+        ],
+        "label": "OU2"
+      },
+      {
+        "offset": [
+          3,
+          2
+        ],
+        "label": "IN2-"
+      },
+      {
+        "offset": [
+          3,
+          3
+        ],
+        "label": "IN2+"
+      }
     ]
   },
   {
-    "name": "L293D Motor Driver", "value": "DIP-16", "color": "#0d0a06",
+    "name": "L293D Motor Driver",
+    "value": "DIP-16",
     "pins": [
-      {"offset": [0,0], "label": "EN1"}, {"offset": [0,1], "label": "IN1"}, {"offset": [0,2], "label": "OU1"}, {"offset": [0,3], "label": "GND"}, {"offset": [0,4], "label": "GND"}, {"offset": [0,5], "label": "OU2"}, {"offset": [0,6], "label": "IN2"}, {"offset": [0,7], "label": "VS"},
-      {"offset": [3,0], "label": "VSS"}, {"offset": [3,1], "label": "IN4"}, {"offset": [3,2], "label": "OU4"}, {"offset": [3,3], "label": "GND"}, {"offset": [3,4], "label": "GND"}, {"offset": [3,5], "label": "OU3"}, {"offset": [3,6], "label": "IN3"}, {"offset": [3,7], "label": "EN2"}
+      {
+        "offset": [
+          0,
+          0
+        ],
+        "label": "EN1"
+      },
+      {
+        "offset": [
+          0,
+          1
+        ],
+        "label": "IN1"
+      },
+      {
+        "offset": [
+          0,
+          2
+        ],
+        "label": "OU1"
+      },
+      {
+        "offset": [
+          0,
+          3
+        ],
+        "label": "GND"
+      },
+      {
+        "offset": [
+          0,
+          4
+        ],
+        "label": "GND"
+      },
+      {
+        "offset": [
+          0,
+          5
+        ],
+        "label": "OU2"
+      },
+      {
+        "offset": [
+          0,
+          6
+        ],
+        "label": "IN2"
+      },
+      {
+        "offset": [
+          0,
+          7
+        ],
+        "label": "VS"
+      },
+      {
+        "offset": [
+          3,
+          0
+        ],
+        "label": "VSS"
+      },
+      {
+        "offset": [
+          3,
+          1
+        ],
+        "label": "IN4"
+      },
+      {
+        "offset": [
+          3,
+          2
+        ],
+        "label": "OU4"
+      },
+      {
+        "offset": [
+          3,
+          3
+        ],
+        "label": "GND"
+      },
+      {
+        "offset": [
+          3,
+          4
+        ],
+        "label": "GND"
+      },
+      {
+        "offset": [
+          3,
+          5
+        ],
+        "label": "OU3"
+      },
+      {
+        "offset": [
+          3,
+          6
+        ],
+        "label": "IN3"
+      },
+      {
+        "offset": [
+          3,
+          7
+        ],
+        "label": "EN2"
+      }
     ]
   },
   {
-    "name": "LCD 16x2", "value": "HD44780", "color": "#0a2a1a",
+    "name": "LCD 16x2",
+    "value": "HD44780",
     "pins": [
-      {"offset": [0,0], "label": "VSS"}, {"offset": [1,0], "label": "VDD"}, {"offset": [2,0], "label": "V0"}, {"offset": [3,0], "label": "RS"}, {"offset": [4,0], "label": "RW"}, {"offset": [5,0], "label": "E"}, {"offset": [6,0], "label": "D0"}, {"offset": [7,0], "label": "D1"}, {"offset": [8,0], "label": "D2"}, {"offset": [9,0], "label": "D3"}, {"offset": [10,0], "label": "D4"}, {"offset": [11,0], "label": "D5"}, {"offset": [12,0], "label": "D6"}, {"offset": [13,0], "label": "D7"}, {"offset": [14,0], "label": "A"}, {"offset": [15,0], "label": "K"}
+      {
+        "offset": [
+          0,
+          0
+        ],
+        "label": "VSS"
+      },
+      {
+        "offset": [
+          1,
+          0
+        ],
+        "label": "VDD"
+      },
+      {
+        "offset": [
+          2,
+          0
+        ],
+        "label": "V0"
+      },
+      {
+        "offset": [
+          3,
+          0
+        ],
+        "label": "RS"
+      },
+      {
+        "offset": [
+          4,
+          0
+        ],
+        "label": "RW"
+      },
+      {
+        "offset": [
+          5,
+          0
+        ],
+        "label": "E"
+      },
+      {
+        "offset": [
+          6,
+          0
+        ],
+        "label": "D0"
+      },
+      {
+        "offset": [
+          7,
+          0
+        ],
+        "label": "D1"
+      },
+      {
+        "offset": [
+          8,
+          0
+        ],
+        "label": "D2"
+      },
+      {
+        "offset": [
+          9,
+          0
+        ],
+        "label": "D3"
+      },
+      {
+        "offset": [
+          10,
+          0
+        ],
+        "label": "D4"
+      },
+      {
+        "offset": [
+          11,
+          0
+        ],
+        "label": "D5"
+      },
+      {
+        "offset": [
+          12,
+          0
+        ],
+        "label": "D6"
+      },
+      {
+        "offset": [
+          13,
+          0
+        ],
+        "label": "D7"
+      },
+      {
+        "offset": [
+          14,
+          0
+        ],
+        "label": "A"
+      },
+      {
+        "offset": [
+          15,
+          0
+        ],
+        "label": "K"
+      }
     ]
   },
   {
-    "name": "Transistor TO-220", "value": "MOSFET/BJT", "color": "#1a1a1a",
+    "name": "Transistor TO-220",
+    "value": "MOSFET/BJT",
     "pins": [
-      {"offset": [0,0], "label": "1"}, {"offset": [1,0], "label": "2"}, {"offset": [2,0], "label": "3"}
+      {
+        "offset": [
+          0,
+          0
+        ],
+        "label": "1"
+      },
+      {
+        "offset": [
+          1,
+          0
+        ],
+        "label": "2"
+      },
+      {
+        "offset": [
+          2,
+          0
+        ],
+        "label": "3"
+      }
     ]
   }
 ]

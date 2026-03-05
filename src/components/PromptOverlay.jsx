@@ -26,7 +26,6 @@ To connect two or more pins, assign them the EXACT same string in their "net" fi
       "id": "U1",
       "name": "ESP32-C3 SuperMini",
       "value": "MCU",
-      "color": "#1a3320",
       "pins": [
         { "offset": [0,0], "label": "5V", "net": "5V" },
         { "offset": [0,1], "label": "GND", "net": "GND" },
@@ -37,7 +36,6 @@ To connect two or more pins, assign them the EXACT same string in their "net" fi
       "id": "R1",
       "name": "Resistor",
       "value": "220",
-      "color": "#2e1a08",
       "pins": [
         { "offset": [0,0], "label": "1", "net": "LED_CONTROL" },
         { "offset": [2,0], "label": "2", "net": "LED_ANODE" }
