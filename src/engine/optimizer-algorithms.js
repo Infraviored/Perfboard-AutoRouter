@@ -717,6 +717,197 @@ export function tryAffinityPacking(components, currentWires, bestScore, cols, ro
   return { improved: false, score: bestScore, wires: currentWires };
 }
 
+/**
+ * Identify clusters of components that are tightly coupled.
+ * Two components are bonded if they share >= 2 nets, OR if they share
+ * 1 net and that is the ONLY net one of the components has.
+ * They must also be physically adjacent (Manhattan BB distance <= 2).
+ */
+function findTightClusters(components) {
+  const n = components.length;
+  const adj = Array.from({ length: n }, () => []);
+
+  const bbs = components.map(c => ({
+    minC: c.ox, maxC: c.ox + c.w - 1,
+    minR: c.oy, maxR: c.oy + c.h - 1,
+    nets: new Set(c.pins.map(p => p.net).filter(Boolean))
+  }));
+
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const a = bbs[i], b = bbs[j];
+
+      const distC = Math.max(0, a.minC - b.maxC, b.minC - a.maxC);
+      const distR = Math.max(0, a.minR - b.maxR, b.minR - a.maxR);
+      if (distC + distR > 2) continue;
+
+      let sharedCount = 0;
+      for (const net of a.nets) {
+        if (b.nets.has(net)) sharedCount++;
+      }
+
+      if (sharedCount >= 2 || (sharedCount === 1 && (a.nets.size === 1 || b.nets.size === 1))) {
+        adj[i].push(j);
+        adj[j].push(i);
+      }
+    }
+  }
+
+  const visited = new Set();
+  const clusters = [];
+
+  for (let i = 0; i < n; i++) {
+    if (visited.has(i)) continue;
+
+    const cluster = [];
+    const queue = [i];
+    visited.add(i);
+
+    while (queue.length > 0) {
+      const curr = queue.shift();
+      cluster.push(components[curr].id);
+      for (const neighbor of adj[curr]) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push(neighbor);
+        }
+      }
+    }
+
+    if (cluster.length > 1 && cluster.length <= 6) {
+      clusters.push(cluster);
+    }
+  }
+
+  return clusters;
+}
+
+/**
+ * Cluster Rotate Optimize:
+ * Identifies tightly coupled clusters and attempts to rotate the entire
+ * cluster as a rigid body (90, 180, 270 degrees) to resolve topology
+ * issues and shrink the footprint. Includes a 5x5 sub-grid translation
+ * search per angle to seat the rotated cluster optimally.
+ */
+export function tryClusterRotateOptimize(components, currentWires, bestScore, cols, rows, gCancelRequested = false) {
+  const clusters = findTightClusters(components);
+  if (clusters.length === 0) return { improved: false, score: bestScore, wires: currentWires };
+
+  const original = saveComps(components);
+  const bounds = calculateComponentBounds(components);
+  const currentArea = (bounds.maxCol - bounds.minCol + 1) * (bounds.maxRow - bounds.minRow + 1);
+
+  let bestGlobalScore = bestScore;
+  let bestGlobalWires = currentWires;
+  let improved = false;
+
+  for (const clusterIds of clusters) {
+    if (gCancelRequested) break;
+
+    const clusterComps = clusterIds.map(id => components.find(c => c.id === id));
+
+    // Cluster bounding box
+    let minC = Infinity, maxC = -Infinity, minR = Infinity, maxR = -Infinity;
+    clusterComps.forEach(c => {
+      minC = Math.min(minC, c.ox);
+      maxC = Math.max(maxC, c.ox + c.w - 1);
+      minR = Math.min(minR, c.oy);
+      maxR = Math.max(maxR, c.oy + c.h - 1);
+    });
+    const W = maxC - minC + 1;
+    const H = maxR - minR + 1;
+
+    let bestLocalScore = bestGlobalScore;
+    let bestLocalWires = null;
+    let bestLocalPos = null;
+
+    const preRotateOriginal = saveComps(components);
+
+    for (const angle of [90, 180, 270]) {
+      for (let tx = -2; tx <= 2; tx++) {
+        for (let ty = -2; ty <= 2; ty++) {
+          if (gCancelRequested) break;
+          restoreComps(components, preRotateOriginal);
+
+          let hasOverlapWithNonCluster = false;
+          const movedBatch = [];
+
+          for (const c of components) {
+            if (clusterIds.includes(c.id)) {
+              const dx = c.ox - minC;
+              const dy = c.oy - minR;
+              const cw = c.w;
+              const ch = c.h;
+              let new_dx, new_dy;
+
+              if (angle === 90) {
+                new_dx = H - dy - ch;
+                new_dy = dx;
+                rotateComp90InPlace(c);
+              } else if (angle === 180) {
+                new_dx = W - dx - cw;
+                new_dy = H - dy - ch;
+                rotateComp90InPlace(c);
+                rotateComp90InPlace(c);
+              } else if (angle === 270) {
+                new_dx = dy;
+                new_dy = W - dx - cw;
+                rotateComp90InPlace(c);
+                rotateComp90InPlace(c);
+                rotateComp90InPlace(c);
+              }
+
+              moveComp(c, minC + new_dx + tx, minR + new_dy + ty);
+              movedBatch.push(c);
+            }
+          }
+
+          for (const c of movedBatch) {
+            if (anyOverlap(c, components)) {
+              hasOverlapWithNonCluster = true;
+              break;
+            }
+          }
+
+          if (hasOverlapWithNonCluster) continue;
+
+          const nb = calculateComponentBounds(components);
+          const nArea = (nb.maxCol - nb.minCol + 1) * (nb.maxRow - nb.minRow + 1);
+          if (nArea > currentArea) continue;
+
+          const { success, wires: testWires } = incrementalReroute(components, bestGlobalWires, movedBatch);
+          if (!success) continue;
+
+          const testScore = scoreState(components, testWires);
+          if (testScore.comp < bestGlobalScore.comp) continue;
+
+          // Crucial: we want *strict* improvement so it doesn't vacillate
+          if (isScoreBetter(testScore, bestLocalScore)) {
+            bestLocalScore = testScore;
+            bestLocalWires = testWires;
+            bestLocalPos = saveComps(components);
+          }
+        }
+      }
+    }
+
+    if (bestLocalWires) {
+      restoreComps(components, bestLocalPos);
+      bestGlobalScore = bestLocalScore;
+      bestGlobalWires = bestLocalWires;
+      improved = true;
+    } else {
+      restoreComps(components, preRotateOriginal);
+    }
+  }
+
+  if (!improved) {
+    restoreComps(components, original);
+    return { improved: false, score: bestScore, wires: currentWires };
+  }
+
+  return { improved: true, score: bestGlobalScore, wires: bestGlobalWires };
+}
 
 /**
  * Generate candidate positions for relocating a blocker component.
