@@ -238,11 +238,12 @@ export function SidebarLeft({
         .comp-card:hover {
            background: var(--bg4);
            border-color: var(--border2);
+           border-left-color: var(--comp-color);
         }
         .comp-card.sel {
            background: var(--bg4);
-           border-color: var(--blu);
-           box-shadow: 0 0 0 1px var(--blu), var(--shadow-glow);
+           border-color: var(--comp-color);
+           box-shadow: 0 0 0 1px var(--comp-color), 0 0 15px color-mix(in srgb, var(--comp-color), transparent 60%);
         }
         .comp-id-tag {
           font-family: 'Outfit', sans-serif;
