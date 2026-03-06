@@ -36,7 +36,9 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
       maxR = Math.max(maxR, pt.row + 1);
     }));
 
-    const pad = 1;
+    const strokeWidth = 2;
+    const padPx = 3;
+    const pad = padPx / SP;
     minC -= pad; minR -= pad;
     maxC += pad; maxR += pad;
 
@@ -48,9 +50,12 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
     if (W <= 0 || H <= 0) return null;
 
     let inner = '';
+    // PCB Background color
+    inner += `<rect width="${W}" height="${H}" fill="#1a1208" rx="7"/>`;
+
     // Background drill holes
-    for (let c = minC; c < maxC; c++) {
-      for (let r = minR; r < maxR; r++) {
+    for (let c = Math.ceil(minC); c < Math.floor(maxC); c++) {
+      for (let r = Math.ceil(minR); r < Math.floor(maxR); r++) {
         const cx = Math.round((c - minC) * SP + SP / 2);
         const cy = Math.round((r - minR) * SP + SP / 2);
         inner += `<circle cx="${cx}" cy="${cy}" r="${Math.round(SP * .22)}" fill="#b87333"/><circle cx="${cx}" cy="${cy}" r="${Math.round(SP * .09)}" fill="#0d0a06"/>`;
@@ -73,6 +78,9 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
       };
       inner += renderCompSVG(sc, false);
     });
+
+    // Outer border matching generateBoundingBoxSVG
+    inner += `<rect x="${strokeWidth / 2}" y="${strokeWidth / 2}" width="${W - strokeWidth}" height="${H - strokeWidth}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="${strokeWidth}" stroke-dasharray="8 6" rx="7"/>`;
 
     return { W, H, inner };
   }, [bestSnapshot]);
@@ -109,8 +117,7 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
           <div className="pb-preview">
             <div className="pb-preview-label">final design</div>
             <div className="pb-preview-wrap success">
-              <svg viewBox={`0 0 ${preview.W} ${preview.H}`} style={{ height: '100%', maxWidth: '100%', display: 'block' }}>
-                <rect width={preview.W} height={preview.H} fill="#1a1208" />
+              <svg viewBox={`0 0 ${preview.W + 60} ${preview.H}`} style={{ height: '100%', maxWidth: '100%', display: 'block', overflow: 'visible' }}>
                 <g dangerouslySetInnerHTML={{ __html: preview.inner }} />
               </svg>
             </div>
@@ -137,10 +144,9 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
             <div className="pb-preview-label">current best</div>
             <div className="pb-preview-wrap">
               <svg
-                viewBox={`0 0 ${preview.W} ${preview.H}`}
-                style={{ height: '100%', maxWidth: '100%', display: 'block' }}
+                viewBox={`0 0 ${preview.W + 60} ${preview.H}`}
+                style={{ height: '100%', maxWidth: '100%', display: 'block', overflow: 'visible' }}
               >
-                <rect width={preview.W} height={preview.H} fill="#1a1208" />
                 <g dangerouslySetInnerHTML={{ __html: preview.inner }} />
               </svg>
             </div>
@@ -248,11 +254,13 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
         .pb-preview {
           display: flex;
           flex-direction: column;
-          align-items: flex-end;
+          align-items: center;
           gap: 10px;
           flex-shrink: 0;
           height: 100%;
           justify-content: center;
+          width: 320px;
+          min-width: 320px;
         }
         .pb-preview-label {
           font-family: 'Inter', sans-serif;
@@ -263,25 +271,12 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
           font-weight: 800;
         }
         .pb-preview-wrap {
-          border: 1px solid var(--border2);
-          border-radius: 12px;
-          overflow: hidden;
           height: 180px;
-          min-width: 220px;
+          width: 100%;
           display: flex;
           align-items: center;
           justify-content: center;
-          background: #0d0a06;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.6), inset 0 0 40px rgba(0,0,0,0.8);
           position: relative;
-        }
-        .pb-preview-wrap::after {
-          content: '';
-          position: absolute;
-          inset: 0;
-          border-radius: 12px;
-          box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
-          pointer-events: none;
         }
         .pb-title.success { color: var(--grn-bright); font-size: 1.4em; }
         .res-grid { display: flex; gap: 40px; margin-top: 8px; }
@@ -289,7 +284,7 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
         .res-label { font-size: 0.7em; text-transform: uppercase; color: var(--txt2); letter-spacing: 0.1em; font-weight: 700; }
         .res-val { font-size: 1.8em; font-weight: 800; color: #fff; font-family: 'Outfit', sans-serif; line-height: 1; }
         .res-sub { font-size: 0.75em; color: var(--txt1); font-family: 'Consolas', monospace; opacity: 0.8; }
-        .pb-preview-wrap.success { border-color: var(--grn); box-shadow: 0 0 20px rgba(0, 255, 144, 0.15); }
+        .pb-preview-wrap.success {  }
         #proc-bar.results { border-top-color: var(--grn-bright); background: linear-gradient(180deg, rgba(5,7,6,0.95) 0%, rgba(10,25,20,0.98) 100%); }
       `}} />
     </div>

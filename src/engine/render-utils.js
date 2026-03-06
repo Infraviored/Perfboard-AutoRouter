@@ -147,17 +147,20 @@ export function renderCompSVG(c, isSelected = false) {
   const bw = c.w * SP - SP * .16, bh = c.h * SP - SP * .16;
   const mainColor = boostColor(compColor(c));
 
-  let out = `<g class="pcb-comp" data-id="${c.id}">`;
+  let out = `<g class="pcb-comp ${isSelected ? 'component-selected' : ''}" data-id="${c.id}">`;
 
   // 1. Draw Component Base (balanced shine-through, solid rim)
-  const sw = 2.2; // stroke width
+  const sw = isSelected ? 3.2 : 2.2; // Subtler rim when selected
+  const rimOp = isSelected ? 1.0 : 0.8;
+  const tintOp = isSelected ? 0.15 : 0.08;
+
   const half = sw / 2;
   // Body: Inset by half the stroke width so it doesn't overlap the inner stroke half
   out += `<rect x="${bx + half}" y="${by + half}" width="${bw - sw}" height="${bh - sw}" rx="3" fill="#080808" fill-opacity="0.8"/>`;
   // Rim: Drawn with fill="none" to ensure uniform wire visibility through the stroke
-  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="none" stroke="${mainColor}" stroke-width="${sw}" stroke-opacity="0.8"/>`;
+  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="none" stroke="${mainColor}" stroke-width="${sw}" stroke-opacity="${rimOp}"/>`;
   // subtle tint overlay (entire area)
-  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="${mainColor}" opacity="0.08" style="pointer-events:none"/>`;
+  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="${mainColor}" opacity="${tintOp}" style="pointer-events:none"/>`;
 
   // 2. Draw Pins
   c.pins.forEach(p => {
@@ -170,10 +173,6 @@ export function renderCompSVG(c, isSelected = false) {
 
   // 3. Draw Component Labels
   out += `<text x="${bx + 3}" y="${by + SP * 0.35}" fill="#fff" font-family="'Consolas',monospace" font-size="${Math.min(SP * .3, 9)}" font-weight="bold" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${c.id}: ${c.value}</text>`;
-
-  if (isSelected) {
-    out += `<rect x="${c.ox * SP - 4}" y="${c.oy * SP - 4}" width="${c.w * SP + 8}" height="${c.h * SP + 8}" fill="none" stroke="#3b82f6" stroke-width="2" stroke-dasharray="4 2"/>`;
-  }
 
   out += `</g>`;
   return out;
