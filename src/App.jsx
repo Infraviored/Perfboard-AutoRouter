@@ -133,15 +133,24 @@ function App() {
 
   const handlePlaceAndRoute = useCallback(async () => {
     setBestSnapshot(null);
-    setStatus(prev => ({ ...prev, isProcessing: true }));
+    setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
     try {
       const data = JSON.parse(jsonInput);
       const defs = processTemplate(data);
-      await engine.placeAndRoute(defs, autoOptimize);
+      const res = await engine.placeAndRoute(defs, autoOptimize);
+      if (res) {
+        setStatus(prev => ({ ...prev, isProcessing: false, results: res }));
+        setTimeout(() => {
+          setStatus(prev => ({ ...prev, results: null }));
+          setBestSnapshot(null);
+        }, 4000);
+      } else {
+        setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
+      }
     } catch (e) {
       setToast({ msg: 'Error: ' + e.message, type: 'err' });
+      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
     }
-    setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
     saveHistory();
   }, [engine, jsonInput, autoOptimize, saveHistory]);
 
@@ -181,19 +190,35 @@ Use this format:
 
   const handleOptimizeFootprint = useCallback(async () => {
     setBestSnapshot(null);
-    setStatus(prev => ({ ...prev, isProcessing: true }));
-    await engine.optimize();
-    setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
-    setBestSnapshot(null);
+    setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
+    const res = await engine.optimize();
+    if (res) {
+      setStatus(prev => ({ ...prev, isProcessing: false, results: res }));
+      setTimeout(() => {
+        setStatus(prev => ({ ...prev, results: null }));
+        setBestSnapshot(null);
+      }, 4000);
+    } else {
+      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
+      setBestSnapshot(null);
+    }
     saveHistory();
   }, [engine, saveHistory]);
 
   const handlePlateauExplore = useCallback(async () => {
     setBestSnapshot(null);
-    setStatus(prev => ({ ...prev, isProcessing: true }));
-    await engine.plateau();
-    setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
-    setBestSnapshot(null);
+    setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
+    const res = await engine.plateau();
+    if (res) {
+      setStatus(prev => ({ ...prev, isProcessing: false, results: res }));
+      setTimeout(() => {
+        setStatus(prev => ({ ...prev, results: null }));
+        setBestSnapshot(null);
+      }, 4000);
+    } else {
+      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
+      setBestSnapshot(null);
+    }
     saveHistory();
   }, [engine, saveHistory]);
 
@@ -398,7 +423,7 @@ Use this format:
               components={board.components} wires={board.wires} cols={board.cols} rows={board.rows}
               selectedId={selectedId} onSelect={setSelectedId} hoveredNet={hoveredNet}
               onMove={handleMoveComp} onRotate={handleRotateComp} onMoveEnd={saveHistory}
-              tick={board.tick} isProcessing={status.isProcessing}
+              tick={board.tick} isProcessing={status.isProcessing || !!status.results}
             />
           </main>
           <ProcessingBar
@@ -426,7 +451,7 @@ Use this format:
         __html: `
         .app-main { display: flex; flex-direction: column; height: 100vh; width: 100vw; overflow: hidden; background: var(--bg0); }
         #layout { display: flex; flex: 1; overflow: hidden; min-height: 0; }
-        #ca-col { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+        #ca-col { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
         #ca { flex: 1; position: relative; background: #050706; overflow: hidden; border-radius: 4px; margin: 4px; box-shadow: inset 0 0 40px rgba(0,0,0,0.8); min-height: 0; }
       `}} />
     </div>

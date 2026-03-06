@@ -93,6 +93,7 @@ export class AutorouterEngine {
 
         this.wires = res.wires || this.wires;
         this.notify();
+        return res;
     }
 
     async plateau() {
@@ -120,6 +121,7 @@ export class AutorouterEngine {
 
         this.wires = res.wires || this.wires;
         this.notify();
+        return res;
     }
 
     async routeOnly() {
@@ -187,15 +189,16 @@ export class AutorouterEngine {
         }
 
         if (bestComps) {
+            const startScore = scoreState(this.components, this.wires);
             this.components = placeInitial(compDefs, this.cols, this.rows); // Reset structure
             restoreComps(this.components, bestComps);
             this.wires = bestWires;
 
             this.notify();
-            if (bestCompletion < 1.0) {
-                this.onToast?.(`Best completion: ${Math.round(bestCompletion * 100)}%`, 'warn');
-            }
+            const finalScore = scoreState(this.components, this.wires);
+            return { score: finalScore, startScore };
         }
+        return null;
     }
 
     moveComponent(id, ox, oy) {

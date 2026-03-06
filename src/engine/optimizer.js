@@ -321,10 +321,8 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
     const finalScore = scoreState(components, currentWires);
     setBestLine('');
     flashUIState();
-    if (checkCancel()) toast?.('Optimization cancelled — kept best so far', 'inf');
-    else toast?.(`Optimization complete!`, "ok");
 
-    return { improved: true, score: finalScore, wires: currentWires };
+    return { improved: true, score: finalScore, wires: currentWires, startScore: startScore };
 }
 
 
@@ -436,7 +434,5 @@ export async function doPlateauExplore(components, wires, cols, rows, options = 
 
     const finalScore = scoreState(components, currentWires);
     setBestLine('');
-    if (checkCancel()) toast('Plateau explore cancelled — kept best so far', 'inf');
-
-    return { improved: isScoreBetter(finalScore, startScore), score: finalScore, wires: currentWires };
+    return { improved: isScoreBetter(finalScore, startScore), score: finalScore, wires: currentWires, startScore: startScore };
 }

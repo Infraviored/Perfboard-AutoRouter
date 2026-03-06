@@ -2,15 +2,16 @@ import React, { useMemo, useEffect } from 'react';
 import { SP, netColor, renderCompSVG } from '../engine/render-utils.js';
 
 export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
-  const active = !!status.isProcessing;
+  const active = !!status.isProcessing || !!status.results;
+  const results = status.results;
 
   // Hooks must always run before any early return
   useEffect(() => {
-    if (!active) return;
+    if (!active || results) return;
     const onKey = (e) => { if (e.key === 'Escape') onGoodEnough(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onGoodEnough, active]);
+  }, [onGoodEnough, active, results]);
 
   // Compute bounding box of current best board
   const preview = useMemo(() => {
@@ -76,52 +77,116 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
     return { W, H, inner };
   }, [bestSnapshot]);
 
-  if (!active) return null;
+  // Determine content type
+  let barContent = null;
+  const isResults = !!results;
+  const isShown = active || isResults;
 
-  return (
-    <div id="proc-bar">
-      {/* LEFT: progress info */}
-      <div className="pb-left">
-        <div className="pb-title">{status.title || '…'}</div>
-        {status.best && <div className="pb-best">{status.best}</div>}
-        <div className="pb-track">
-          <div className="pb-fill" style={{ width: `${status.progress}%` }} />
-        </div>
-        <button className="btn grn pb-btn" onClick={onGoodEnough}>
-          ✓ Good Enough <span className="pb-esc">Esc</span>
-        </button>
-      </div>
+  if (isResults) {
+    const s = results.startScore;
+    const f = results.score;
+    const areaGain = s.area > 0 ? Math.round((s.area - f.area) / s.area * 100) : 0;
+    const wlGain = s.wl > 0 ? Math.round((s.wl - f.wl) / s.wl * 100) : 0;
 
-      {/* RIGHT: bounding-box SVG cutout of current best */}
-      {preview && !status.title?.includes('Attempt') && (
-        <div className="pb-preview">
-          <div className="pb-preview-label">current best</div>
-          <div className="pb-preview-wrap">
-            <svg
-              viewBox={`0 0 ${preview.W} ${preview.H}`}
-              style={{ height: '100%', maxWidth: '100%', display: 'block' }}
-            >
-              <rect width={preview.W} height={preview.H} fill="#1a1208" />
-              <g dangerouslySetInnerHTML={{ __html: preview.inner }} />
-            </svg>
+    barContent = (
+      <>
+        <div className="pb-left">
+          <div className="pb-title success">Optimization Successful</div>
+          <div className="res-grid">
+            <div className="res-item">
+              <div className="res-label">Footprint</div>
+              <div className="res-val">{areaGain > 0 ? `-${areaGain}%` : 'Optimal'}</div>
+              <div className="res-sub">{s.width}×{s.height} → {f.width}×{f.height} holes</div>
+            </div>
+            <div className="res-item">
+              <div className="res-label">Wire Length</div>
+              <div className="res-val">{wlGain > 0 ? `-${wlGain}%` : 'Optimal'}</div>
+              <div className="res-sub">{s.wl} → {f.wl} holes</div>
+            </div>
           </div>
         </div>
-      )}
+        {preview && (
+          <div className="pb-preview">
+            <div className="pb-preview-label">final design</div>
+            <div className="pb-preview-wrap success">
+              <svg viewBox={`0 0 ${preview.W} ${preview.H}`} style={{ height: '100%', maxWidth: '100%', display: 'block' }}>
+                <rect width={preview.W} height={preview.H} fill="#1a1208" />
+                <g dangerouslySetInnerHTML={{ __html: preview.inner }} />
+              </svg>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  } else if (active) {
+    barContent = (
+      <>
+        <div className="pb-left">
+          <div className="pb-title">{status.title || '…'}</div>
+          {status.best && <div className="pb-best">{status.best}</div>}
+          <div className="pb-track">
+            <div className="pb-fill" style={{ width: `${status.progress}%` }} />
+          </div>
+          <button className="btn grn pb-btn" onClick={onGoodEnough}>
+            ✓ Good Enough <span className="pb-esc">Esc</span>
+          </button>
+        </div>
+
+        {preview && !status.title?.includes('Attempt') && (
+          <div className="pb-preview">
+            <div className="pb-preview-label">current best</div>
+            <div className="pb-preview-wrap">
+              <svg
+                viewBox={`0 0 ${preview.W} ${preview.H}`}
+                style={{ height: '100%', maxWidth: '100%', display: 'block' }}
+              >
+                <rect width={preview.W} height={preview.H} fill="#1a1208" />
+                <g dangerouslySetInnerHTML={{ __html: preview.inner }} />
+              </svg>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <div id="proc-bar" className={`${isResults ? "results" : ""} ${isShown ? "shown" : ""}`}>
+      <div className="pb-content-wrap">
+        {barContent}
+      </div>
 
       <style dangerouslySetInnerHTML={{
         __html: `
         #proc-bar {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
           display: flex;
           align-items: center;
-          gap: 32px;
-          padding: 20px 32px;
+          padding: 0 32px;
           background: var(--glass-bg);
           backdrop-filter: blur(16px);
           border-top: 2px solid var(--grn-bright);
-          flex-shrink: 0;
           height: 240px;
           box-shadow: var(--shadow-premium), 0 -4px 32px rgba(35, 134, 54, 0.2);
-          z-index: 50;
+          z-index: 100;
+          transition: opacity 0.3s ease;
+          transform: none;
+          opacity: 0;
+          pointer-events: none;
+        }
+        #proc-bar.shown {
+          opacity: 1;
+          pointer-events: auto;
+        }
+        .pb-content-wrap {
+          display: flex;
+          align-items: center;
+          gap: 32px;
+          width: 100%;
+          height: 100%;
         }
         .pb-left {
           display: flex;
@@ -218,6 +283,14 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
           box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
           pointer-events: none;
         }
+        .pb-title.success { color: var(--grn-bright); font-size: 1.4em; }
+        .res-grid { display: flex; gap: 40px; margin-top: 8px; }
+        .res-item { display: flex; flex-direction: column; gap: 4px; }
+        .res-label { font-size: 0.7em; text-transform: uppercase; color: var(--txt2); letter-spacing: 0.1em; font-weight: 700; }
+        .res-val { font-size: 1.8em; font-weight: 800; color: #fff; font-family: 'Outfit', sans-serif; line-height: 1; }
+        .res-sub { font-size: 0.75em; color: var(--txt1); font-family: 'Consolas', monospace; opacity: 0.8; }
+        .pb-preview-wrap.success { border-color: var(--grn); box-shadow: 0 0 20px rgba(0, 255, 144, 0.15); }
+        #proc-bar.results { border-top-color: var(--grn-bright); background: linear-gradient(180deg, rgba(5,7,6,0.95) 0%, rgba(10,25,20,0.98) 100%); }
       `}} />
     </div>
   );

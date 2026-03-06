@@ -282,7 +282,7 @@ export function PcbCanvas({
     const boundingBoxSvg = useMemo(() => generateBoundingBoxSVG(components, wires), [components, wires, tick]);
 
     return (
-        <div className="canvas-container" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} onMouseDown={handleMouseDown} onWheel={handleWheel} onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', cursor: (isPanning || draggingId) ? 'grabbing' : 'crosshair', background: '#050706' }}>
+        <div className={`canvas-container ${isProcessing ? 'pb-active' : ''}`} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} onMouseDown={handleMouseDown} onWheel={handleWheel} onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', cursor: (isPanning || draggingId) ? 'grabbing' : 'crosshair', background: '#050706', '--pb-height': '240px' }}>
             <svg ref={svgRef} width="100%" height="100%" style={{ display: 'block' }}>
                 <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
                     <g dangerouslySetInnerHTML={{ __html: background }} />
@@ -312,7 +312,8 @@ export function PcbCanvas({
             <style dangerouslySetInnerHTML={{
                 __html: `
                 .canvas-container { user-select: none; -webkit-user-select: none; }
-                .canvas-controls { position: absolute; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
+                .canvas-controls { position: absolute; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 10; transition: bottom 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+                .canvas-container.pb-active .canvas-controls { bottom: calc(20px + var(--pb-height)); }
                 .cbtn { 
                   width: 38px; 
                   height: 38px; 
