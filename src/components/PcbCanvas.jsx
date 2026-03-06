@@ -288,9 +288,25 @@ export function PcbCanvas({
             </svg>
 
             <div className="zbx">
-                <button className="zbtn" onClick={() => setZoom(z => z * 1.15)} title="Zoom In">+</button>
-                <button className="zbtn" onClick={() => setZoom(z => z * 0.87)} title="Zoom Out">−</button>
-                <button className="zbtn" onClick={() => setForceCenterToggle(true)} title="Center Board (Reset View)">⊕</button>
+                <button className="zbtn" onClick={() => setZoom(z => z * 1.15)} title="Zoom In">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                </button>
+                <button className="zbtn" onClick={() => setZoom(z => z * 0.87)} title="Zoom Out">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                </button>
+                <button className="zbtn" onClick={() => setForceCenterToggle(true)} title="Center Board (Reset View)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+                        <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+                        <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+                        <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+                    </svg>
+                </button>
                 <button className="zbtn" onClick={() => setIsAutoTracking(v => !v)} title={isAutoTracking ? "Disable Auto-Tracking" : "Enable Auto-Tracking"} style={{ color: isAutoTracking ? '#00ff00' : 'inherit' }}>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="12" cy="12" r="10" />
