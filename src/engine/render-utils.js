@@ -168,14 +168,22 @@ export function renderCompSVG(c, isSelected = false) {
   // 2. Draw Pins
   c.pins.forEach(p => {
     const px = p.col * SP + SP / 2, py = p.row * SP + SP / 2;
-    out += `<circle cx="${px}" cy="${py}" r="${SP * .28}" fill="#b87333"/>`;
+    // Centered pin design: Label inside the colored pad
     out += `<circle cx="${px}" cy="${py}" r="${SP * .2}" fill="${netColor(p.net)}"/>`;
-    out += `<circle cx="${px}" cy="${py}" r="${SP * .09}" fill="#0d0a06"/>`;
-    out += `<text x="${px}" y="${py + SP * .42}" fill="rgba(230,230,230,.9)" font-family="monospace" font-size="${Math.min(SP * .25, 7)}" text-anchor="middle" style="pointer-events:none;user-select:none">${p.lbl}</text>`;
+    out += `<text x="${px}" y="${py}" dy=".35em" fill="#fff" font-family="'Outfit', sans-serif" font-weight="900" font-size="${Math.min(SP * .22, 6)}" text-anchor="middle" paint-order="stroke" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${p.lbl}</text>`;
   });
 
-  // 3. Draw Component Labels
-  out += `<text x="${bx + 3}" y="${by + SP * 0.35}" fill="#fff" font-family="'Consolas',monospace" font-size="${Math.min(SP * .3, 9)}" font-weight="bold" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${c.id}: ${c.value}</text>`;
+  // 3. Draw Component Labels (Centered, two-line layout)
+  const midX = bx + bw / 2;
+  // Shift midY only for vertical strips (h > w) with odd pin counts (h > 1) to avoid pin overlap.
+  const isVerticalStrip = c.h > c.w && c.h > 1;
+  const midY = (isVerticalStrip && c.h % 2 !== 0) ? (by + bh / 2 - SP / 2) : (by + bh / 2);
+  const fontSize = Math.min(SP * .3, 10);
+
+  // Name line
+  out += `<text x="${midX}" y="${midY - 1}" fill="#fff" font-family="'Outfit', sans-serif" font-size="${fontSize}" font-weight="800" text-anchor="middle" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${c.id}</text>`;
+  // Value line (slightly smaller and dimmer)
+  out += `<text x="${midX}" y="${midY + fontSize}" fill="rgba(255,255,255,0.6)" font-family="'Outfit', sans-serif" font-size="${fontSize * 0.8}" font-weight="700" text-anchor="middle" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${c.value}</text>`;
 
   out += `</g>`;
   return out;
