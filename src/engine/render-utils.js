@@ -181,9 +181,9 @@ export function renderCompSVG(c, isSelected = false) {
   const fontSize = Math.min(SP * .3, 10);
 
   // Name line
-  out += `<text x="${midX}" y="${midY - 1}" fill="#fff" font-family="'Outfit', sans-serif" font-size="${fontSize}" font-weight="800" text-anchor="middle" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${c.id}</text>`;
+  out += `<text x="${midX}" y="${midY}" fill="#fff" font-family="'Outfit', sans-serif" font-size="${fontSize}" font-weight="800" text-anchor="middle" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${c.id}</text>`;
   // Value line (slightly smaller and dimmer)
-  out += `<text x="${midX}" y="${midY + fontSize}" fill="rgba(255,255,255,0.6)" font-family="'Outfit', sans-serif" font-size="${fontSize * 0.8}" font-weight="700" text-anchor="middle" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${c.value}</text>`;
+  out += `<text x="${midX}" y="${midY + fontSize * 0.8}" fill="rgba(255,255,255,0.6)" font-family="'Outfit', sans-serif" font-size="${fontSize * 0.8}" font-weight="700" text-anchor="middle" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${c.value}</text>`;
 
   out += `</g>`;
   return out;
