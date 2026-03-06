@@ -122,35 +122,7 @@ export function PcbCanvas({
         return () => resizeObs.disconnect();
     }, []);
 
-    // Continuous smooth camera tracking during processing, or instant snap on load/manual
-    useEffect(() => {
-        if (components.length === 0) return;
-
-        let minC = Infinity, maxC = -Infinity, minRow = Infinity, maxRow = -Infinity;
-        components.forEach(c => {
-            minC = Math.min(minC, c.ox);
-            maxC = Math.max(maxC, c.ox + c.w);
-            minRow = Math.min(minRow, c.oy);
-            maxRow = Math.max(maxRow, c.oy + c.h);
-        });
-
-        const rect = svgRef.current?.getBoundingClientRect();
-        if (!rect) return;
-
-        const cx = (minC + maxC) / 2 * SP;
-        const cy = (minRow + maxRow) / 2 * SP;
-
-        const targetX = rect.width / 2 - cx * zoom;
-        const targetY = rect.height / 2 - cy * zoom;
-
-        // If 'pan' hasn't been initialized (0,0) or manual button triggered, instantly snap
-        if ((pan.x === 0 && pan.y === 0) || forceCenterToggle) {
-            setPan({ x: targetX, y: targetY });
-            if (forceCenterToggle) setForceCenterToggle(false);
-        }
-    }, [isProcessing, tick, components, zoom, pan.x, pan.y, forceCenterToggle]);
-
-    // Bounding box for background fading
+    // Bounding box for tracking, background fading, and zooming
     const bounds = useMemo(() => {
         if (components.length === 0) return null;
         let minCol = Infinity, maxCol = -Infinity, minRow = Infinity, maxRow = -Infinity;
@@ -168,6 +140,94 @@ export function PcbCanvas({
         }));
         return { minCol, maxCol, minRow, maxRow };
     }, [components, wires, tick]);
+
+    const zoomVelRef = useRef(0);
+    const smoothCenterRef = useRef(null);
+
+    // Continuous smooth camera tracking and auto-zoom during processing
+    useEffect(() => {
+        if (!bounds) return;
+
+        const rect = svgRef.current?.getBoundingClientRect();
+        if (!rect || rect.width === 0 || rect.height === 0) return;
+
+        const cx = (bounds.minCol + bounds.maxCol + 1) / 2 * SP;
+        const cy = (bounds.minRow + bounds.maxRow + 1) / 2 * SP;
+
+        // Initialize smooth center if needed
+        if (!smoothCenterRef.current) {
+            smoothCenterRef.current = { x: cx, y: cy };
+        }
+
+        let curZoom = zoom;
+        let zoomChanged = false;
+
+        if (isProcessing) {
+            // 1. Calculate the 'ideal' zoom that would make the BB exactly 85% of viewport
+            const targetCoverage = 0.85;
+            const bbW = (bounds.maxCol - bounds.minCol + 1) * SP;
+            const bbH = (bounds.maxRow - bounds.minRow + 1) * SP;
+            const fitZoom = Math.min(
+                (rect.width * targetCoverage) / bbW,
+                (rect.height * targetCoverage) / bbH,
+                5.0
+            );
+
+            // 2. Identify current coverage percentage
+            const currentCoverageX = (bbW * curZoom) / rect.width;
+            const currentCoverageY = (bbH * curZoom) / rect.height;
+            const maxCoverage = Math.max(currentCoverageX, currentCoverageY);
+
+            // 3. Dual-Box Hysteresis Logic
+            const outerLimit = 0.90; // If coverage > 90%, zoom out
+            const innerLimit = 0.80; // If coverage < 80%, zoom in
+
+            let zoomAcc = 0;
+            if (maxCoverage > outerLimit) {
+                // Accelerate OUT (fitZoom will be smaller than curZoom)
+                zoomAcc = (fitZoom - curZoom) * 0.005;
+            } else if (maxCoverage < innerLimit) {
+                // Accelerate IN (fitZoom will be larger than curZoom)
+                zoomAcc = (fitZoom - curZoom) * 0.005;
+            }
+
+            // 4. Physics: Integrate Acceleration -> Velocity -> Position
+            // Apply damping (friction) for critical damping feel
+            zoomVelRef.current = zoomVelRef.current * 0.85 + zoomAcc;
+
+            // Apply velocity to zoom
+            if (Math.abs(zoomVelRef.current) > 0.00001) {
+                curZoom += zoomVelRef.current;
+                zoomChanged = true;
+            }
+
+            // 5. Smooth Centering: EMA to follow the BB center without high-frequency jitter
+            // 0.05 factor gives a nice "lazy" follow feel
+            smoothCenterRef.current.x += (cx - smoothCenterRef.current.x) * 0.05;
+            smoothCenterRef.current.y += (cy - smoothCenterRef.current.y) * 0.05;
+        } else {
+            // Reset physics when not processing
+            zoomVelRef.current = 0;
+            smoothCenterRef.current = { x: cx, y: cy };
+        }
+
+        const useCx = smoothCenterRef.current.x;
+        const useCy = smoothCenterRef.current.y;
+
+        const targetX = rect.width / 2 - useCx * curZoom;
+        const targetY = rect.height / 2 - useCy * curZoom;
+
+        // If 'pan' hasn't been initialized (0,0) or manual button triggered, instantly snap
+        if ((pan.x === 0 && pan.y === 0) || forceCenterToggle) {
+            setPan({ x: targetX, y: targetY });
+            if (zoomChanged) setZoom(curZoom);
+            if (forceCenterToggle) setForceCenterToggle(false);
+        } else if (isProcessing) {
+            // Always update pan/zoom during processing to follow the smooth center/physics
+            setPan({ x: targetX, y: targetY });
+            if (zoomChanged) setZoom(curZoom);
+        }
+    }, [isProcessing, tick, forceCenterToggle, bounds]);
 
     // Labels for the board
     const labelsSvg = useMemo(() => {

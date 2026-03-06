@@ -399,7 +399,7 @@ Use this format:
               components={board.components} wires={board.wires} cols={board.cols} rows={board.rows}
               selectedId={selectedId} onSelect={setSelectedId} hoveredNet={hoveredNet}
               onMove={handleMoveComp} onRotate={handleRotateComp} onMoveEnd={saveHistory}
-              tick={board.tick}
+              tick={board.tick} isProcessing={status.isProcessing}
             />
           </main>
           <ProcessingBar
