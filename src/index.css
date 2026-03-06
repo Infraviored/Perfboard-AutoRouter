@@ -421,31 +421,10 @@ kbd {
 }
 
 .component-selected .pcb-comp-rim {
-  animation: component-halo 1.5s infinite alternate ease-in-out;
-}
-
-@keyframes component-halo {
-  from {
-    filter: drop-shadow(0 0 1px var(--comp-color));
-  }
-
-  to {
-    filter: drop-shadow(0 0 6px var(--comp-color));
-  }
+  filter: drop-shadow(0 0 2px var(--comp-color));
 }
 
 .wire-active {
-  animation: wire-halo 1.5s infinite alternate ease-in-out;
-}
-
-@keyframes wire-halo {
-  from {
-    filter: drop-shadow(0 0 1px var(--wire-color));
-    stroke-width: 4.5px;
-  }
-
-  to {
-    filter: drop-shadow(0 0 8px var(--wire-color));
-    stroke-width: 5.2px;
-  }
+  filter: drop-shadow(0 0 2px var(--wire-color));
+  stroke-width: 3.8px;
 }

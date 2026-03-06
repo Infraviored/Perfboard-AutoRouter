@@ -105,7 +105,7 @@ export function generateWiresSVG(wires, activeNets = []) {
     }
 
     const isActive = activeNets.includes(w.net);
-    const strokeW = isActive ? 4.5 : 2.8;
+    const strokeW = isActive ? 3.8 : 2.8;
     const pts = w.path.map(pt => `${pt.col * SP + SP / 2},${pt.row * SP + SP / 2}`).join(' ');
     const color = netColor(w.net);
 
@@ -153,7 +153,7 @@ export function renderCompSVG(c, isSelected = false) {
   let out = `<g class="pcb-comp ${isSelected ? 'component-selected' : ''}" data-id="${c.id}" style="--comp-color: ${mainColor}">`;
 
   // 1. Draw Component Base (balanced shine-through, solid rim)
-  const sw = isSelected ? 2.7 : 1.9; // Thinner, more professional rims
+  const sw = isSelected ? 3.1 : 1.9; // Balanced selecion thickness
   const rimOp = isSelected ? 1.0 : 0.8;
   const tintOp = isSelected ? 0.2 : 0.08;
 
