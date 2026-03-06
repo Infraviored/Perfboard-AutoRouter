@@ -146,7 +146,6 @@ export function Topbar({
           font-weight: 600;
         }
         
-        /* RESTORED: Horizontal layout for button groups */
         .btn-group {
           display: flex;
           align-items: center;
@@ -155,61 +154,99 @@ export function Topbar({
         
         .workflow-track {
           display: flex;
-          gap: 6px;
-          padding: 4px;
-          background: rgba(0,0,0,0.1);
+          gap: 0;
+          padding: 2px;
+          background: rgba(0,0,0,0.22);
           border-radius: 10px;
           border: 1px solid var(--border);
+          box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
         }
 
         .flow-btn {
           background: transparent;
-          border: 1px solid transparent;
+          border: none;
           color: var(--txt2);
-          padding: 6px 14px;
-          border-radius: 7px;
+          padding: 7px 18px;
           cursor: pointer;
           font-size: .78em;
           font-weight: 700;
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 9px;
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
           position: relative;
+          border-radius: 0;
+          position: relative;
+        }
+
+        /* The vertical separator between non-active buttons */
+        .flow-btn:not(:last-child)::after {
+          content: '';
+          position: absolute;
+          right: 0;
+          top: 20%;
+          bottom: 20%;
+          width: 1px;
+          background: var(--border);
+          opacity: 0.5;
+        }
+        
+        .flow-btn:first-child {
+          border-radius: 8px 0 0 8px;
+        }
+        .flow-btn:last-child {
+          border-radius: 0 8px 8px 0;
+        }
+        .flow-btn:last-child::after {
+          display: none;
         }
         
         .flow-btn.active {
           background: var(--bg3);
           color: var(--txt0);
-          border-color: var(--border);
-          box-shadow: var(--shadow-small);
+          box-shadow: 0 2px 6px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+          z-index: 2;
+          /* Remove separator when active */
         }
-        
-        .flow-btn.active svg {
-          color: var(--flow-color);
-          filter: drop-shadow(0 0 4px var(--flow-color));
+        .flow-btn.active::after {
+          display: none;
+        }
+        /* Also hide PREVIOUS separator when active */
+        .flow-btn.active + .flow-btn::before {
+          display: none;
         }
 
-        .flow-btn.active::after {
+        /* Color accent for the current active/completed stages */
+        .flow-btn.active svg {
+          color: var(--flow-color);
+          filter: drop-shadow(0 0 5px var(--flow-color));
+        }
+
+        /* Marker for current step */
+        .flow-btn.active::before {
           content: '';
           position: absolute;
-          bottom: -4px;
-          left: 10%;
-          right: 10%;
+          bottom: 0px;
+          left: 15%;
+          right: 15%;
           height: 2px;
           background: var(--flow-color);
           box-shadow: 0 0 8px var(--flow-color);
           border-radius: 2px;
-          opacity: 0.7;
+          opacity: 0.8;
         }
 
         .flow-btn:hover:not(:disabled) {
-          background: var(--bg4);
+          background: rgba(255,255,255,0.03);
           color: var(--txt0);
+          z-index: 3;
+        }
+        .flow-btn.active:hover:not(:disabled) {
+          background: var(--bg4);
         }
 
         .flow-btn:disabled {
-          opacity: 0.2;
+          opacity: 0.15;
           cursor: not-allowed;
           filter: grayscale(1);
         }
