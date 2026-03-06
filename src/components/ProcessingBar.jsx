@@ -2,7 +2,7 @@ import React, { useMemo, useEffect } from 'react';
 import { SP, netColor, renderCompSVG } from '../engine/render-utils.js';
 
 export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
-  const active = status.isProcessing || !!status.title;
+  const active = !!status.isProcessing;
 
   // Hooks must always run before any early return
   useEffect(() => {

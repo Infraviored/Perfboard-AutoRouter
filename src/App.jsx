@@ -174,9 +174,8 @@ Use this format:
   }, []);
 
   const handleRouteOnly = useCallback(async () => {
-    setStatus(prev => ({ ...prev, isProcessing: true }));
     await engine.routeOnly();
-    setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
+    setStatus(prev => ({ ...prev, title: '', best: '' }));
     saveHistory();
   }, [engine, saveHistory]);
 
