@@ -202,13 +202,15 @@ export function generateBoundingBoxSVG(components, wires = []) {
 
   if (!isFinite(minC)) return '';
 
-  const pad = 0;
-  const x = (minC - pad) * SP;
-  const y = (minR - pad) * SP;
-  const w = (maxC - minC + pad * 2) * SP;
-  const h = (maxR - minR + pad * 2) * SP;
+  const strokeWidth = 2;
+  const padPx = 3; // Exactly one line width gap
+  const x = (minC) * SP - padPx;
+  const y = (minR) * SP - padPx;
+  const w = (maxC - minC) * SP + padPx * 2;
+  const h = (maxR - minR) * SP + padPx * 2;
 
-  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="8 6" rx="4"/>`;
+  // rx=7 (4 comp radius + 3 padding) ensures parallel rounding
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="${strokeWidth}" stroke-dasharray="8 6" rx="7"/>`;
 }
 
 export function hitComp(col, row, components) {
