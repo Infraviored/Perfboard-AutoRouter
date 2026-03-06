@@ -29,7 +29,8 @@ export function PcbCanvas({
     onRotate,
     onMoveEnd,
     tick,
-    isProcessing
+    isProcessing,
+    isInitialProcessing
 }) {
     const svgRef = useRef(null);
     const [zoom, setZoom] = useState(1);
@@ -145,12 +146,15 @@ export function PcbCanvas({
         return { minCol, minRow, maxCol, maxRow };
     }, [components, wires, cols, rows]);
 
+    const wasProcessing = useRef(false);
     useEffect(() => {
-        if (bounds && !hasInitializedFit.current) {
+        // Instant snap for new circuit (manual load) OR initial placement phase (isInitialProcessing)
+        if (bounds && (!isProcessing && !wasProcessing.current || isInitialProcessing)) {
             setForceCenterToggle(true);
             hasInitializedFit.current = true;
         }
-    }, [bounds]);
+        wasProcessing.current = isProcessing;
+    }, [components, isProcessing, isInitialProcessing, bounds]);
 
     const zoomVelRef = useRef(0);
     const panVelRef = useRef({ x: 0, y: 0 });
@@ -176,7 +180,7 @@ export function PcbCanvas({
         const pbHeight = isProcessing ? 240 : 0;
         const availableHeight = rect.height - pbHeight;
 
-        const shouldApplyPhysics = isAutoTracking && b && rect.width > 0;
+        const shouldApplyPhysics = isAutoTracking && isProcessing && b && rect.width > 0 && !isPanning && !draggingId;
 
         if (shouldApplyPhysics) {
             const targetCX = (b.minCol + b.maxCol + 1) / 2 * SP;
@@ -232,10 +236,10 @@ export function PcbCanvas({
             setPan({ x: simPan.current.x, y: simPan.current.y });
         }
         rAFRef.current = requestAnimationFrame(updatePhysics);
-    }, [isProcessing, isAutoTracking]);
+    }, [isProcessing, isAutoTracking, isPanning, draggingId]);
 
     useEffect(() => {
-        if (isAutoTracking) {
+        if (isAutoTracking && isProcessing) {
             lastTimeRef.current = performance.now();
             rAFRef.current = requestAnimationFrame(updatePhysics);
         } else {
@@ -245,7 +249,7 @@ export function PcbCanvas({
             lastTimeRef.current = 0;
         }
         return () => { if (rAFRef.current) cancelAnimationFrame(rAFRef.current); };
-    }, [isAutoTracking, updatePhysics]);
+    }, [isAutoTracking, isProcessing, updatePhysics]);
 
     useEffect(() => {
         if (forceCenterToggle && bounds && svgRef.current) {

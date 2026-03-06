@@ -75,7 +75,7 @@ function App() {
     localStorage.setItem('pcb_json_input', jsonInput);
   }, [jsonInput]);
 
-  const [status, setStatus] = useState({ title: '', progress: 0, best: '', isProcessing: false });
+  const [status, setStatus] = useState({ title: '', progress: 0, best: '', isProcessing: false, isInitial: false });
   const [toast, setToast] = useState({ msg: '', type: 'ok' });
   const [selectedId, setSelectedId] = useState(null);
   const [selectedNet, setSelectedNet] = useState(null);
@@ -133,23 +133,23 @@ function App() {
 
   const handlePlaceAndRoute = useCallback(async () => {
     setBestSnapshot(null);
-    setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
+    setStatus(prev => ({ ...prev, isProcessing: true, isInitial: true, results: null }));
     try {
       const data = JSON.parse(jsonInput);
       const defs = processTemplate(data);
       const res = await engine.placeAndRoute(defs);
       if (res) {
-        setStatus(prev => ({ ...prev, isProcessing: false, results: res }));
+        setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, results: res }));
         setTimeout(() => {
           setStatus(prev => ({ ...prev, results: null }));
           setBestSnapshot(null);
         }, 4000);
       } else {
-        setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
+        setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: '' }));
       }
     } catch (e) {
       setToast({ msg: 'Error: ' + e.message, type: 'err' });
-      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
+      setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: '' }));
     }
     saveHistory();
   }, [engine, jsonInput, saveHistory]);
@@ -444,6 +444,7 @@ Use this format:
               activeNets={activeNets}
               onMove={handleMoveComp} onRotate={handleRotateComp} onMoveEnd={saveHistory}
               tick={board.tick} isProcessing={status.isProcessing || !!status.results}
+              isInitialProcessing={status.isInitial}
             />
           </main>
           <ProcessingBar
