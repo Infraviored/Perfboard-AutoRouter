@@ -9,15 +9,29 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
     const setProg = onProgress;
     const setBestLine = (msg) => onStatusUpdate?.({ best: msg });
 
-    let currentWires = wires;
-    let uiCols = cols;
-    let uiRows = rows;
+    const startTime = performance.now();
+    const MAX_EPOCHS = config.maxEpochs || 1;
+    let MAX_ITERS = config.maxIters || 100;
+
+    // Distribute iterations across epochs
+    if (MAX_EPOCHS > 1 && MAX_ITERS > 10) {
+        MAX_ITERS = Math.max(10, Math.floor(MAX_ITERS / MAX_EPOCHS));
+    }
+    const saThresh = config.saTrigger || 5;
+    const platThresh = config.plateauTrigger || 8;
+    const deepThresh = config.deepStagnation || 12;
+    const maxTimeMs = config.maxTimeMs || 25000;
 
     let gCancelRequested = false;
     const checkCancel = () => {
-        if (options.checkCancel) return options.checkCancel();
+        if (options.checkCancel && options.checkCancel()) return true;
+        if ((performance.now() - startTime) > maxTimeMs) return true;
         return gCancelRequested;
     };
+
+    let currentWires = wires;
+    let uiCols = cols;
+    let uiRows = rows;
 
     // Flash the main canvas with whatever intermediate state we're exploring
     const flashUIState = () => {
@@ -43,19 +57,6 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
 
     if (!components.length) { toast?.('No components to optimize', 'warn'); return; }
 
-
-    const MAX_EPOCHS = config.maxEpochs || 1;
-    let MAX_ITERS = config.maxIters || 100;
-
-    // Distribute iterations across epochs
-    if (MAX_EPOCHS > 1 && MAX_ITERS > 10) {
-        MAX_ITERS = Math.max(10, Math.floor(MAX_ITERS / MAX_EPOCHS));
-    }
-
-    const saThresh = config.saTrigger || 5;
-    const platThresh = config.plateauTrigger || 8;
-    const deepThresh = config.deepStagnation || 12;
-    const maxTimeMs = config.maxTimeMs || 25000;
 
     setBestLine('');
 
@@ -92,8 +93,6 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
 
     let stagnation = 0;
     let macroCount = 0;
-
-    const startTime = performance.now();
 
     for (let currentEpoch = 1; currentEpoch <= MAX_EPOCHS; currentEpoch++) {
         if (checkCancel() || (performance.now() - startTime) > maxTimeMs) break;
@@ -320,12 +319,6 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
     // Removed translateFootprintToTopLeftUI(); to stop jumping to top-left
 
     const finalScore = scoreState(components, currentWires);
-    if (!isScoreBetter(finalScore, startScore)) {
-        restoreComps(components, startSnapshot);
-        toast?.('Optimization found no improvement', 'inf');
-        return { improved: false };
-    }
-
     setBestLine('');
     flashUIState();
     if (checkCancel()) toast?.('Optimization cancelled — kept best so far', 'inf');
@@ -442,10 +435,6 @@ export async function doPlateauExplore(components, wires, cols, rows, options = 
     }
 
     const finalScore = scoreState(components, currentWires);
-    if (!isScoreBetter(finalScore, startScore)) {
-        restoreComps(components, startSnapshot);
-    }
-
     setBestLine('');
     if (checkCancel()) toast('Plateau explore cancelled — kept best so far', 'inf');
 

@@ -91,10 +91,8 @@ export class AutorouterEngine {
             options
         );
 
-        if (res.improved) {
-            this.wires = res.wires;
-            this.notify();
-        }
+        this.wires = res.wires || this.wires;
+        this.notify();
     }
 
     async plateau() {
@@ -120,10 +118,8 @@ export class AutorouterEngine {
             options
         );
 
-        if (res.improved) {
-            this.wires = res.wires;
-            this.notify();
-        }
+        this.wires = res.wires || this.wires;
+        this.notify();
     }
 
     async routeOnly() {
