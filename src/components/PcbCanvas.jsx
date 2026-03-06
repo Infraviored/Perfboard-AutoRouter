@@ -24,7 +24,7 @@ export function PcbCanvas({
     rows,
     selectedId,
     onSelect,
-    hoveredNet,
+    activeNets,
     onMove,
     onRotate,
     onMoveEnd,
@@ -287,7 +287,7 @@ export function PcbCanvas({
     }, [bounds]);
 
     const background = useMemo(() => generateBackgroundSVG(cols, rows, bounds), [cols, rows, bounds]);
-    const wiresSvg = useMemo(() => generateWiresSVG(wires, hoveredNet), [wires, hoveredNet, tick]);
+    const wiresSvg = useMemo(() => generateWiresSVG(wires, activeNets), [wires, activeNets, tick]);
     const ratsnestSvg = useMemo(() => generateRatsnestSVG(components, wires, !!draggingId), [components, wires, draggingId, tick]);
     const componentsSvg = useMemo(() => components.map(c => renderCompSVG(c, c.id === selectedId)).join(''), [components, selectedId, tick]);
     const boundingBoxSvg = useMemo(() => generateBoundingBoxSVG(components, wires), [components, wires, tick]);

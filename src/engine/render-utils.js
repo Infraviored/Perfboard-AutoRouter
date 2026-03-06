@@ -95,7 +95,7 @@ export function generateBackgroundSVG(cols, rows, bounds = null) {
   `;
 }
 
-export function generateWiresSVG(wires, hoveredNet = null) {
+export function generateWiresSVG(wires, activeNets = []) {
   let out = '';
   wires.forEach(w => {
     if (w.failed) {
@@ -104,9 +104,12 @@ export function generateWiresSVG(wires, hoveredNet = null) {
       return;
     }
 
-    const strokeW = hoveredNet === w.net ? 4.5 : 2.8;
+    const isActive = activeNets.includes(w.net);
+    const strokeW = isActive ? 4.5 : 2.8;
     const pts = w.path.map(pt => `${pt.col * SP + SP / 2},${pt.row * SP + SP / 2}`).join(' ');
-    out += `<polyline points="${pts}" fill="none" stroke="${netColor(w.net)}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round"/>`;
+    const color = netColor(w.net);
+
+    out += `<polyline points="${pts}" fill="none" class="${isActive ? 'wire-active' : ''}" stroke="${color}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" style="${isActive ? `--wire-color: ${color}` : ''}"/>`;
   });
   return out;
 }

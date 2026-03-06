@@ -78,6 +78,7 @@ function App() {
   const [status, setStatus] = useState({ title: '', progress: 0, best: '', isProcessing: false });
   const [toast, setToast] = useState({ msg: '', type: 'ok' });
   const [selectedId, setSelectedId] = useState(null);
+  const [selectedNet, setSelectedNet] = useState(null);
   const [hoveredNet, setHoveredNet] = useState(null);
   const [autoOptimize, setAutoOptimize] = useState(true);
   const [tool, setTool] = useState('sel');
@@ -397,6 +398,16 @@ Use this format:
 
   const selectedComp = useMemo(() => board.components.find(c => c.id === selectedId), [board.components, selectedId]);
 
+  const activeNets = useMemo(() => {
+    const list = new Set();
+    if (hoveredNet) list.add(hoveredNet);
+    if (selectedNet) list.add(selectedNet);
+    if (selectedComp) {
+      selectedComp.pins.forEach(p => { if (p.net) list.add(p.net); });
+    }
+    return Array.from(list);
+  }, [hoveredNet, selectedNet, selectedComp]);
+
   return (
     <div className="app-main">
       <Topbar
@@ -414,7 +425,10 @@ Use this format:
           onOpenPrompt={() => setIsPromptOpen(true)}
           jsonInput={jsonInput} setJsonInput={setJsonInput} onLoadCircuit={handleLoadCircuit}
           onLoadTemplate={handleLoadTemplate} components={board.components} selectedId={selectedId}
-          onSelectComponent={setSelectedId} onOpenLibrary={() => setIsLibraryOpen(true)}
+          onSelectComponent={(id) => {
+            setSelectedId(id);
+            if (id) setSelectedNet(null); // Clear net if comp selected
+          }} onOpenLibrary={() => setIsLibraryOpen(true)}
           onAddNewComponent={() => { setEditingComp(null); setIsEditorOpen(true); }}
           onEditComponent={(id) => { setEditingComp(board.components.find(x => x.id === id)); setIsEditorOpen(true); }}
           isProcessing={status.isProcessing}
@@ -423,7 +437,12 @@ Use this format:
           <main id="ca">
             <PcbCanvas
               components={board.components} wires={board.wires} cols={board.cols} rows={board.rows}
-              selectedId={selectedId} onSelect={setSelectedId} hoveredNet={hoveredNet}
+              selectedId={selectedId} onSelect={(id) => {
+                setSelectedId(id);
+                if (id) setSelectedNet(null); // Clear net if comp selected
+                else setSelectedNet(null);
+              }}
+              activeNets={activeNets}
               onMove={handleMoveComp} onRotate={handleRotateComp} onMoveEnd={saveHistory}
               tick={board.tick} isProcessing={status.isProcessing || !!status.results}
             />
@@ -443,7 +462,14 @@ Use this format:
             }}
           />
         </div>
-        <SidebarRight stats={stats} selectedComp={selectedComp} nets={netsMap} hoveredNet={hoveredNet} setHoveredNet={setHoveredNet} />
+        <SidebarRight stats={stats} selectedComp={selectedComp} nets={netsMap}
+          hoveredNet={hoveredNet} setHoveredNet={setHoveredNet}
+          selectedNet={selectedNet} setSelectedNet={(net) => {
+            setSelectedNet(net);
+            if (net) setSelectedId(null); // Clear comp if net selected
+          }}
+          activeNets={activeNets}
+        />
       </div>
       <Toast key={toast.msg} msg={toast.msg} type={toast.type} onClear={() => setToast({ msg: '', type: 'ok' })} />
       <LibraryOverlay isOpen={isLibraryOpen} onClose={() => setIsLibraryOpen(false)} onSelect={handleAddFromLibrary} />

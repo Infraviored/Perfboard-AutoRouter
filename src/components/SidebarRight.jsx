@@ -1,121 +1,129 @@
 import React from 'react';
 import { netColor } from '../engine/render-utils.js';
 import {
-    BarChart3,
-    Settings2,
-    Network,
-    Fingerprint,
-    Tag,
-    Hash,
-    MapPin,
-    Maximize
+  BarChart3,
+  Settings2,
+  Network,
+  Fingerprint,
+  Tag,
+  Hash,
+  MapPin,
+  Maximize
 } from 'lucide-react';
 
 export function SidebarRight({
-    stats,
-    selectedComp,
-    nets,
-    hoveredNet,
-    setHoveredNet
+  stats,
+  selectedComp,
+  nets,
+  hoveredNet,
+  setHoveredNet,
+  selectedNet,
+  setSelectedNet,
+  activeNets = []
 }) {
-    return (
-        <aside id="rsb">
-            <div className="ph"><BarChart3 size={14} style={{ marginRight: '8px' }} />Stats</div>
-            <div className="sgrid">
-                <div className="scard">
-                    <div className="sv">{stats.components}</div>
-                    <div className="sl">Components</div>
-                </div>
-                <div className="scard">
-                    <div className="sv" style={{ color: 'var(--blu-bright)' }}>{stats.nets}</div>
-                    <div className="sl">Nets</div>
-                </div>
-                <div className="scard">
-                    <div className="sv" style={{ color: 'var(--grn-bright)' }}>{stats.routed}</div>
-                    <div className="sl">Routed</div>
-                </div>
-                <div className="scard">
-                    <div className="sv" style={{ color: stats.failed > 0 ? 'var(--red)' : 'var(--txt1)' }}>{stats.failed}</div>
-                    <div className="sl">Failed</div>
-                </div>
-                <div className="scard w2">
-                    <div className="sv">{stats.wireLength || '—'}</div>
-                    <div className="sl">Wire length (holes)</div>
-                </div>
-                <div className="scard w2">
-                    <div className="sv">{stats.footprint || '—'}</div>
-                    <div className="sl">Footprint (W×H)</div>
-                </div>
-                <div className="scard w2">
-                    <div className="progress-container">
-                        <div className="progress-bar" style={{ width: `${stats.completion || 0}%`, background: stats.completion >= 100 ? 'var(--grn-bright)' : 'var(--blu-bright)' }}></div>
-                        <div className="progress-text">{stats.completion !== null ? `${stats.completion}%` : '—'}</div>
-                    </div>
-                    <div className="sl">Routing Completion</div>
-                </div>
+  return (
+    <aside id="rsb">
+      <div className="ph"><BarChart3 size={14} style={{ marginRight: '8px' }} />Stats</div>
+      <div className="sgrid">
+        <div className="scard">
+          <div className="sv">{stats.components}</div>
+          <div className="sl">Components</div>
+        </div>
+        <div className="scard">
+          <div className="sv" style={{ color: 'var(--blu-bright)' }}>{stats.nets}</div>
+          <div className="sl">Nets</div>
+        </div>
+        <div className="scard">
+          <div className="sv" style={{ color: 'var(--grn-bright)' }}>{stats.routed}</div>
+          <div className="sl">Routed</div>
+        </div>
+        <div className="scard">
+          <div className="sv" style={{ color: stats.failed > 0 ? 'var(--red)' : 'var(--txt1)' }}>{stats.failed}</div>
+          <div className="sl">Failed</div>
+        </div>
+        <div className="scard w2">
+          <div className="sv">{stats.wireLength || '—'}</div>
+          <div className="sl">Wire length (holes)</div>
+        </div>
+        <div className="scard w2">
+          <div className="sv">{stats.footprint || '—'}</div>
+          <div className="sl">Footprint (W×H)</div>
+        </div>
+        <div className="scard w2">
+          <div className="progress-container">
+            <div className="progress-bar" style={{ width: `${stats.completion || 0}%`, background: stats.completion >= 100 ? 'var(--grn-bright)' : 'var(--blu-bright)' }}></div>
+            <div className="progress-text">{stats.completion !== null ? `${stats.completion}%` : '—'}</div>
+          </div>
+          <div className="sl">Routing Completion</div>
+        </div>
+      </div>
+
+      <div className="ph"><Maximize size={14} style={{ marginRight: '8px' }} />Selected</div>
+      <div id="selInfo">
+        {!selectedComp ? (
+          <div className="empty-selection">
+            <Fingerprint size={24} style={{ opacity: 0.2, marginBottom: '8px' }} />
+            <div>No component selected</div>
+          </div>
+        ) : (
+          <div className="prop-list">
+            <div className="prop-item">
+              <Tag size={12} className="prop-icon" />
+              <div className="prop-label">ID</div>
+              <div className="prop-value">{selectedComp.id}</div>
+            </div>
+            <div className="prop-item">
+              <Settings2 size={12} className="prop-icon" />
+              <div className="prop-label">Name</div>
+              <div className="prop-value">{selectedComp.name}</div>
+            </div>
+            <div className="prop-item">
+              <Hash size={12} className="prop-icon" />
+              <div className="prop-label">Value</div>
+              <div className="prop-value">{selectedComp.value}</div>
+            </div>
+            <div className="prop-item">
+              <MapPin size={12} className="prop-icon" />
+              <div className="prop-label">Origin</div>
+              <div className="prop-value">({selectedComp.ox}, {selectedComp.oy})</div>
             </div>
 
-            <div className="ph"><Maximize size={14} style={{ marginRight: '8px' }} />Selected</div>
-            <div id="selInfo">
-                {!selectedComp ? (
-                    <div className="empty-selection">
-                        <Fingerprint size={24} style={{ opacity: 0.2, marginBottom: '8px' }} />
-                        <div>No component selected</div>
-                    </div>
-                ) : (
-                    <div className="prop-list">
-                        <div className="prop-item">
-                            <Tag size={12} className="prop-icon" />
-                            <div className="prop-label">ID</div>
-                            <div className="prop-value">{selectedComp.id}</div>
-                        </div>
-                        <div className="prop-item">
-                            <Settings2 size={12} className="prop-icon" />
-                            <div className="prop-label">Name</div>
-                            <div className="prop-value">{selectedComp.name}</div>
-                        </div>
-                        <div className="prop-item">
-                            <Hash size={12} className="prop-icon" />
-                            <div className="prop-label">Value</div>
-                            <div className="prop-value">{selectedComp.value}</div>
-                        </div>
-                        <div className="prop-item">
-                            <MapPin size={12} className="prop-icon" />
-                            <div className="prop-label">Origin</div>
-                            <div className="prop-value">({selectedComp.ox}, {selectedComp.oy})</div>
-                        </div>
-
-                        <div className="pin-list-header">Pins ({selectedComp.pins.length})</div>
-                        <div className="pin-list">
-                            {selectedComp.pins.map((p, i) => (
-                                <div className="pin-row" key={i}>
-                                    <span className="pin-label" style={{ borderLeft: `2px solid ${netColor(p.net)}` }}>{p.lbl}</span>
-                                    <span className="pin-net">{p.net || '—'}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
+            <div className="pin-list-header">Pins ({selectedComp.pins.length})</div>
+            <div className="pin-list">
+              {selectedComp.pins.map((p, i) => (
+                <div className="pin-row" key={i}>
+                  <span className="pin-label" style={{ borderLeft: `2px solid ${netColor(p.net)}` }}>{p.lbl}</span>
+                  <span className="pin-net">{p.net || '—'}</span>
+                </div>
+              ))}
             </div>
+          </div>
+        )}
+      </div>
 
-            <div className="ph" style={{ borderTop: '1px solid var(--border)' }}><Network size={14} style={{ marginRight: '8px' }} />Nets</div>
-            <div id="netPanel" className="scroll-container">
-                {Object.entries(nets).map(([name, pins]) => (
-                    <div
-                        key={name}
-                        className={`net-row ${hoveredNet === name ? 'hov' : ''}`}
-                        onMouseEnter={() => setHoveredNet(name)}
-                        onMouseLeave={() => setHoveredNet(null)}
-                    >
-                        <div className="net-dot" style={{ background: netColor(name) }}></div>
-                        <span className="net-name">{name}</span>
-                        <span className="net-count">{pins.length}P</span>
-                    </div>
-                ))}
+      <div className="ph" style={{ borderTop: '1px solid var(--border)' }}><Network size={14} style={{ marginRight: '8px' }} />Nets</div>
+      <div id="netPanel" className="scroll-container">
+        {Object.entries(nets).map(([name, pins]) => {
+          const isMarked = activeNets.includes(name);
+          return (
+            <div
+              key={name}
+              className={`net-row ${hoveredNet === name ? 'hov' : ''} ${isMarked ? 'sel' : ''}`}
+              style={{ '--net-color': netColor(name) }}
+              onMouseEnter={() => setHoveredNet(name)}
+              onMouseLeave={() => setHoveredNet(null)}
+              onClick={() => setSelectedNet(selectedNet === name ? null : name)}
+            >
+              <div className="net-dot" style={{ background: netColor(name) }}></div>
+              <span className="net-name">{name}</span>
+              <span className="net-count">{pins.length}P</span>
             </div>
+          );
+        })}
+      </div>
 
-            <style dangerouslySetInnerHTML={{
-                __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         #rsb {
           width: var(--rsb-width);
           background: var(--bg2);
@@ -236,26 +244,49 @@ export function SidebarRight({
         .pin-label { color: var(--txt1); padding-left: 6px; }
         .pin-net { color: var(--txt0); font-family: 'Consolas', monospace; }
 
+        #netPanel {
+          padding: 8px 12px 16px 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
         .net-row {
           display: flex;
           align-items: center;
-          padding: 8px 16px;
-          gap: 12px;
-          border-bottom: 1px solid var(--border);
-          transition: background 0.1s;
+          padding: 6px 10px;
+          gap: 10px;
+          border: 1px solid var(--border);
+          border-left: 3px solid var(--net-color);
+          background: var(--bg3);
+          border-radius: 6px;
+          transition: all 0.2s;
           cursor: pointer;
         }
-        .net-row:hover { background: rgba(255,255,255,0.02); }
-        .net-row.hov { background: rgba(31, 111, 235, 0.1); }
+        .net-row:hover { 
+          background: var(--bg4); 
+          border-color: var(--border2);
+          border-left-color: var(--net-color);
+        }
+        .net-row.sel {
+           background: var(--bg4);
+           border-color: var(--net-color);
+           box-shadow: 0 0 0 1px var(--net-color), 0 0 12px color-mix(in srgb, var(--net-color), transparent 60%);
+        }
         
         .net-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
+          display: none; 
         }
-        .net-name { flex: 1; font-size: 0.8em; color: var(--txt0); font-family: 'Consolas', monospace; }
-        .net-count { font-size: 0.7em; color: var(--txt2); font-weight: 700; }
+        .net-name { flex: 1; font-size: 0.8em; color: var(--txt0); font-family: 'Consolas', monospace; font-weight: 600; }
+        .net-count { 
+          font-size: 0.62em; 
+          font-weight: 800; 
+          color: var(--txt2); 
+          background: var(--bg2);
+          padding: 1px 5px;
+          border-radius: 4px;
+          border: 1px solid var(--border);
+        }
       `}} />
-        </aside>
-    );
+    </aside>
+  );
 }
