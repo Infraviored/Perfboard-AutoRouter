@@ -422,6 +422,92 @@ kbd {
 
 .component-selected .pcb-comp-rim {
   filter: drop-shadow(0 0 2px var(--comp-color));
+  animation: halo-flicker var(--anim-dur, 3s) infinite;
+  animation-delay: var(--anim-delay, 0s);
+}
+
+@keyframes halo-flicker {
+
+  0%,
+  100% {
+    opacity: 0.98;
+    filter: drop-shadow(0 0 1.6px var(--comp-color));
+  }
+
+  5% {
+    opacity: 0.96;
+    filter: drop-shadow(0 0 1.4px var(--comp-color));
+  }
+
+  10% {
+    opacity: 0.99;
+    filter: drop-shadow(0 0 1.8px var(--comp-color));
+  }
+
+  15% {
+    opacity: 0.97;
+    filter: drop-shadow(0 0 1.5px var(--comp-color));
+  }
+
+  17% {
+    opacity: 1;
+    filter: drop-shadow(0 0 2.2px var(--comp-color)) brightness(1.04);
+  }
+
+  19% {
+    opacity: 0.95;
+    filter: drop-shadow(0 0 1.3px var(--comp-color));
+  }
+
+  25% {
+    opacity: 0.98;
+    filter: drop-shadow(0 0 1.6px var(--comp-color));
+  }
+
+  40% {
+    opacity: 0.97;
+    filter: drop-shadow(0 0 1.5px var(--comp-color));
+  }
+
+  42% {
+    opacity: 1;
+    filter: drop-shadow(0 0 2.0px var(--comp-color)) brightness(1.03);
+  }
+
+  44% {
+    opacity: 0.96;
+    filter: drop-shadow(0 0 1.4px var(--comp-color));
+  }
+
+  60% {
+    opacity: 0.98;
+    filter: drop-shadow(0 0 1.7px var(--comp-color));
+  }
+
+  61% {
+    opacity: 1;
+    filter: drop-shadow(0 0 2.4px var(--comp-color)) brightness(1.05);
+  }
+
+  63% {
+    opacity: 0.95;
+    filter: drop-shadow(0 0 1.2px var(--comp-color));
+  }
+
+  80% {
+    opacity: 0.98;
+    filter: drop-shadow(0 0 1.6px var(--comp-color));
+  }
+
+  90% {
+    opacity: 0.99;
+    filter: drop-shadow(0 0 1.8px var(--comp-color));
+  }
+
+  92% {
+    opacity: 0.96;
+    filter: drop-shadow(0 0 1.4px var(--comp-color));
+  }
 }
 
 .wire-active {

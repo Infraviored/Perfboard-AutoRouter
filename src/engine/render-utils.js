@@ -150,7 +150,12 @@ export function renderCompSVG(c, isSelected = false) {
   const bw = c.w * SP - SP * .16, bh = c.h * SP - SP * .16;
   const mainColor = boostColor(compColor(c));
 
-  let out = `<g class="pcb-comp ${isSelected ? 'component-selected' : ''}" data-id="${c.id}" style="--comp-color: ${mainColor}">`;
+  // Use deterministic hash for "random" animation timing
+  const hash = (hashString(c.id) % 1000) / 1000;
+  const animDelay = -(hash * 5).toFixed(2) + 's';
+  const animDur = (2.5 + hash * 2).toFixed(2) + 's';
+
+  let out = `<g class="pcb-comp ${isSelected ? 'component-selected' : ''}" data-id="${c.id}" style="--comp-color: ${mainColor}; --anim-delay: ${animDelay}; --anim-dur: ${animDur}">`;
 
   // 1. Draw Component Base (balanced shine-through, solid rim)
   const sw = isSelected ? 3.1 : 1.9; // Balanced selecion thickness
