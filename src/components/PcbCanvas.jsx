@@ -9,6 +9,13 @@ import {
     hitComp
 } from "../engine/render-utils.js";
 import { CAMERA_CONFIG } from "../engine/config";
+import {
+    Plus,
+    Minus,
+    Maximize,
+    Crosshair,
+    Grid3X3
+} from 'lucide-react';
 
 export function PcbCanvas({
     components,
@@ -287,44 +294,47 @@ export function PcbCanvas({
                 </g>
             </svg>
 
-            <div className="zbx">
-                <button className="zbtn" onClick={() => setZoom(z => z * 1.15)} title="Zoom In">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
+            <div className="canvas-controls">
+                <button className="cbtn" onClick={() => setZoom(z => z * 1.15)} title="Zoom In">
+                    <Plus size={18} />
                 </button>
-                <button className="zbtn" onClick={() => setZoom(z => z * 0.87)} title="Zoom Out">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
+                <button className="cbtn" onClick={() => setZoom(z => z * 0.87)} title="Zoom Out">
+                    <Minus size={18} />
                 </button>
-                <button className="zbtn" onClick={() => setForceCenterToggle(true)} title="Center Board (Reset View)">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M8 3H5a2 2 0 0 0-2 2v3" />
-                        <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
-                        <path d="M3 16v3a2 2 0 0 0 2 2h3" />
-                        <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
-                    </svg>
+                <button className="cbtn" onClick={() => setForceCenterToggle(true)} title="Center Board">
+                    <Maximize size={18} />
                 </button>
-                <button className="zbtn" onClick={() => setIsAutoTracking(v => !v)} title={isAutoTracking ? "Disable Auto-Tracking" : "Enable Auto-Tracking"} style={{ color: isAutoTracking ? '#00ff00' : 'inherit' }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10" />
-                        <circle cx="12" cy="12" r="3" />
-                        <line x1="12" y1="2" x2="12" y2="5" />
-                        <line x1="12" y1="19" x2="12" y2="22" />
-                        <line x1="2" y1="12" x2="5" y2="12" />
-                        <line x1="19" y1="12" x2="22" y2="12" />
-                    </svg>
+                <button className="cbtn" onClick={() => setIsAutoTracking(v => !v)} title={isAutoTracking ? "Disable Auto-Tracking" : "Enable Auto-Tracking"} style={{ color: isAutoTracking ? 'var(--grn-bright)' : 'inherit' }}>
+                    <Crosshair size={18} />
                 </button>
             </div>
 
             <style dangerouslySetInnerHTML={{
                 __html: `
                 .canvas-container { user-select: none; -webkit-user-select: none; }
-                .zbx { position: absolute; right: 10px; bottom: 34px; display: flex; flex-direction: column; gap: 3px; z-index: 10; }
-                .zbtn { width: 32px; height: 32px; background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; color: var(--txt0); cursor: pointer; font-size: 1.1em; display: flex; align-items: center; justify-content: center; transition: .14s; }
-                .zbtn:hover { background: var(--bg4); }
+                .canvas-controls { position: absolute; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
+                .cbtn { 
+                  width: 38px; 
+                  height: 38px; 
+                  background: var(--glass-bg); 
+                  backdrop-filter: blur(8px);
+                  border: 1px solid var(--border); 
+                  border-radius: 10px; 
+                  color: var(--txt1); 
+                  cursor: pointer; 
+                  display: flex; 
+                  align-items: center; 
+                  justify-content: center; 
+                  transition: all 0.2s; 
+                  box-shadow: var(--shadow-premium);
+                }
+                .cbtn:hover { 
+                  background: var(--bg4); 
+                  color: var(--txt0);
+                  transform: scale(1.05);
+                  border-color: var(--border2);
+                }
+                .cbtn:active { transform: scale(0.95); }
                 .pcb-comp { transition: filter 0.2s ease; }
                 .pcb-comp:hover { filter: brightness(1.2); }
             `}} />

@@ -16,16 +16,17 @@
   --blu-bright: #58a6ff;
   --org: #d29922;
   --red: #f85149;
-  
-  --glass-bg: rgba(13, 17, 23, 0.7);
+
+  --glass-bg: rgba(13, 17, 23, 0.85);
   --glass-border: rgba(255, 255, 255, 0.1);
   --shadow-premium: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 15px rgba(88, 166, 255, 0.2);
 
   /* Layout */
   --topbar-height: 52px;
   --statusbar-height: 26px;
-  --lsb-width: 260px;
-  --rsb-width: 220px;
+  --lsb-width: 280px;
+  --rsb-width: 240px;
 }
 
 * {
@@ -46,7 +47,10 @@ body,
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3, .logo {
+h1,
+h2,
+h3,
+.logo {
   font-family: 'Outfit', sans-serif;
 }
 
@@ -54,7 +58,7 @@ h1, h2, h3, .logo {
 .tbtn {
   background: var(--bg4);
   border: 1px solid var(--border);
-  color: var(--txt0);
+  color: var(--txt1);
   padding: 6px 12px;
   border-radius: 8px;
   cursor: pointer;
@@ -62,17 +66,27 @@ h1, h2, h3, .logo {
   font-weight: 500;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
   backdrop-filter: blur(4px);
 }
 
+.tbtn svg {
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
 .tbtn:hover {
   background: var(--bg3);
-  border-color: var(--txt1);
+  border-color: var(--border2);
+  color: var(--txt0);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.tbtn:hover svg {
+  opacity: 1;
 }
 
 .tbtn:active {
@@ -86,27 +100,27 @@ h1, h2, h3, .logo {
 }
 
 .tbtn.grn {
-  background: var(--grn);
-  border-color: rgba(255,255,255,0.1);
+  background: linear-gradient(180deg, #2ea043 0%, #238636 100%);
+  border-color: rgba(255, 255, 255, 0.1);
   color: #fff;
   font-weight: 600;
   box-shadow: 0 2px 8px rgba(35, 134, 54, 0.3);
 }
 
 .tbtn.grn:hover {
-  background: #2ea043;
+  background: linear-gradient(180deg, #34bb4d 0%, #2ea043 100%);
   box-shadow: 0 4px 16px rgba(35, 134, 54, 0.5);
 }
 
 .tbtn.blu {
-  background: var(--blu);
-  border-color: rgba(255,255,255,0.1);
+  background: linear-gradient(180deg, #388bfd 0%, #1f6feb 100%);
+  border-color: rgba(255, 255, 255, 0.1);
   color: #fff;
   box-shadow: 0 2px 8px rgba(31, 111, 235, 0.3);
 }
 
 .tbtn.blu:hover {
-  background: #388bfd;
+  background: linear-gradient(180deg, #4da0ff 0%, #388bfd 100%);
   box-shadow: 0 4px 16px rgba(31, 111, 235, 0.5);
 }
 
@@ -117,20 +131,22 @@ h1, h2, h3, .logo {
 }
 
 .tbtn.red {
-  background: rgba(248, 81, 73, 0.1);
-  border-color: var(--red);
+  background: rgba(248, 81, 73, 0.05);
+  border-color: rgba(248, 81, 73, 0.2);
   color: var(--red);
 }
+
 .tbtn.red:hover {
   background: var(--red);
   color: #fff;
 }
 
 .tbtn.org {
-  background: rgba(210, 153, 34, 0.1);
-  border-color: var(--org);
+  background: rgba(210, 153, 34, 0.05);
+  border-color: rgba(210, 153, 34, 0.2);
   color: var(--org);
 }
+
 .tbtn.org:hover {
   background: var(--org);
   color: #000;
@@ -155,13 +171,19 @@ h1, h2, h3, .logo {
   background: var(--grn);
   color: #fff;
 }
-.btn.grn:hover { background: #2ea043; }
+
+.btn.grn:hover {
+  background: #2ea043;
+}
 
 .btn.blu {
   background: var(--blu);
   color: #fff;
 }
-.btn.blu:hover { background: #388bfd; }
+
+.btn.blu:hover {
+  background: #388bfd;
+}
 
 /* Layout Utilities */
 .sep {

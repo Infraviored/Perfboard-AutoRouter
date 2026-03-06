@@ -1,4 +1,18 @@
 import React from 'react';
+import {
+  Zap,
+  Wrench,
+  Compass,
+  Undo2,
+  Redo2,
+  Download,
+  Upload,
+  RotateCcw,
+  FileJson,
+  ExternalLink,
+  Eraser,
+  Spline
+} from 'lucide-react';
 
 export function Topbar({
   onOptimizeFootprint,
@@ -21,47 +35,85 @@ export function Topbar({
   return (
     <header id="topbar">
       <div className="logo">Perfboard<em>Designer</em></div>
-      <div className="sep"></div>
-
-
-      <button className="tbtn grn" onClick={onPlaceAndRoute}>
-        ⚡ Place & Route <kbd>Ctrl+↵</kbd>
-      </button>
-      <button className="tbtn blu" onClick={onOptimizeFootprint} disabled={!hasWires}>🔧 Optimize Footprint</button>
-      <button className="tbtn blu" onClick={onPlateauExplore} disabled={!hasWires}>🧭 Plateau Explore</button>
 
       <div className="sep"></div>
 
-      <button className="tbtn" onClick={onUndo} title="Undo">↶</button>
-      <button className="tbtn" onClick={onRedo} title="Redo">↷</button>
-
-      <div style={{ display: 'flex', gap: '2px' }}>
-        <button className="tbtn" onClick={onImportState} title="Import State">📥 Import</button>
-        <button className="tbtn" onClick={onExportState} title="Export State">📤 Export</button>
+      <div className="btn-group">
+        <button className="tbtn grn" onClick={onPlaceAndRoute}>
+          <Zap size={16} />
+          Place & Route
+          <kbd>Ctrl+↵</kbd>
+        </button>
+        <button className="tbtn blu" onClick={onOptimizeFootprint} disabled={!hasWires}>
+          <Wrench size={16} />
+          Optimize
+        </button>
+        <button className="tbtn blu" onClick={onPlateauExplore} disabled={!hasWires}>
+          <Compass size={16} />
+          Explore
+        </button>
       </div>
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--txt1)', fontSize: '.75em', cursor: 'pointer', marginLeft: '8px' }}>
+      <div className="sep"></div>
+
+      <div className="btn-group">
+        <button className="tbtn" onClick={onUndo} title="Undo">
+          <Undo2 size={16} />
+        </button>
+        <button className="tbtn" onClick={onRedo} title="Redo">
+          <Redo2 size={16} />
+        </button>
+      </div>
+
+      <div className="sep"></div>
+
+      <div className="btn-group">
+        <button className="tbtn" onClick={onImportState} title="Import State">
+          <Download size={16} />
+          Import
+        </button>
+        <button className="tbtn" onClick={onExportState} title="Export State">
+          <Upload size={16} />
+          Export
+        </button>
+      </div>
+
+      <label className="topbar-toggle">
         <input
           type="checkbox"
           checked={autoOptimize}
           onChange={(e) => setAutoOptimize(e.target.checked)}
-          style={{ margin: 0 }}
         />
-        Auto-optimize
+        <span>Auto-optimize</span>
       </label>
 
       <div className="sep"></div>
 
-      <button className="tbtn" onClick={onRouteOnly}>〰 Route Only <kbd>Shift+R</kbd></button>
-      <button className="tbtn" onClick={onClearWires}>⊘ Clear Wires</button>
+      <div className="btn-group">
+        <button className="tbtn" onClick={onRouteOnly}>
+          <Spline size={16} />
+          Route Only
+          <kbd>Shift+R</kbd>
+        </button>
+        <button className="tbtn" onClick={onClearWires}>
+          <Eraser size={16} />
+          Clear
+        </button>
+      </div>
 
       <div className="sep"></div>
 
-      <button className="tbtn org" onClick={onExportSVG}>⬇ Export SVG</button>
+      <button className="tbtn org" onClick={onExportSVG}>
+        <ExternalLink size={16} />
+        Export SVG
+      </button>
 
       <div className="spc"></div>
 
-      <button className="tbtn red" onClick={onReset}>⟳ Reset</button>
+      <button className="tbtn red" onClick={onReset}>
+        <RotateCcw size={16} />
+        Reset
+      </button>
 
       <style dangerouslySetInnerHTML={{
         __html: `
@@ -72,10 +124,9 @@ export function Topbar({
           border-bottom: 1px solid var(--border);
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 4px;
           padding: 0 16px;
           flex-shrink: 0;
-          grid-area: topbar;
           z-index: 100;
         }
         .logo {
@@ -91,6 +142,34 @@ export function Topbar({
           color: var(--blu-bright);
           font-style: normal;
           font-weight: 600;
+        }
+        .btn-group {
+          display: flex;
+          gap: 4px;
+        }
+        .topbar-toggle {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: var(--txt1);
+          font-size: .75em;
+          font-weight: 600;
+          cursor: pointer;
+          margin-left: 12px;
+          padding: 6px 10px;
+          border-radius: 8px;
+          transition: background 0.2s;
+        }
+        .topbar-toggle:hover {
+          background: rgba(255,255,255,0.05);
+          color: var(--txt0);
+        }
+        .topbar-toggle input {
+          width: 14px;
+          height: 14px;
+          accent-color: var(--blu-bright);
+          margin: 0;
+          cursor: pointer;
         }
       `}} />
     </header>
