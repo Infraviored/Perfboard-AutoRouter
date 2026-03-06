@@ -141,93 +141,120 @@ export function PcbCanvas({
         return { minCol, maxCol, minRow, maxRow };
     }, [components, wires, tick]);
 
+    // --- CONTINUOUS PHYSICS ENGINE (rAF) ---
     const zoomVelRef = useRef(0);
-    const smoothCenterRef = useRef(null);
+    const panVelRef = useRef({ x: 0, y: 0 });
+    const smoothCenterRef = useRef({ x: 0, y: 0 });
+    const targetBoundsRef = useRef(null);
+    const lastTimeRef = useRef(0);
+    const rAFRef = useRef(null);
 
-    // Continuous smooth camera tracking and auto-zoom during processing
+    // Keep simulation state in refs so the rAF loop can access 'live' values 
+    // without closure staleness, while still syncing to React for rendering.
+    const simZoom = useRef(zoom);
+    const simPan = useRef(pan);
+
+    // 1. Sync React state changes back to Simulation (e.g. from mouse wheel)
+    useEffect(() => { simZoom.current = zoom; }, [zoom]);
+    useEffect(() => { simPan.current = pan; }, [pan.x, pan.y]);
+
+    // 2. Sync incoming board updates to the "Latest Target" Reference
     useEffect(() => {
-        if (!bounds) return;
+        targetBoundsRef.current = bounds;
+    }, [bounds]);
 
-        const rect = svgRef.current?.getBoundingClientRect();
-        if (!rect || rect.width === 0 || rect.height === 0) return;
+    // 3. The Continuous Physics Thread
+    const updatePhysics = useCallback((time) => {
+        if (!svgRef.current) return;
 
-        const cx = (bounds.minCol + bounds.maxCol + 1) / 2 * SP;
-        const cy = (bounds.minRow + bounds.maxRow + 1) / 2 * SP;
+        // Calculate Delta Time (dt) in seconds, capped to prevent massive jumps on tab-back
+        if (!lastTimeRef.current) lastTimeRef.current = time;
+        let dt = Math.min((time - lastTimeRef.current) / 1000, 0.1);
+        lastTimeRef.current = time;
 
-        // Initialize smooth center if needed
-        if (!smoothCenterRef.current) {
-            smoothCenterRef.current = { x: cx, y: cy };
-        }
+        const rect = svgRef.current.getBoundingClientRect();
+        const b = targetBoundsRef.current;
 
-        let curZoom = zoom;
-        let zoomChanged = false;
+        if (isProcessing && b && rect.width > 0) {
+            const cx = (b.minCol + b.maxCol + 1) / 2 * SP;
+            const cy = (b.minRow + b.maxRow + 1) / 2 * SP;
 
-        if (isProcessing) {
-            // 1. Calculate the 'ideal' zoom that would make the BB exactly 85% of viewport
+            // --- ZOOM PHYSICS ---
             const targetCoverage = 0.85;
-            const bbW = (bounds.maxCol - bounds.minCol + 1) * SP;
-            const bbH = (bounds.maxRow - bounds.minRow + 1) * SP;
+            const bbW = (b.maxCol - b.minCol + 1) * SP;
+            const bbH = (b.maxRow - b.minRow + 1) * SP;
             const fitZoom = Math.min(
                 (rect.width * targetCoverage) / bbW,
                 (rect.height * targetCoverage) / bbH,
                 5.0
             );
 
-            // 2. Identify current coverage percentage
-            const currentCoverageX = (bbW * curZoom) / rect.width;
-            const currentCoverageY = (bbH * curZoom) / rect.height;
-            const maxCoverage = Math.max(currentCoverageX, currentCoverageY);
+            const curZ = simZoom.current;
+            const currentCoverage = Math.max((bbW * curZ) / rect.width, (bbH * curZ) / rect.height);
 
-            // 3. Dual-Box Hysteresis Logic
-            const outerLimit = 0.90; // If coverage > 90%, zoom out
-            const innerLimit = 0.80; // If coverage < 80%, zoom in
-
+            // Dual-Box Hysteresis Force
             let zoomAcc = 0;
-            if (maxCoverage > outerLimit) {
-                // Accelerate OUT (fitZoom will be smaller than curZoom)
-                zoomAcc = (fitZoom - curZoom) * 0.005;
-            } else if (maxCoverage < innerLimit) {
-                // Accelerate IN (fitZoom will be larger than curZoom)
-                zoomAcc = (fitZoom - curZoom) * 0.005;
+            if (currentCoverage > 0.90 || currentCoverage < 0.80) {
+                // Apply force towards the ideal 85% fit
+                zoomAcc = (fitZoom - curZ) * 2.5; // Force constant
             }
 
-            // 4. Physics: Integrate Acceleration -> Velocity -> Position
-            // Apply damping (friction) for critical damping feel
-            zoomVelRef.current = zoomVelRef.current * 0.85 + zoomAcc;
+            // Integrate Zoom: Acc -> Vel -> Pos
+            const damping = Math.pow(0.15, dt); // Critically damped feel
+            zoomVelRef.current = (zoomVelRef.current + zoomAcc * dt) * damping;
+            simZoom.current += zoomVelRef.current * dt;
 
-            // Apply velocity to zoom
-            if (Math.abs(zoomVelRef.current) > 0.00001) {
-                curZoom += zoomVelRef.current;
-                zoomChanged = true;
-            }
+            // --- PAN PHYSICS (Centering) ---
+            // Smoothly track the BB center with a heavy "lazy" spring
+            const followTightness = 4.0;
+            smoothCenterRef.current.x += (cx - smoothCenterRef.current.x) * followTightness * dt;
+            smoothCenterRef.current.y += (cy - smoothCenterRef.current.y) * followTightness * dt;
 
-            // 5. Smooth Centering: EMA to follow the BB center without high-frequency jitter
-            // 0.05 factor gives a nice "lazy" follow feel
-            smoothCenterRef.current.x += (cx - smoothCenterRef.current.x) * 0.05;
-            smoothCenterRef.current.y += (cy - smoothCenterRef.current.y) * 0.05;
+            const targetX = rect.width / 2 - smoothCenterRef.current.x * simZoom.current;
+            const targetY = rect.height / 2 - smoothCenterRef.current.y * simZoom.current;
+
+            // Simple linear follow for pan (already smoothed by center EMA)
+            simPan.current = {
+                x: simPan.current.x + (targetX - simPan.current.x) * 6.0 * dt,
+                y: simPan.current.y + (targetY - simPan.current.y) * 6.0 * dt
+            };
+
+            // Sync to React State for Rendering
+            setZoom(simZoom.current);
+            setPan(simPan.current);
+        }
+
+        rAFRef.current = requestAnimationFrame(updatePhysics);
+    }, [isProcessing]);
+
+    useEffect(() => {
+        if (isProcessing) {
+            lastTimeRef.current = performance.now();
+            rAFRef.current = requestAnimationFrame(updatePhysics);
         } else {
-            // Reset physics when not processing
+            if (rAFRef.current) cancelAnimationFrame(rAFRef.current);
             zoomVelRef.current = 0;
+            lastTimeRef.current = 0;
+        }
+        return () => { if (rAFRef.current) cancelAnimationFrame(rAFRef.current); };
+    }, [isProcessing, updatePhysics]);
+
+    useEffect(() => {
+        if (forceCenterToggle && bounds && svgRef.current) {
+            const rect = svgRef.current.getBoundingClientRect();
+            const cx = (bounds.minCol + bounds.maxCol + 1) / 2 * SP;
+            const cy = (bounds.minRow + bounds.maxRow + 1) / 2 * SP;
             smoothCenterRef.current = { x: cx, y: cy };
+
+            const bbW = (bounds.maxCol - bounds.minCol + 1) * SP;
+            const bbH = (bounds.maxRow - bounds.minRow + 1) * SP;
+            const fitZoom = Math.min((rect.width * 0.85) / bbW, (rect.height * 0.85) / bbH, 2.0);
+
+            setZoom(fitZoom);
+            setPan({ x: rect.width / 2 - cx * fitZoom, y: rect.height / 2 - cy * fitZoom });
+            setForceCenterToggle(false);
         }
-
-        const useCx = smoothCenterRef.current.x;
-        const useCy = smoothCenterRef.current.y;
-
-        const targetX = rect.width / 2 - useCx * curZoom;
-        const targetY = rect.height / 2 - useCy * curZoom;
-
-        // If 'pan' hasn't been initialized (0,0) or manual button triggered, instantly snap
-        if ((pan.x === 0 && pan.y === 0) || forceCenterToggle) {
-            setPan({ x: targetX, y: targetY });
-            if (zoomChanged) setZoom(curZoom);
-            if (forceCenterToggle) setForceCenterToggle(false);
-        } else if (isProcessing) {
-            // Always update pan/zoom during processing to follow the smooth center/physics
-            setPan({ x: targetX, y: targetY });
-            if (zoomChanged) setZoom(curZoom);
-        }
-    }, [isProcessing, tick, forceCenterToggle, bounds]);
+    }, [forceCenterToggle, bounds]);
 
     // Labels for the board
     const labelsSvg = useMemo(() => {
