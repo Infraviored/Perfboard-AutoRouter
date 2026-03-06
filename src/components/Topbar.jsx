@@ -8,7 +8,6 @@ import {
   Download,
   Upload,
   RotateCcw,
-  FileJson,
   ExternalLink,
   Eraser,
   Spline
@@ -30,7 +29,8 @@ export function Topbar({
   setAutoOptimize,
   tool,
   setTool,
-  hasWires
+  hasWires,
+  isProcessing
 }) {
   return (
     <header id="topbar">
@@ -38,20 +38,39 @@ export function Topbar({
 
       <div className="sep"></div>
 
-      <div className="btn-group">
-        <button className="tbtn grn" onClick={onPlaceAndRoute}>
-          <Zap size={16} />
-          Place & Route
-          <kbd>Ctrl+↵</kbd>
-        </button>
-        <button className="tbtn blu" onClick={onOptimizeFootprint} disabled={!hasWires}>
-          <Wrench size={16} />
-          Optimize
-        </button>
-        <button className="tbtn blu" onClick={onPlateauExplore} disabled={!hasWires}>
-          <Compass size={16} />
-          Explore
-        </button>
+      <div className="workflow-track">
+        <div className="flow-item">
+          <button
+            className={`flow-btn ${isProcessing ? 'active' : ''}`}
+            onClick={onPlaceAndRoute}
+            style={{ '--flow-color': 'var(--grn-bright)' }}
+          >
+            <Zap size={16} />
+            Place & Route
+          </button>
+        </div>
+        <div className="flow-item">
+          <button
+            className="flow-btn"
+            onClick={onOptimizeFootprint}
+            disabled={!hasWires || isProcessing}
+            style={{ '--flow-color': 'var(--blu-bright)' }}
+          >
+            <Wrench size={16} />
+            Optimize
+          </button>
+        </div>
+        <div className="flow-item">
+          <button
+            className="flow-btn"
+            onClick={onPlateauExplore}
+            disabled={!hasWires || isProcessing}
+            style={{ '--flow-color': '#a371f7' }}
+          >
+            <Compass size={16} />
+            Explore
+          </button>
+        </div>
       </div>
 
       <div className="sep"></div>
@@ -90,12 +109,11 @@ export function Topbar({
       <div className="sep"></div>
 
       <div className="btn-group">
-        <button className="tbtn" onClick={onRouteOnly}>
+        <button className="tbtn" onClick={onRouteOnly} disabled={isProcessing}>
           <Spline size={16} />
           Route Only
-          <kbd>Shift+R</kbd>
         </button>
-        <button className="tbtn" onClick={onClearWires}>
+        <button className="tbtn" onClick={onClearWires} disabled={isProcessing}>
           <Eraser size={16} />
           Clear
         </button>
@@ -103,9 +121,9 @@ export function Topbar({
 
       <div className="sep"></div>
 
-      <button className="tbtn org" onClick={onExportSVG}>
-        <ExternalLink size={16} />
-        Export SVG
+      <button className="tbtn" onClick={onExportSVG} style={{ '--org': '#d29922' }}>
+        <ExternalLink size={16} title="Export SVG" />
+        Export
       </button>
 
       <div className="spc"></div>
@@ -153,7 +171,7 @@ export function Topbar({
           gap: 8px;
           color: var(--txt1);
           font-size: .75em;
-          font-weight: 600;
+          font-weight: 700;
           cursor: pointer;
           margin-left: 12px;
           padding: 6px 10px;

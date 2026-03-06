@@ -407,6 +407,7 @@ Use this format:
         onExportState={handleExportState} onImportState={handleImportState}
         onExportSVG={() => { /* SVG Export Logic */ }}
         hasWires={board.wires.length > 0}
+        isProcessing={status.isProcessing}
       />
       <div id="layout">
         <SidebarLeft
@@ -416,6 +417,7 @@ Use this format:
           onSelectComponent={setSelectedId} onOpenLibrary={() => setIsLibraryOpen(true)}
           onAddNewComponent={() => { setEditingComp(null); setIsEditorOpen(true); }}
           onEditComponent={(id) => { setEditingComp(board.components.find(x => x.id === id)); setIsEditorOpen(true); }}
+          isProcessing={status.isProcessing}
         />
         <div id="ca-col">
           <main id="ca">

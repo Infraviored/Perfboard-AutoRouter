@@ -26,7 +26,8 @@ export function SidebarLeft({
   onOpenLibrary,
   onAddNewComponent,
   onEditComponent,
-  onOpenPrompt
+  onOpenPrompt,
+  isProcessing
 }) {
   const [localCols, setLocalCols] = useState(cols);
   const [localRows, setLocalRows] = useState(rows);
@@ -53,8 +54,8 @@ export function SidebarLeft({
             />
           </div>
           <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-            <button className="btn blu" onClick={onLoadCircuit} style={{ flex: 1 }}>
-              <Play size={14} /> Load Circuit
+            <button className={`btn ${isProcessing ? 'is-loading' : ''}`} onClick={onLoadCircuit} style={{ flex: 1 }} disabled={isProcessing}>
+              <Play size={14} /> {isProcessing ? 'Processing Circuit...' : 'Load Circuit'}
             </button>
             <button
               className="btn"
