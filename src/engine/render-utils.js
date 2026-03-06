@@ -147,18 +147,18 @@ export function renderCompSVG(c, isSelected = false) {
   const bw = c.w * SP - SP * .16, bh = c.h * SP - SP * .16;
   const mainColor = boostColor(compColor(c));
 
-  let out = `<g class="pcb-comp ${isSelected ? 'component-selected' : ''}" data-id="${c.id}">`;
+  let out = `<g class="pcb-comp ${isSelected ? 'component-selected' : ''}" data-id="${c.id}" style="--comp-color: ${mainColor}">`;
 
   // 1. Draw Component Base (balanced shine-through, solid rim)
-  const sw = isSelected ? 3.2 : 2.2; // Subtler rim when selected
+  const sw = isSelected ? 2.7 : 1.9; // Thinner, more professional rims
   const rimOp = isSelected ? 1.0 : 0.8;
-  const tintOp = isSelected ? 0.15 : 0.08;
+  const tintOp = isSelected ? 0.2 : 0.08;
 
   const half = sw / 2;
   // Body: Inset by half the stroke width so it doesn't overlap the inner stroke half
   out += `<rect x="${bx + half}" y="${by + half}" width="${bw - sw}" height="${bh - sw}" rx="3" fill="#080808" fill-opacity="0.8"/>`;
   // Rim: Drawn with fill="none" to ensure uniform wire visibility through the stroke
-  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="none" stroke="${mainColor}" stroke-width="${sw}" stroke-opacity="${rimOp}"/>`;
+  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="none" class="pcb-comp-rim" stroke="${mainColor}" stroke-width="${sw}" stroke-opacity="${rimOp}"/>`;
   // subtle tint overlay (entire area)
   out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="${mainColor}" opacity="${tintOp}" style="pointer-events:none"/>`;
 
