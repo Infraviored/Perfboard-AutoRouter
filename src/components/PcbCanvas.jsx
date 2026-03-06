@@ -8,6 +8,8 @@ import {
     generateBackgroundSVG,
     generateBoundingBoxSVG
 } from '../engine/render-utils.js';
+import { CAMERA_CONFIG } from "../engine/config";
+
 
 export function PcbCanvas({
     components,
@@ -176,52 +178,74 @@ export function PcbCanvas({
         const b = targetBoundsRef.current;
 
         if (isProcessing && b && rect.width > 0) {
-            const cx = (b.minCol + b.maxCol + 1) / 2 * SP;
-            const cy = (b.minRow + b.maxRow + 1) / 2 * SP;
+            const targetCX = (b.minCol + b.maxCol + 1) / 2 * SP;
+            const targetCY = (b.minRow + b.maxRow + 1) / 2 * SP;
 
-            // --- ZOOM PHYSICS ---
-            const targetCoverage = 0.85;
+            // --- 1. ZOOM PHYSICS (Relaxed Hysteresis) ---
             const bbW = (b.maxCol - b.minCol + 1) * SP;
             const bbH = (b.maxRow - b.minRow + 1) * SP;
+
             const fitZoom = Math.min(
-                (rect.width * targetCoverage) / bbW,
-                (rect.height * targetCoverage) / bbH,
-                5.0
+                (rect.width * CAMERA_CONFIG.TARGET_COVERAGE) / bbW,
+                (rect.height * CAMERA_CONFIG.TARGET_COVERAGE) / bbH,
+                CAMERA_CONFIG.MAX_ZOOM_FIT
             );
 
             const curZ = simZoom.current;
             const currentCoverage = Math.max((bbW * curZ) / rect.width, (bbH * curZ) / rect.height);
 
-            // Dual-Box Hysteresis Force
+            // Relaxed Zoom Hysteresis
             let zoomAcc = 0;
-            if (currentCoverage > 0.90 || currentCoverage < 0.80) {
-                // Apply force towards the ideal 85% fit
-                zoomAcc = (fitZoom - curZ) * 2.5; // Force constant
+            if (currentCoverage > CAMERA_CONFIG.ZOOM_OUT_THRESHOLD || currentCoverage < CAMERA_CONFIG.ZOOM_IN_THRESHOLD) {
+                zoomAcc = (fitZoom - curZ) * CAMERA_CONFIG.ZOOM_STRENGTH;
             }
 
-            // Integrate Zoom: Acc -> Vel -> Pos
-            const damping = Math.pow(0.15, dt); // Critically damped feel
-            zoomVelRef.current = (zoomVelRef.current + zoomAcc * dt) * damping;
+            const zoomDamping = Math.pow(CAMERA_CONFIG.ZOOM_DAMPING, dt);
+            zoomVelRef.current = (zoomVelRef.current + zoomAcc * dt) * zoomDamping;
             simZoom.current += zoomVelRef.current * dt;
 
-            // --- PAN PHYSICS (Centering) ---
-            // Smoothly track the BB center with a heavy "lazy" spring
-            const followTightness = 4.0;
-            smoothCenterRef.current.x += (cx - smoothCenterRef.current.x) * followTightness * dt;
-            smoothCenterRef.current.y += (cy - smoothCenterRef.current.y) * followTightness * dt;
+            // --- 2. PAN PHYSICS (Translation Hysteresis) ---
+            // Current screen coordinates of the BB center
+            const screenCX = rect.width / 2 - simPan.current.x;
+            const screenCY = rect.height / 2 - simPan.current.y;
+            // Target screen coordinates (normalized by zoom)
+            const worldCX = smoothCenterRef.current.x;
+            const worldCY = smoothCenterRef.current.y;
 
-            const targetX = rect.width / 2 - smoothCenterRef.current.x * simZoom.current;
-            const targetY = rect.height / 2 - smoothCenterRef.current.y * simZoom.current;
+            // We calculate the error in pixels on screen
+            const errorX = rect.width / 2 - (worldCX * simZoom.current + simPan.current.x);
+            const errorY = rect.height / 2 - (worldCY * simZoom.current + simPan.current.y);
 
-            // Simple linear follow for pan (already smoothed by center EMA)
-            simPan.current = {
-                x: simPan.current.x + (targetX - simPan.current.x) * 6.0 * dt,
-                y: simPan.current.y + (targetY - simPan.current.y) * 6.0 * dt
-            };
+            // Pan Hysteresis Deadzone
+            const deadzoneX = rect.width * CAMERA_CONFIG.PAN_DEADZONE_X;
+            const deadzoneY = rect.height * CAMERA_CONFIG.PAN_DEADZONE_Y;
+
+            let panAccX = 0;
+            let panAccY = 0;
+
+            if (Math.abs(errorX) > deadzoneX) {
+                panAccX = errorX * CAMERA_CONFIG.PAN_STRENGTH;
+            }
+            if (Math.abs(errorY) > deadzoneY) {
+                panAccY = errorY * CAMERA_CONFIG.PAN_STRENGTH;
+            }
+
+            // Integrate Pan Physics
+            const panDamping = Math.pow(CAMERA_CONFIG.PAN_DAMPING, dt);
+            panVelRef.current.x = (panVelRef.current.x + panAccX * dt) * panDamping;
+            panVelRef.current.y = (panVelRef.current.y + panAccY * dt) * panDamping;
+
+            simPan.current.x += panVelRef.current.x * dt;
+            simPan.current.y += panVelRef.current.y * dt;
+
+            // Also slowly drift the 'target' center towards the actual BB center
+            // to ignore micro-jitter but follow large trends.
+            smoothCenterRef.current.x += (targetCX - smoothCenterRef.current.x) * CAMERA_CONFIG.CENTER_FOLLOW_STRENGTH * dt;
+            smoothCenterRef.current.y += (targetCY - smoothCenterRef.current.y) * CAMERA_CONFIG.CENTER_FOLLOW_STRENGTH * dt;
 
             // Sync to React State for Rendering
             setZoom(simZoom.current);
-            setPan(simPan.current);
+            setPan({ x: simPan.current.x, y: simPan.current.y });
         }
 
         rAFRef.current = requestAnimationFrame(updatePhysics);
