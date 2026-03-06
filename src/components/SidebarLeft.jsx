@@ -235,6 +235,7 @@ export function SidebarLeft({
            gap: 10px;
            cursor: pointer;
            transition: all 0.2s;
+           user-select: none;
         }
         .comp-card:hover {
            background: var(--bg4);

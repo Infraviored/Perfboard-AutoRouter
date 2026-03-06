@@ -261,6 +261,7 @@ export function SidebarRight({
           border-radius: 6px;
           transition: all 0.2s;
           cursor: pointer;
+          user-select: none;
         }
         .net-row:hover { 
           background: var(--bg4); 
