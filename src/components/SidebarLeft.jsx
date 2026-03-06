@@ -78,7 +78,7 @@ export function SidebarLeft({
           <h2>Components</h2>
         </div>
 
-        <div className="header-actions-row">
+        <div className="header-actions-row" style={{ paddingTop: '10px' }}>
           <button className="tplbtn blu-bg" onClick={onOpenLibrary} style={{ flex: 1 }}>
             <Library size={14} /> Library
           </button>
