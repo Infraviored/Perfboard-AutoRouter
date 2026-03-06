@@ -289,7 +289,6 @@ async function doPlaceAndRoute() {
       ostep(3); setProg(0, 'Optimizing footprint…');
       await doRecursivePushPacking();
     }
-    toast(`Perfect routing achieved!`, 'ok');
     // REMOVED saveState() from here so it saves regardless of success
   } else {
     toast(`No perfect routing found. Best completion: ${Math.round(bestCompletion * 100)}%`, 'warn');
@@ -1032,7 +1031,6 @@ The JSON must contain two main sections:
    - "id": Reference designator (e.g., "R1", "U1").
    - "name": Component type (e.g., "Resistor", "ESP32").
    - "value": Component value/spec (e.g., "10k", "SuperMini").
-   - "color": A hex color code for the UI (e.g., "#2e1a08"). Try to use distinct, appropriate colors per component type (e.g., dark green for PCBs, black for ICs, brown for resistors).
    - "pins": An array of pins. Each pin needs:
      - "offset": [col, row] grid coordinates relative to component's top-left (0,0).
      - "net": The net name this pin connects to (e.g., "GND", "VCC", "GATE"). Omit if unconnected.
@@ -1052,21 +1050,21 @@ Example JSON for a simple LED circuit:
   "board": { "cols": 15, "rows": 10 },
   "components": [
     {
-      "id": "J1", "name": "Power", "value": "5V", "color": "#2a2808",
+      "id": "J1", "name": "Power", "value": "5V",
       "pins": [
         { "offset": [0, 0], "net": "5V", "label": "+" },
         { "offset": [0, 1], "net": "GND", "label": "-" }
       ]
     },
     {
-      "id": "R1", "name": "Resistor", "value": "330Ω", "color": "#2e1a08",
+      "id": "R1", "name": "Resistor", "value": "330Ω",
       "pins": [
         { "offset": [0, 0], "net": "5V", "label": "1" },
         { "offset": [3, 0], "net": "NET_LED", "label": "2" }
       ]
     },
     {
-      "id": "D1", "name": "LED", "value": "Red", "color": "#4a0a0a",
+      "id": "D1", "name": "LED", "value": "Red",
       "pins": [
         { "offset": [0, 0], "net": "NET_LED", "label": "A" },
         { "offset": [1, 0], "net": "GND", "label": "K" }
@@ -1118,7 +1116,6 @@ function openCompEditor(compId) {
   document.getElementById('editCompId').value = editingComp.id;
   document.getElementById('editCompName').value = editingComp.name;
   document.getElementById('editCompValue').value = editingComp.value;
-  document.getElementById('editCompColor').value = editingComp.color;
   document.getElementById('editCompWidth').value = editingComp.w;
   document.getElementById('editCompHeight').value = editingComp.h;
   const ru = document.getElementById('editCompRouteUnder');
@@ -1143,7 +1140,7 @@ function closeCompEditor() {
 
 function addNewComponent() {
   editingComp = {
-    id: 'NEW' + Date.now(), name: 'New Component', value: '', color: '#2a2808',
+    id: 'NEW' + Date.now(), name: 'New Component', value: '',
     offsets: [[0, 0]], pinNets: ['NET1'], pinLbls: ['1'], w: 1, h: 1, routeUnder: false
   };
   editingCompIndex = -1; isAddingNewComponent = true;
@@ -1151,7 +1148,6 @@ function addNewComponent() {
   document.getElementById('editCompId').value = editingComp.id;
   document.getElementById('editCompName').value = editingComp.name;
   document.getElementById('editCompValue').value = editingComp.value;
-  document.getElementById('editCompColor').value = editingComp.color;
   document.getElementById('editCompWidth').value = editingComp.w;
   document.getElementById('editCompHeight').value = editingComp.h;
   const ru = document.getElementById('editCompRouteUnder');
@@ -1374,7 +1370,7 @@ function saveComponentEdit() {
   editingComp.id = document.getElementById('editCompId').value;
   editingComp.name = document.getElementById('editCompName').value;
   editingComp.value = document.getElementById('editCompValue').value;
-  editingComp.color = document.getElementById('editCompColor').value;
+  // removed color save
   editingComp.w = parseInt(document.getElementById('editCompWidth').value);
   editingComp.h = parseInt(document.getElementById('editCompHeight').value);
   const ru = document.getElementById('editCompRouteUnder');
@@ -1405,7 +1401,7 @@ function updateJSONFromComponents() {
   const data = {
     board: { cols: parseInt(document.getElementById('bCols').value) || 22, rows: parseInt(document.getElementById('bRows').value) || 16 },
     components: compDefs.map(cd => ({
-      id: cd.id, name: cd.name, value: cd.value, color: cd.color,
+      id: cd.id, name: cd.name, value: cd.value,
       pins: cd.offsets.map((off, i) => ({
         offset: [off[0] + (cd.boardOffset ? cd.boardOffset[0] : 0), off[1] + (cd.boardOffset ? cd.boardOffset[1] : 0)],
         net: cd.pinNets[i], label: cd.pinLbls[i]
