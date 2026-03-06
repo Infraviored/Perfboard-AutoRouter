@@ -138,7 +138,7 @@ export class AutorouterEngine {
         return scoreState(this.components, testWires);
     }
 
-    async placeAndRoute(compDefs, autoOptimize = false) {
+    async placeAndRoute(compDefs) {
         if (!compDefs || compDefs.length === 0) {
             this.onToast?.('No components to place', 'warn');
             return;

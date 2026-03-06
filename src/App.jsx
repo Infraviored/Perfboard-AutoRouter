@@ -80,7 +80,6 @@ function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [selectedNet, setSelectedNet] = useState(null);
   const [hoveredNet, setHoveredNet] = useState(null);
-  const [autoOptimize, setAutoOptimize] = useState(true);
   const [tool, setTool] = useState('sel');
   const [bestSnapshot, setBestSnapshot] = useState(null);
 
@@ -138,7 +137,7 @@ function App() {
     try {
       const data = JSON.parse(jsonInput);
       const defs = processTemplate(data);
-      const res = await engine.placeAndRoute(defs, autoOptimize);
+      const res = await engine.placeAndRoute(defs);
       if (res) {
         setStatus(prev => ({ ...prev, isProcessing: false, results: res }));
         setTimeout(() => {
@@ -153,7 +152,7 @@ function App() {
       setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
     }
     saveHistory();
-  }, [engine, jsonInput, autoOptimize, saveHistory]);
+  }, [engine, jsonInput, saveHistory]);
 
   const handleUndo = useCallback(() => {
     if (historyIndex > 0) {
@@ -411,7 +410,7 @@ Use this format:
   return (
     <div className="app-main">
       <Topbar
-        tool={tool} setTool={setTool} autoOptimize={autoOptimize} setAutoOptimize={setAutoOptimize}
+        tool={tool} setTool={setTool}
         onPlaceAndRoute={handlePlaceAndRoute} onOptimizeFootprint={handleOptimizeFootprint}
         onPlateauExplore={handlePlateauExplore} onRouteOnly={handleRouteOnly}
         onClearWires={handleClearWires} onReset={handleReset} onUndo={handleUndo} onRedo={handleRedo}

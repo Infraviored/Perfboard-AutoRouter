@@ -25,9 +25,6 @@ export function Topbar({
   onRedo,
   onExportState,
   onImportState,
-  autoOptimize,
-  setAutoOptimize,
-  tool,
   setTool,
   hasWires,
   isProcessing
@@ -97,14 +94,7 @@ export function Topbar({
         </button>
       </div>
 
-      <label className="topbar-toggle">
-        <input
-          type="checkbox"
-          checked={autoOptimize}
-          onChange={(e) => setAutoOptimize(e.target.checked)}
-        />
-        <span>Auto-optimize</span>
-      </label>
+
 
       <div className="sep"></div>
 
