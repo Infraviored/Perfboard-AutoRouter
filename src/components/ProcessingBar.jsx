@@ -117,7 +117,7 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
           <div className="pb-preview">
             <div className="pb-preview-label">final design</div>
             <div className="pb-preview-wrap success">
-              <svg viewBox={`0 0 ${preview.W + 60} ${preview.H}`} style={{ height: '100%', maxWidth: '100%', display: 'block', overflow: 'visible' }}>
+              <svg viewBox={`-30 0 ${preview.W + 60} ${preview.H}`} style={{ height: '100%', maxWidth: '100%', display: 'block', overflow: 'visible' }}>
                 <g dangerouslySetInnerHTML={{ __html: preview.inner }} />
               </svg>
             </div>
@@ -144,7 +144,7 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
             <div className="pb-preview-label">current best</div>
             <div className="pb-preview-wrap">
               <svg
-                viewBox={`0 0 ${preview.W + 60} ${preview.H}`}
+                viewBox={`-30 0 ${preview.W + 60} ${preview.H}`}
                 style={{ height: '100%', maxWidth: '100%', display: 'block', overflow: 'visible' }}
               >
                 <g dangerouslySetInnerHTML={{ __html: preview.inner }} />
@@ -259,8 +259,8 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
           flex-shrink: 0;
           height: 100%;
           justify-content: center;
-          width: 320px;
-          min-width: 320px;
+          width: 220px;
+          min-width: 220px;
         }
         .pb-preview-label {
           font-family: 'Inter', sans-serif;

@@ -173,7 +173,10 @@ export function PcbCanvas({
 
         const rect = svgRef.current.getBoundingClientRect();
         const b = targetBoundsRef.current;
-        const shouldApplyPhysics = isAutoTracking && isProcessing && b && rect.width > 0;
+        const pbHeight = isProcessing ? 240 : 0;
+        const availableHeight = rect.height - pbHeight;
+
+        const shouldApplyPhysics = isAutoTracking && b && rect.width > 0;
 
         if (shouldApplyPhysics) {
             const targetCX = (b.minCol + b.maxCol + 1) / 2 * SP;
@@ -183,12 +186,12 @@ export function PcbCanvas({
 
             const fitZoom = Math.min(
                 (rect.width * CAMERA_CONFIG.TARGET_COVERAGE) / bbW,
-                (rect.height * CAMERA_CONFIG.TARGET_COVERAGE) / bbH,
+                (availableHeight * CAMERA_CONFIG.TARGET_COVERAGE) / bbH,
                 CAMERA_CONFIG.MAX_ZOOM_FIT
             );
 
             const curZ = simZoom.current;
-            const currentCoverage = Math.max((bbW * curZ) / rect.width, (bbH * curZ) / rect.height);
+            const currentCoverage = Math.max((bbW * curZ) / rect.width, (bbH * curZ) / availableHeight);
 
             let zoomAcc = 0;
             if (currentCoverage > CAMERA_CONFIG.ZOOM_OUT_THRESHOLD || currentCoverage < CAMERA_CONFIG.ZOOM_IN_THRESHOLD) {
@@ -201,10 +204,15 @@ export function PcbCanvas({
 
             const worldCX = smoothCenterRef.current.x;
             const worldCY = smoothCenterRef.current.y;
-            const errorX = rect.width / 2 - (worldCX * simZoom.current + simPan.current.x);
-            const errorY = rect.height / 2 - (worldCY * simZoom.current + simPan.current.y);
+
+            const targetViewportCX = rect.width / 2;
+            const targetViewportCY = availableHeight / 2;
+
+            const errorX = targetViewportCX - (worldCX * simZoom.current + simPan.current.x);
+            const errorY = targetViewportCY - (worldCY * simZoom.current + simPan.current.y);
+
             const deadzoneX = rect.width * CAMERA_CONFIG.PAN_DEADZONE_X;
-            const deadzoneY = rect.height * CAMERA_CONFIG.PAN_DEADZONE_Y;
+            const deadzoneY = availableHeight * CAMERA_CONFIG.PAN_DEADZONE_Y;
 
             let panAccX = 0, panAccY = 0;
             if (Math.abs(errorX) > deadzoneX) panAccX = errorX * CAMERA_CONFIG.PAN_STRENGTH;
@@ -227,7 +235,7 @@ export function PcbCanvas({
     }, [isProcessing, isAutoTracking]);
 
     useEffect(() => {
-        if (isProcessing) {
+        if (isAutoTracking) {
             lastTimeRef.current = performance.now();
             rAFRef.current = requestAnimationFrame(updatePhysics);
         } else {
@@ -237,11 +245,14 @@ export function PcbCanvas({
             lastTimeRef.current = 0;
         }
         return () => { if (rAFRef.current) cancelAnimationFrame(rAFRef.current); };
-    }, [isProcessing, updatePhysics]);
+    }, [isAutoTracking, updatePhysics]);
 
     useEffect(() => {
         if (forceCenterToggle && bounds && svgRef.current) {
             const rect = svgRef.current.getBoundingClientRect();
+            const pbHeight = isProcessing ? 240 : 0;
+            const availableHeight = rect.height - pbHeight;
+
             const cx = (bounds.minCol + bounds.maxCol + 1) / 2 * SP;
             const cy = (bounds.minRow + bounds.maxRow + 1) / 2 * SP;
             smoothCenterRef.current = { x: cx, y: cy };
@@ -249,14 +260,14 @@ export function PcbCanvas({
             const bbH = (bounds.maxRow - bounds.minRow + 1) * SP;
             const fitZoom = Math.min(
                 (rect.width * CAMERA_CONFIG.TARGET_COVERAGE) / bbW,
-                (rect.height * CAMERA_CONFIG.TARGET_COVERAGE) / bbH,
+                (availableHeight * CAMERA_CONFIG.TARGET_COVERAGE) / bbH,
                 CAMERA_CONFIG.MAX_ZOOM_FIT
             );
             setZoom(fitZoom);
-            setPan({ x: rect.width / 2 - cx * fitZoom, y: rect.height / 2 - cy * fitZoom });
+            setPan({ x: rect.width / 2 - cx * fitZoom, y: availableHeight / 2 - cy * fitZoom });
             setForceCenterToggle(false);
         }
-    }, [forceCenterToggle, bounds]);
+    }, [forceCenterToggle, bounds, isProcessing]);
 
     const labelsSvg = useMemo(() => {
         if (!bounds) return '';
