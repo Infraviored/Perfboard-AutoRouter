@@ -30,7 +30,8 @@ export function PcbCanvas({
     onMoveEnd,
     tick,
     isProcessing,
-    isInitialProcessing
+    isInitialProcessing,
+    workflowStep
 }) {
     const svgRef = useRef(null);
     const [zoom, setZoom] = useState(1);
@@ -147,14 +148,20 @@ export function PcbCanvas({
     }, [components, wires, cols, rows]);
 
     const wasProcessing = useRef(false);
+    const lastSnapStep = useRef(0);
+
     useEffect(() => {
-        // Instant snap for new circuit (manual load) OR initial placement phase (isInitialProcessing)
-        if (bounds && (!isProcessing && !wasProcessing.current || isInitialProcessing)) {
+        // Trigger snap on milestone (workflowStep change) OR initial placement phase (isInitialProcessing) OR manual load
+        const milestoneChange = workflowStep > 0 && workflowStep !== lastSnapStep.current;
+        const manualLoad = bounds && !isProcessing && !wasProcessing.current;
+
+        if (milestoneChange || manualLoad || isInitialProcessing) {
             setForceCenterToggle(true);
             hasInitializedFit.current = true;
+            if (milestoneChange) lastSnapStep.current = workflowStep;
         }
         wasProcessing.current = isProcessing;
-    }, [components, isProcessing, isInitialProcessing, bounds]);
+    }, [components, isProcessing, isInitialProcessing, workflowStep, bounds]);
 
     const zoomVelRef = useRef(0);
     const panVelRef = useRef({ x: 0, y: 0 });
@@ -164,6 +171,10 @@ export function PcbCanvas({
     const rAFRef = useRef(null);
     const simZoom = useRef(zoom);
     const simPan = useRef(pan);
+
+    const lastUpdateKeyRef = useRef("");
+    const zoomCountRef = useRef(0);
+    const panCountRef = useRef(0);
 
     useEffect(() => { simZoom.current = zoom; }, [zoom]);
     useEffect(() => { simPan.current = pan; }, [pan.x, pan.y]);
@@ -197,8 +208,33 @@ export function PcbCanvas({
             const curZ = simZoom.current;
             const currentCoverage = Math.max((bbW * curZ) / rect.width, (bbH * curZ) / availableHeight);
 
+            const worldCX = smoothCenterRef.current.x;
+            const worldCY = smoothCenterRef.current.y;
+            const targetViewportCX = rect.width / 2;
+            const targetViewportCY = availableHeight / 2;
+
+            const errorX = targetViewportCX - (worldCX * simZoom.current + simPan.current.x);
+            const errorY = targetViewportCY - (worldCY * simZoom.current + simPan.current.y);
+            const deadzoneX = rect.width * CAMERA_CONFIG.PAN_DEADZONE_X;
+            const deadzoneY = availableHeight * CAMERA_CONFIG.PAN_DEADZONE_Y;
+
+            const isZoomViolated = currentCoverage > CAMERA_CONFIG.ZOOM_OUT_THRESHOLD || currentCoverage < CAMERA_CONFIG.ZOOM_IN_THRESHOLD;
+            const isPanViolated = Math.abs(errorX) > deadzoneX || Math.abs(errorY) > deadzoneY;
+
+            // Only count violations when the board actually changes
+            const updateKey = `zoom:${isZoomViolated}-pan:${isPanViolated}-bounds:${b.minCol},${b.minRow},${b.maxCol},${b.maxRow}`;
+            if (updateKey !== lastUpdateKeyRef.current) {
+                if (isZoomViolated) zoomCountRef.current++;
+                else zoomCountRef.current = 0;
+
+                if (isPanViolated) panCountRef.current++;
+                else panCountRef.current = 0;
+
+                lastUpdateKeyRef.current = updateKey;
+            }
+
             let zoomAcc = 0;
-            if (currentCoverage > CAMERA_CONFIG.ZOOM_OUT_THRESHOLD || currentCoverage < CAMERA_CONFIG.ZOOM_IN_THRESHOLD) {
+            if (zoomCountRef.current > CAMERA_CONFIG.ZOOM_VIOLATION_THRESHOLD) {
                 zoomAcc = (fitZoom - curZ) * CAMERA_CONFIG.ZOOM_STRENGTH;
             }
 
@@ -206,21 +242,12 @@ export function PcbCanvas({
             zoomVelRef.current = (zoomVelRef.current + zoomAcc * dt) * zoomDamping;
             simZoom.current += zoomVelRef.current * dt;
 
-            const worldCX = smoothCenterRef.current.x;
-            const worldCY = smoothCenterRef.current.y;
-
-            const targetViewportCX = rect.width / 2;
-            const targetViewportCY = availableHeight / 2;
-
-            const errorX = targetViewportCX - (worldCX * simZoom.current + simPan.current.x);
-            const errorY = targetViewportCY - (worldCY * simZoom.current + simPan.current.y);
-
-            const deadzoneX = rect.width * CAMERA_CONFIG.PAN_DEADZONE_X;
-            const deadzoneY = availableHeight * CAMERA_CONFIG.PAN_DEADZONE_Y;
 
             let panAccX = 0, panAccY = 0;
-            if (Math.abs(errorX) > deadzoneX) panAccX = errorX * CAMERA_CONFIG.PAN_STRENGTH;
-            if (Math.abs(errorY) > deadzoneY) panAccY = errorY * CAMERA_CONFIG.PAN_STRENGTH;
+            if (panCountRef.current > CAMERA_CONFIG.PAN_VIOLATION_THRESHOLD) {
+                if (Math.abs(errorX) > deadzoneX) panAccX = errorX * CAMERA_CONFIG.PAN_STRENGTH;
+                if (Math.abs(errorY) > deadzoneY) panAccY = errorY * CAMERA_CONFIG.PAN_STRENGTH;
+            }
 
             const panDamping = Math.pow(CAMERA_CONFIG.PAN_DAMPING, dt);
             panVelRef.current.x = (panVelRef.current.x + panAccX * dt) * panDamping;
@@ -259,19 +286,36 @@ export function PcbCanvas({
 
             const cx = (bounds.minCol + bounds.maxCol + 1) / 2 * SP;
             const cy = (bounds.minRow + bounds.maxRow + 1) / 2 * SP;
+
+            // JUMP PAN: Center the board world target at current zoom level instantly
+            const jumpPan = {
+                x: rect.width / 2 - cx * zoom,
+                y: availableHeight / 2 - cy * zoom
+            };
+            setPan(jumpPan);
+            simPan.current = jumpPan;
+
+            // Wait, we also need to snap smoothCenterRef to the board center so the following physics 
+            // starts exactly from this board center.
             smoothCenterRef.current = { x: cx, y: cy };
-            const bbW = (bounds.maxCol - bounds.minCol + 1) * SP;
-            const bbH = (bounds.maxRow - bounds.minRow + 1) * SP;
-            const fitZoom = Math.min(
-                (rect.width * CAMERA_CONFIG.TARGET_COVERAGE) / bbW,
-                (availableHeight * CAMERA_CONFIG.TARGET_COVERAGE) / bbH,
-                CAMERA_CONFIG.MAX_ZOOM_FIT
-            );
-            setZoom(fitZoom);
-            setPan({ x: rect.width / 2 - cx * fitZoom, y: availableHeight / 2 - cy * fitZoom });
+
+            // We do NOT snap zoom here - we let updatePhysics smoothly pull zoom to fitZoom
+            // unless it's the very first hit
+            if (!hasInitializedFit.current) {
+                const bbW = (bounds.maxCol - bounds.minCol + 1) * SP;
+                const bbH = (bounds.maxRow - bounds.minRow + 1) * SP;
+                const fitZ = Math.min(
+                    (rect.width * CAMERA_CONFIG.TARGET_COVERAGE) / bbW,
+                    (availableHeight * CAMERA_CONFIG.TARGET_COVERAGE) / bbH,
+                    CAMERA_CONFIG.MAX_ZOOM_FIT
+                );
+                setZoom(fitZ);
+                simZoom.current = fitZ;
+            }
+
             setForceCenterToggle(false);
         }
-    }, [forceCenterToggle, bounds, isProcessing]);
+    }, [forceCenterToggle, bounds, isProcessing, zoom]);
 
     const labelsSvg = useMemo(() => {
         if (!bounds) return '';

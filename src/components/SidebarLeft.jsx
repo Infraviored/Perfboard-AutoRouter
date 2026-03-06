@@ -1,14 +1,11 @@
 import React, { useState } from 'react';
 import { boostColor, compColor } from '../engine/render-utils.js';
 import {
-  FileJson,
   Plus,
   Library,
-  Settings2,
-  HelpCircle,
   Cpu,
-  Play,
-  Pencil
+  Pencil,
+  Info
 } from 'lucide-react';
 
 export function SidebarLeft({
@@ -18,7 +15,6 @@ export function SidebarLeft({
   onCutToBoundingBox,
   jsonInput,
   setJsonInput,
-  onLoadCircuit,
   onLoadTemplate,
   components,
   selectedId,
@@ -26,8 +22,7 @@ export function SidebarLeft({
   onOpenLibrary,
   onAddNewComponent,
   onEditComponent,
-  onOpenPrompt,
-  isProcessing
+  onOpenPrompt
 }) {
   const [localCols, setLocalCols] = useState(cols);
   const [localRows, setLocalRows] = useState(rows);
@@ -41,10 +36,15 @@ export function SidebarLeft({
       {/* Circuit Definition Section */}
       <section className="sidebar-section">
         <div className="section-header">
-          <FileJson size={18} />
+          <Info size={18} />
           <h2>Circuit Definition</h2>
         </div>
         <div className="lbody">
+          <button className="prompt-help-btn" onClick={onOpenPrompt}>
+            <Info size={14} />
+            How do I obtain this?
+          </button>
+
           <div className="textarea-container">
             <textarea
               placeholder="Paste JSON or generate with an LLM..."
@@ -52,19 +52,6 @@ export function SidebarLeft({
               onChange={(e) => setJsonInput(e.target.value)}
               spellCheck="false"
             />
-          </div>
-          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-            <button className={`btn ${isProcessing ? 'is-loading' : ''}`} onClick={onLoadCircuit} style={{ flex: 1 }} disabled={isProcessing}>
-              <Play size={14} /> {isProcessing ? 'Processing Circuit...' : 'Load Circuit'}
-            </button>
-            <button
-              className="btn"
-              style={{ background: 'var(--bg3)', border: '1px solid var(--border2)', color: 'var(--txt1)', width: '40px' }}
-              onClick={onOpenPrompt}
-              title="How do I get this?"
-            >
-              <HelpCircle size={14} />
-            </button>
           </div>
         </div>
       </section>
@@ -78,12 +65,12 @@ export function SidebarLeft({
           <h2>Components</h2>
         </div>
 
-        <div className="header-actions-row" style={{ paddingTop: '10px' }}>
-          <button className="tplbtn blu-bg" onClick={onOpenLibrary} style={{ flex: 1 }}>
-            <Library size={14} /> Library
+        <div className="header-actions-row">
+          <button className="tplbtn" onClick={onOpenLibrary} style={{ flex: 1 }}>
+            <Library size={13} /> Library
           </button>
           <button className="tplbtn grn-bg" onClick={onAddNewComponent} style={{ flex: 1 }}>
-            <Plus size={14} /> New
+            <Plus size={13} /> New
           </button>
         </div>
 
@@ -143,7 +130,7 @@ export function SidebarLeft({
           padding: 4px 0;
         }
         .section-header {
-           padding: 12px 16px 6px 16px;
+           padding: 12px 16px 8px 16px;
            display: flex;
            align-items: center;
            gap: 10px;
@@ -171,7 +158,27 @@ export function SidebarLeft({
           gap: 6px;
           padding: 0 16px 8px 16px;
         }
+        .prompt-help-btn {
+          margin: 0 16px 10px 16px;
+          background: rgba(31, 111, 235, 0.1);
+          border: 1px solid rgba(31, 111, 235, 0.2);
+          color: var(--blu-bright);
+          padding: 8px 12px;
+          border-radius: 8px;
+          font-size: .78em;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          cursor: pointer;
+          transition: 0.2s;
+        }
+        .prompt-help-btn:hover {
+          background: rgba(31, 111, 235, 0.18);
+          border-color: var(--blu-bright);
+        }
         .textarea-container {
+           margin: 0 16px;
            position: relative;
            border-radius: 8px;
            overflow: hidden;
@@ -182,19 +189,21 @@ export function SidebarLeft({
            border: none !important;
            background: transparent !important;
            min-height: 120px;
+           width: 100%;
            font-size: .75em;
            padding: 10px;
            line-height: 1.5;
+           color: var(--txt1);
         }
         .tplbtn {
           padding: 6px 10px;
-          border-radius: 6px;
+          border-radius: 8px;
           cursor: pointer;
           font-size: .72em;
           font-weight: 600;
-          background: var(--bg4);
+          background: var(--bg3);
           border: 1px solid var(--border);
-          color: var(--txt0);
+          color: var(--txt1);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -202,9 +211,9 @@ export function SidebarLeft({
           transition: 0.2s;
         }
         .tplbtn:hover { 
-          background: var(--bg3);
-          border-color: var(--border2);
-          transform: translateY(-1px);
+          background: var(--bg4);
+          border-color: var(--blu-bright);
+          color: var(--txt0);
         }
         
         .comp-list {
@@ -235,7 +244,6 @@ export function SidebarLeft({
            gap: 10px;
            cursor: pointer;
            transition: all 0.2s;
-           user-select: none;
         }
         .comp-card:hover {
            background: var(--bg4);

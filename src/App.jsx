@@ -82,6 +82,7 @@ function App() {
   const [hoveredNet, setHoveredNet] = useState(null);
   const [tool, setTool] = useState('sel');
   const [bestSnapshot, setBestSnapshot] = useState(null);
+  const [workflowStep, setWorkflowStep] = useState(0); // 0: Idle, 1: Loaded, 2: Routed, 3: Optimized, 4: Explored
 
 
   // Modal states
@@ -124,6 +125,7 @@ function App() {
       const defs = processTemplate(data);
       if (defs) {
         engine.initializeBoard(defs);
+        setWorkflowStep(1);
         saveHistory();
       }
     } catch (e) {
@@ -131,7 +133,7 @@ function App() {
     }
   }, [engine, jsonInput, saveHistory]);
 
-  const handlePlaceAndRoute = useCallback(async () => {
+  const handleRoute = useCallback(async () => {
     setBestSnapshot(null);
     setStatus(prev => ({ ...prev, isProcessing: true, isInitial: true, results: null }));
     try {
@@ -140,6 +142,7 @@ function App() {
       const res = await engine.placeAndRoute(defs);
       if (res) {
         setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, results: res }));
+        setWorkflowStep(2);
         setTimeout(() => {
           setStatus(prev => ({ ...prev, results: null }));
           setBestSnapshot(null);
@@ -153,6 +156,58 @@ function App() {
     }
     saveHistory();
   }, [engine, jsonInput, saveHistory]);
+
+  const handleOptimize = useCallback(async () => {
+    setBestSnapshot(null);
+    setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
+    const res = await engine.optimize();
+    if (res) {
+      setStatus(prev => ({ ...prev, isProcessing: false, results: res }));
+      setWorkflowStep(3);
+      setTimeout(() => {
+        setStatus(prev => ({ ...prev, results: null }));
+        setBestSnapshot(null);
+      }, 4000);
+    } else {
+      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
+      setBestSnapshot(null);
+    }
+    saveHistory();
+  }, [engine, saveHistory]);
+
+  const handleExplore = useCallback(async () => {
+    setBestSnapshot(null);
+    setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
+    const res = await engine.plateau();
+    if (res) {
+      setStatus(prev => ({ ...prev, isProcessing: false, results: res }));
+      setWorkflowStep(4);
+      setTimeout(() => {
+        setStatus(prev => ({ ...prev, results: null }));
+        setBestSnapshot(null);
+      }, 4000);
+    } else {
+      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
+      setBestSnapshot(null);
+    }
+    saveHistory();
+  }, [engine, saveHistory]);
+
+
+  const handleStepClick = useCallback(async (step) => {
+    if (step === 0) {
+      engine.setState({ components: [], wires: [] });
+      setWorkflowStep(0);
+    } else if (step === 1) {
+      handleLoadCircuit();
+    } else if (step === 2) {
+      handleRoute();
+    } else if (step === 3) {
+      handleOptimize();
+    } else if (step === 4) {
+      handleExplore();
+    }
+  }, [handleLoadCircuit, handleRoute, handleOptimize, handleExplore, engine]);
 
   const handleUndo = useCallback(() => {
     if (historyIndex > 0) {
@@ -290,7 +345,6 @@ Use this format:
     a.href = url; a.download = 'pcb_circuit.json'; a.click();
     URL.revokeObjectURL(url);
   }, [board]);
-
   const handleImportState = useCallback(() => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -350,13 +404,13 @@ Use this format:
     const handleKeyDown = (e) => {
       if (e.ctrlKey && e.key === 'z') { e.preventDefault(); handleUndo(); }
       if (e.ctrlKey && e.key === 'y') { e.preventDefault(); handleRedo(); }
-      if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); handlePlaceAndRoute(); }
-      if (e.shiftKey && e.key === 'R') { e.preventDefault(); handleRouteOnly(); }
+      if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); handleRoute(); }
+      if (e.shiftKey && e.key === 'R') { e.preventDefault(); handleRoute(); }
       if (e.key === 'v') { e.preventDefault(); setTool('sel'); }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, handlePlaceAndRoute, handleRouteOnly]);
+  }, [handleUndo, handleRedo, handleRoute]);
 
   // --- INITIAL LOAD ---
   useEffect(() => {
@@ -410,19 +464,22 @@ Use this format:
   return (
     <div className="app-main">
       <Topbar
-        tool={tool} setTool={setTool}
-        onPlaceAndRoute={handlePlaceAndRoute} onOptimizeFootprint={handleOptimizeFootprint}
-        onPlateauExplore={handlePlateauExplore} onRouteOnly={handleRouteOnly}
-        onClearWires={handleClearWires} onReset={handleReset} onUndo={handleUndo} onRedo={handleRedo}
-        onExportState={handleExportState} onImportState={handleImportState}
-        onExportSVG={() => { /* SVG Export Logic */ }}
+        workflowStep={workflowStep}
+        onStepClick={handleStepClick}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onImportState={handleImportState}
+        onExportState={handleExportState}
+        onClearWires={handleClearWires}
+        onReset={handleReset}
+        onExportSVG={() => { /* logic */ }}
         hasWires={board.wires.length > 0}
         isProcessing={status.isProcessing}
       />
       <div id="layout">
         <SidebarLeft
           onOpenPrompt={() => setIsPromptOpen(true)}
-          jsonInput={jsonInput} setJsonInput={setJsonInput} onLoadCircuit={handleLoadCircuit}
+          jsonInput={jsonInput} setJsonInput={setJsonInput}
           onLoadTemplate={handleLoadTemplate} components={board.components} selectedId={selectedId}
           onSelectComponent={(id) => {
             setSelectedId(id);
@@ -445,6 +502,7 @@ Use this format:
               onMove={handleMoveComp} onRotate={handleRotateComp} onMoveEnd={saveHistory}
               tick={board.tick} isProcessing={status.isProcessing || !!status.results}
               isInitialProcessing={status.isInitial}
+              workflowStep={workflowStep}
             />
           </main>
           <ProcessingBar

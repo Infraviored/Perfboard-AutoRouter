@@ -37,4 +37,9 @@ export const CAMERA_CONFIG = {
     // How fast the 'target' center follows the actual PCB center (low-pass filter).
     // Used to ignore micro-jitter during footprint updates.
     CENTER_FOLLOW_STRENGTH: 2.0,
+
+    // VIOLATION THRESHOLDS
+    // How many consecutive layout updates must violate bounds before physics kick in.
+    ZOOM_VIOLATION_THRESHOLD: 2,
+    PAN_VIOLATION_THRESHOLD: 1,
 };

@@ -10,22 +10,19 @@ import {
   RotateCcw,
   ExternalLink,
   Eraser,
-  Spline
+  FileJson
 } from 'lucide-react';
 
 export function Topbar({
-  onOptimizeFootprint,
-  onPlateauExplore,
-  onPlaceAndRoute,
-  onRouteOnly,
+  workflowStep,
+  onStepClick,
+  onUndo,
+  onRedo,
+  onImportState,
+  onExportState,
   onClearWires,
   onReset,
   onExportSVG,
-  onUndo,
-  onRedo,
-  onExportState,
-  onImportState,
-  setTool,
   hasWires,
   isProcessing
 }) {
@@ -38,19 +35,30 @@ export function Topbar({
       <div className="workflow-track">
         <div className="flow-item">
           <button
-            className={`flow-btn ${isProcessing ? 'active' : ''}`}
-            onClick={onPlaceAndRoute}
-            style={{ '--flow-color': 'var(--grn-bright)' }}
+            className={`flow-btn ${workflowStep >= 1 ? 'active' : ''}`}
+            onClick={() => onStepClick(1)}
+            style={{ '--flow-color': '#4da0ff' }}
           >
-            <Zap size={16} />
-            Place & Route
+            <FileJson size={16} />
+            Load
           </button>
         </div>
         <div className="flow-item">
           <button
-            className="flow-btn"
-            onClick={onOptimizeFootprint}
-            disabled={!hasWires || isProcessing}
+            className={`flow-btn ${workflowStep >= 2 ? 'active' : ''}`}
+            onClick={() => onStepClick(2)}
+            disabled={workflowStep < 1 || isProcessing}
+            style={{ '--flow-color': 'var(--grn-bright)' }}
+          >
+            <Zap size={16} />
+            Route
+          </button>
+        </div>
+        <div className="flow-item">
+          <button
+            className={`flow-btn ${workflowStep >= 3 ? 'active' : ''}`}
+            onClick={() => onStepClick(3)}
+            disabled={workflowStep < 2 || isProcessing}
             style={{ '--flow-color': 'var(--blu-bright)' }}
           >
             <Wrench size={16} />
@@ -59,9 +67,9 @@ export function Topbar({
         </div>
         <div className="flow-item">
           <button
-            className="flow-btn"
-            onClick={onPlateauExplore}
-            disabled={!hasWires || isProcessing}
+            className={`flow-btn ${workflowStep >= 4 ? 'active' : ''}`}
+            onClick={() => onStepClick(4)}
+            disabled={workflowStep < 3 || isProcessing}
             style={{ '--flow-color': '#a371f7' }}
           >
             <Compass size={16} />
@@ -94,15 +102,9 @@ export function Topbar({
         </button>
       </div>
 
-
-
       <div className="sep"></div>
 
       <div className="btn-group">
-        <button className="tbtn" onClick={onRouteOnly} disabled={isProcessing}>
-          <Spline size={16} />
-          Route Only
-        </button>
         <button className="tbtn" onClick={onClearWires} disabled={isProcessing}>
           <Eraser size={16} />
           Clear
@@ -151,33 +153,90 @@ export function Topbar({
           font-style: normal;
           font-weight: 600;
         }
-        .btn-group {
+        
+        .workflow-track {
           display: flex;
-          gap: 4px;
+          gap: 0;
+          padding-left: 10px;
         }
-        .topbar-toggle {
+        .flow-item {
+          margin-left: -12px;
+        }
+        .flow-item:first-child {
+          margin-left: 0;
+        }
+
+        .flow-btn {
+          background: var(--bg3);
+          border: none;
+          color: var(--txt2);
+          padding: 8px 24px 8px 30px;
+          cursor: pointer;
+          font-size: .78em;
+          font-weight: 700;
           display: flex;
           align-items: center;
-          gap: 8px;
-          color: var(--txt1);
-          font-size: .75em;
-          font-weight: 700;
-          cursor: pointer;
-          margin-left: 12px;
-          padding: 6px 10px;
-          border-radius: 8px;
-          transition: background 0.2s;
+          gap: 10px;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          position: relative;
+          /* The filter is applied to the button itself, and the drop-shadow follows the clip-path path! */
+          filter: drop-shadow(1px 0 0 var(--border)) drop-shadow(-1px 0 0 var(--border)) 
+                  drop-shadow(0 1px 0 var(--border)) drop-shadow(0 -1px 0 var(--border));
+          clip-path: polygon(
+            0% 0%, 
+            calc(100% - 12px) 0%, 
+            100% 50%, 
+            calc(100% - 12px) 100%, 
+            0% 100%, 
+            12px 50%
+          );
         }
-        .topbar-toggle:hover {
-          background: rgba(255,255,255,0.05);
+        .flow-btn:first-child {
+          padding-left: 20px;
+          clip-path: polygon(
+            0% 0%, 
+            calc(100% - 12px) 0%, 
+            100% 50%, 
+            calc(100% - 12px) 100%, 
+            0% 100%
+          );
+        }
+        
+        /* Ensure used steps remain colored/highlighted */
+        .flow-btn.active {
+          background: var(--bg4);
           color: var(--txt0);
+          box-shadow: inset 0 0 10px rgba(255,255,255,0.02);
         }
-        .topbar-toggle input {
-          width: 14px;
-          height: 14px;
-          accent-color: var(--blu-bright);
-          margin: 0;
-          cursor: pointer;
+        .flow-btn.active::after {
+          content: '';
+          position: absolute;
+          bottom: 2px;
+          left: 30%;
+          right: 30%;
+          height: 2px;
+          background: var(--flow-color);
+          box-shadow: 0 0 8px var(--flow-color);
+          border-radius: 2px;
+          opacity: 0.8;
+        }
+        
+        /* Specific glow for the furthest step reached */
+        .flow-btn.active svg {
+          color: var(--flow-color);
+          filter: drop-shadow(0 0 5px var(--flow-color));
+        }
+
+        .flow-btn:hover:not(:disabled) {
+          background: #333;
+          color: var(--txt0);
+          z-index: 10;
+        }
+
+        .flow-btn:disabled {
+          opacity: 0.25;
+          cursor: not-allowed;
+          filter: grayscale(1);
         }
       `}} />
     </header>
