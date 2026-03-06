@@ -169,7 +169,7 @@ export function renderCompSVG(c, isSelected = false) {
   c.pins.forEach(p => {
     const px = p.col * SP + SP / 2, py = p.row * SP + SP / 2;
     // Centered pin design: Label inside the colored pad
-    out += `<circle cx="${px}" cy="${py}" r="${SP * .2}" fill="${netColor(p.net)}"/>`;
+    out += `<circle cx="${px}" cy="${py}" r="${SP * .22}" fill="${netColor(p.net)}"/>`;
     out += `<text x="${px}" y="${py}" dy=".35em" fill="#fff" font-family="'Outfit', sans-serif" font-weight="900" font-size="${Math.min(SP * .22, 6)}" text-anchor="middle" paint-order="stroke" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${p.lbl}</text>`;
   });
 
