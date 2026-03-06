@@ -33,49 +33,41 @@ export function Topbar({
       <div className="sep"></div>
 
       <div className="workflow-track">
-        <div className="flow-item">
-          <button
-            className={`flow-btn ${workflowStep >= 1 ? 'active' : ''}`}
-            onClick={() => onStepClick(1)}
-            style={{ '--flow-color': '#4da0ff' }}
-          >
-            <FileJson size={16} />
-            Load
-          </button>
-        </div>
-        <div className="flow-item">
-          <button
-            className={`flow-btn ${workflowStep >= 2 ? 'active' : ''}`}
-            onClick={() => onStepClick(2)}
-            disabled={workflowStep < 1 || isProcessing}
-            style={{ '--flow-color': 'var(--grn-bright)' }}
-          >
-            <Zap size={16} />
-            Route
-          </button>
-        </div>
-        <div className="flow-item">
-          <button
-            className={`flow-btn ${workflowStep >= 3 ? 'active' : ''}`}
-            onClick={() => onStepClick(3)}
-            disabled={workflowStep < 2 || isProcessing}
-            style={{ '--flow-color': 'var(--blu-bright)' }}
-          >
-            <Wrench size={16} />
-            Optimize
-          </button>
-        </div>
-        <div className="flow-item">
-          <button
-            className={`flow-btn ${workflowStep >= 4 ? 'active' : ''}`}
-            onClick={() => onStepClick(4)}
-            disabled={workflowStep < 3 || isProcessing}
-            style={{ '--flow-color': '#a371f7' }}
-          >
-            <Compass size={16} />
-            Explore
-          </button>
-        </div>
+        <button
+          className={`flow-btn ${workflowStep >= 1 ? 'active' : ''}`}
+          onClick={() => onStepClick(1)}
+          style={{ '--flow-color': '#4da0ff' }}
+        >
+          <FileJson size={16} />
+          Load
+        </button>
+        <button
+          className={`flow-btn ${workflowStep >= 2 ? 'active' : ''}`}
+          onClick={() => onStepClick(2)}
+          disabled={workflowStep < 1 || isProcessing}
+          style={{ '--flow-color': 'var(--grn-bright)' }}
+        >
+          <Zap size={16} />
+          Route
+        </button>
+        <button
+          className={`flow-btn ${workflowStep >= 3 ? 'active' : ''}`}
+          onClick={() => onStepClick(3)}
+          disabled={workflowStep < 2 || isProcessing}
+          style={{ '--flow-color': 'var(--blu-bright)' }}
+        >
+          <Wrench size={16} />
+          Optimize
+        </button>
+        <button
+          className={`flow-btn ${workflowStep >= 4 ? 'active' : ''}`}
+          onClick={() => onStepClick(4)}
+          disabled={workflowStep < 3 || isProcessing}
+          style={{ '--flow-color': '#a371f7' }}
+        >
+          <Compass size={16} />
+          Explore
+        </button>
       </div>
 
       <div className="sep"></div>
@@ -154,87 +146,70 @@ export function Topbar({
           font-weight: 600;
         }
         
+        /* RESTORED: Horizontal layout for button groups */
+        .btn-group {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+        
         .workflow-track {
           display: flex;
-          gap: 0;
-          padding-left: 10px;
-        }
-        .flow-item {
-          margin-left: -12px;
-        }
-        .flow-item:first-child {
-          margin-left: 0;
+          gap: 6px;
+          padding: 4px;
+          background: rgba(0,0,0,0.1);
+          border-radius: 10px;
+          border: 1px solid var(--border);
         }
 
         .flow-btn {
-          background: var(--bg3);
-          border: none;
+          background: transparent;
+          border: 1px solid transparent;
           color: var(--txt2);
-          padding: 8px 24px 8px 30px;
+          padding: 6px 14px;
+          border-radius: 7px;
           cursor: pointer;
           font-size: .78em;
           font-weight: 700;
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 8px;
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
           position: relative;
-          /* The filter is applied to the button itself, and the drop-shadow follows the clip-path path! */
-          filter: drop-shadow(1px 0 0 var(--border)) drop-shadow(-1px 0 0 var(--border)) 
-                  drop-shadow(0 1px 0 var(--border)) drop-shadow(0 -1px 0 var(--border));
-          clip-path: polygon(
-            0% 0%, 
-            calc(100% - 12px) 0%, 
-            100% 50%, 
-            calc(100% - 12px) 100%, 
-            0% 100%, 
-            12px 50%
-          );
-        }
-        .flow-btn:first-child {
-          padding-left: 20px;
-          clip-path: polygon(
-            0% 0%, 
-            calc(100% - 12px) 0%, 
-            100% 50%, 
-            calc(100% - 12px) 100%, 
-            0% 100%
-          );
         }
         
-        /* Ensure used steps remain colored/highlighted */
         .flow-btn.active {
-          background: var(--bg4);
+          background: var(--bg3);
           color: var(--txt0);
-          box-shadow: inset 0 0 10px rgba(255,255,255,0.02);
+          border-color: var(--border);
+          box-shadow: var(--shadow-small);
         }
+        
+        .flow-btn.active svg {
+          color: var(--flow-color);
+          filter: drop-shadow(0 0 4px var(--flow-color));
+        }
+
         .flow-btn.active::after {
           content: '';
           position: absolute;
-          bottom: 2px;
-          left: 30%;
-          right: 30%;
+          bottom: -4px;
+          left: 10%;
+          right: 10%;
           height: 2px;
           background: var(--flow-color);
           box-shadow: 0 0 8px var(--flow-color);
           border-radius: 2px;
-          opacity: 0.8;
-        }
-        
-        /* Specific glow for the furthest step reached */
-        .flow-btn.active svg {
-          color: var(--flow-color);
-          filter: drop-shadow(0 0 5px var(--flow-color));
+          opacity: 0.7;
         }
 
         .flow-btn:hover:not(:disabled) {
-          background: #333;
+          background: var(--bg4);
           color: var(--txt0);
-          z-index: 10;
         }
 
         .flow-btn:disabled {
-          opacity: 0.25;
+          opacity: 0.2;
           cursor: not-allowed;
           filter: grayscale(1);
         }
