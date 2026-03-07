@@ -178,6 +178,8 @@ export function PcbCanvas({
         const bbH = (bounds.maxRow - bounds.minRow + 1) * SP;
 
         const viewport = viewportSizeRef.current;
+        if (viewport.width === 0) return; // Prevent infinity zoom on initial load
+
         // Normalize: Match updatePhysics behavior by using full height for consistent centering
         const fitZoom = Math.min(
             (viewport.width * CAMERA_CONFIG.TARGET_COVERAGE) / bbW,
@@ -195,7 +197,8 @@ export function PcbCanvas({
         const isAiphase = workflowStep === 3 || workflowStep === 4;
         const shouldBeLive = isAiphase && isProcessing && isAutoTracking;
 
-        if (isMilestone || isCounterJump || isInitialProcessing) {
+        // Trigger snap if milestone/counter changes (and we have a viewport)
+        if (isMilestone || isCounterJump || (isInitialProcessing && viewportSizeRef.current.width > 0)) {
             startSnap();
             hasInitializedFit.current = true;
             lastSnapStep.current = workflowStep;
@@ -212,6 +215,14 @@ export function PcbCanvas({
             lastSnapCounter.current = snapCounter;
         }
     }, [workflowStep, snapCounter, isInitialProcessing, draggingId, isProcessing, isAutoTracking, startSnap, trackingMode]);
+
+    // Late Initial Snap: Catch the board once dimensions arrive
+    useEffect(() => {
+        if (!hasInitializedFit.current && viewportSizeRef.current.width > 0 && bounds) {
+            startSnap();
+            hasInitializedFit.current = true;
+        }
+    }, [bounds, startSnap]);
 
     const zoomVelRef = useRef(0);
     const panVelRef = useRef({ x: 0, y: 0 });
