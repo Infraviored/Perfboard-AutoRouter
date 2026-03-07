@@ -378,22 +378,6 @@ export function PcbCanvas({
         };
     }, [isAutoTracking, trackingMode, updatePhysics]);
 
-    const labelsSvg = useMemo(() => {
-        if (!bounds) return '';
-        let out = '';
-        const pad = 15;
-        const minC = bounds.minCol - pad, maxC = bounds.maxCol + pad;
-        const minR = bounds.minRow - pad, maxR = bounds.maxRow + pad;
-        for (let c = minC; c <= maxC; c++) {
-            if (c % 5 !== 0) continue;
-            out += `<text x="${c * SP + SP / 2}" y="${(bounds.minRow - 0.6) * SP}" fill="rgba(0,187,144,0.3)" font-family="monospace" font-size="9" text-anchor="middle">${c}</text>`;
-        }
-        for (let r = minR; r <= maxR; r++) {
-            if (r % 5 !== 0) continue;
-            out += `<text x="${(bounds.minCol - 0.8) * SP}" y="${r * SP + SP / 2 + 3}" fill="rgba(0,187,144,0.3)" font-family="monospace" font-size="9" text-anchor="end">${r}</text>`;
-        }
-        return out;
-    }, [bounds]);
 
     const background = useMemo(() => generateBackgroundSVG(cols, rows, bounds), [cols, rows, bounds]);
     const wiresSvg = useMemo(() => generateWiresSVG(wires, activeNets), [wires, activeNets, tick]);
@@ -406,7 +390,6 @@ export function PcbCanvas({
             <svg ref={svgRef} width="100%" height="100%" style={{ display: 'block' }}>
                 <g transform={`translate(${camera.x}, ${camera.y}) scale(${camera.z})`}>
                     <g dangerouslySetInnerHTML={{ __html: background }} />
-                    <g dangerouslySetInnerHTML={{ __html: labelsSvg }} />
                     <g dangerouslySetInnerHTML={{ __html: wiresSvg }} />
                     <g dangerouslySetInnerHTML={{ __html: ratsnestSvg }} />
                     <g dangerouslySetInnerHTML={{ __html: componentsSvg }} />
