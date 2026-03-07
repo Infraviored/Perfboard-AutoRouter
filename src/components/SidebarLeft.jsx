@@ -5,7 +5,8 @@ import {
   Library,
   Cpu,
   Pencil,
-  Info
+  Info,
+  CircuitBoard
 } from 'lucide-react';
 
 export function SidebarLeft({
@@ -36,7 +37,7 @@ export function SidebarLeft({
       {/* Circuit Definition Section */}
       <section className="sidebar-section">
         <div className="section-header">
-          <Info size={18} />
+          <CircuitBoard size={18} />
           <h2>Circuit Definition</h2>
         </div>
         <div className="lbody">
@@ -130,7 +131,7 @@ export function SidebarLeft({
           padding: 4px 0;
         }
         .section-header {
-           padding: 12px 16px 8px 16px;
+           padding: 12px 12px 8px 16px;
            display: flex;
            align-items: center;
            gap: 10px;
@@ -150,16 +151,23 @@ export function SidebarLeft({
         .section-divider {
            height: 1px;
            background: linear-gradient(90deg, transparent, var(--border2), transparent);
-           margin: 4px 16px;
+           margin: 4px 12px 4px 16px;
            opacity: 0.3;
         }
         .header-actions-row {
           display: flex;
           gap: 6px;
-          padding: 0 16px 8px 16px;
+          padding: 0 12px 8px 16px;
+        }
+        .lbody {
+          padding: 0 12px 12px 16px;
+          display: flex;
+          flex-direction: column;
         }
         .prompt-help-btn {
-          margin: 0 16px 10px 16px;
+          margin-bottom: 10px;
+          width: 100%;
+          box-sizing: border-box;
           background: rgba(31, 111, 235, 0.1);
           border: 1px solid rgba(31, 111, 235, 0.2);
           color: var(--blu-bright);
@@ -178,12 +186,14 @@ export function SidebarLeft({
           border-color: var(--blu-bright);
         }
         .textarea-container {
-           margin: 0 16px;
            position: relative;
+           width: 100%;
+           box-sizing: border-box;
            border-radius: 8px;
            overflow: hidden;
            border: 1px solid var(--border2);
            background: var(--bg3);
+           display: flex; /* Ensures textarea fills it better */
         }
         textarea {
            border: none !important;
@@ -218,7 +228,6 @@ export function SidebarLeft({
         
         .comp-list {
           gap: 6px;
-          padding: 0 16px 16px 16px;
         }
         .empty-state {
           padding: 30px 20px;
