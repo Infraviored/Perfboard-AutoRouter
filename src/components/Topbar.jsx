@@ -166,7 +166,7 @@ export function Topbar({
           background: transparent;
           border: none;
           color: var(--txt2);
-          padding: 7px 18px;
+          padding: 7px 20px 7px 28px;
           cursor: pointer;
           font-size: .78em;
           font-weight: 700;
@@ -176,29 +176,42 @@ export function Topbar({
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
           position: relative;
           border-radius: 0;
-          position: relative;
-        }
-
-        /* The vertical separator between non-active buttons */
-        .flow-btn:not(:last-child)::after {
-          content: '';
-          position: absolute;
-          right: 0;
-          top: 20%;
-          bottom: 20%;
-          width: 1px;
-          background: var(--border);
-          opacity: 0.5;
+          /* Chevron shape: points right, has hole on left */
+          clip-path: polygon(
+            calc(100% - 10px) 0%, 
+            100% 50%, 
+            calc(100% - 10px) 100%, 
+            0% 100%, 
+            10px 50%, 
+            0% 0%
+          );
+          margin-left: -9px; /* Pull into previous arrow's hole */
         }
         
         .flow-btn:first-child {
           border-radius: 8px 0 0 8px;
+          padding-left: 20px;
+          margin-left: 0;
+          /* First child: NO hole on left */
+          clip-path: polygon(
+            calc(100% - 10px) 0%, 
+            100% 50%, 
+            calc(100% - 10px) 100%, 
+            0% 100%, 
+            0% 0%
+          );
         }
         .flow-btn:last-child {
           border-radius: 0 8px 8px 0;
-        }
-        .flow-btn:last-child::after {
-          display: none;
+          padding-right: 20px;
+          /* Last child: NO point on right */
+          clip-path: polygon(
+            100% 0%, 
+            100% 100%, 
+            0% 100%, 
+            10px 50%, 
+            0% 0%
+          );
         }
         
         .flow-btn.active {
@@ -206,14 +219,6 @@ export function Topbar({
           color: var(--txt0);
           box-shadow: 0 2px 6px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
           z-index: 2;
-          /* Remove separator when active */
-        }
-        .flow-btn.active::after {
-          display: none;
-        }
-        /* Also hide PREVIOUS separator when active */
-        .flow-btn.active + .flow-btn::before {
-          display: none;
         }
 
         /* Color accent for the current active/completed stages */
