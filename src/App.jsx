@@ -44,6 +44,12 @@ function App() {
     return { components: [], wires: [], cols: 30, rows: 20, tick: 0 };
   });
 
+  const [workflowStep, setWorkflowStep] = useState(() => {
+    const saved = localStorage.getItem('pcb_workflow_step');
+    return saved ? parseInt(saved, 10) : 0;
+  });
+  const [snapCounter, setSnapCounter] = useState(0);
+
   const [jsonInput, setJsonInput] = useState(() => {
     return localStorage.getItem('pcb_json_input') || '';
   });
@@ -75,6 +81,10 @@ function App() {
     localStorage.setItem('pcb_json_input', jsonInput);
   }, [jsonInput]);
 
+  useEffect(() => {
+    localStorage.setItem('pcb_workflow_step', workflowStep.toString());
+  }, [workflowStep]);
+
   const [status, setStatus] = useState({ title: '', progress: 0, best: '', isProcessing: false, isInitial: false });
   const [toast, setToast] = useState({ msg: '', type: 'ok' });
   const [selectedId, setSelectedId] = useState(null);
@@ -82,7 +92,6 @@ function App() {
   const [hoveredNet, setHoveredNet] = useState(null);
   const [tool, setTool] = useState('sel');
   const [bestSnapshot, setBestSnapshot] = useState(null);
-  const [workflowStep, setWorkflowStep] = useState(0); // 0: Idle, 1: Loaded, 2: Routed, 3: Optimized, 4: Explored
 
 
   // Modal states
@@ -113,9 +122,12 @@ function App() {
   }, [engine, historyIndex]);
 
   const handleLoadTemplate = useCallback(() => {
+    setWorkflowStep(0); // Reset for clean trigger
     setJsonInput(JSON.stringify(TEMPLATE, null, 2));
     const defs = processTemplate(TEMPLATE);
     engine.initializeBoard(defs);
+    setWorkflowStep(1); // Loaded
+    setSnapCounter(c => c + 1);
     saveHistory();
   }, [engine, saveHistory]);
 
@@ -126,6 +138,7 @@ function App() {
       if (defs) {
         engine.initializeBoard(defs);
         setWorkflowStep(1);
+        setSnapCounter(c => c + 1);
         saveHistory();
       }
     } catch (e) {
@@ -135,6 +148,7 @@ function App() {
 
   const handleRoute = useCallback(async () => {
     setBestSnapshot(null);
+    setWorkflowStep(2);
     setStatus(prev => ({ ...prev, isProcessing: true, isInitial: true, results: null }));
     try {
       const data = JSON.parse(jsonInput);
@@ -142,7 +156,7 @@ function App() {
       const res = await engine.placeAndRoute(defs);
       if (res) {
         setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, results: res }));
-        setWorkflowStep(2);
+        setSnapCounter(c => c + 1);
         setTimeout(() => {
           setStatus(prev => ({ ...prev, results: null }));
           setBestSnapshot(null);
@@ -159,11 +173,11 @@ function App() {
 
   const handleOptimize = useCallback(async () => {
     setBestSnapshot(null);
+    setWorkflowStep(3);
     setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
     const res = await engine.optimize();
     if (res) {
       setStatus(prev => ({ ...prev, isProcessing: false, results: res }));
-      setWorkflowStep(3);
       setTimeout(() => {
         setStatus(prev => ({ ...prev, results: null }));
         setBestSnapshot(null);
@@ -177,11 +191,11 @@ function App() {
 
   const handleExplore = useCallback(async () => {
     setBestSnapshot(null);
+    setWorkflowStep(4);
     setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
     const res = await engine.plateau();
     if (res) {
       setStatus(prev => ({ ...prev, isProcessing: false, results: res }));
-      setWorkflowStep(4);
       setTimeout(() => {
         setStatus(prev => ({ ...prev, results: null }));
         setBestSnapshot(null);
@@ -503,6 +517,7 @@ Use this format:
               tick={board.tick} isProcessing={status.isProcessing || !!status.results}
               isInitialProcessing={status.isInitial}
               workflowStep={workflowStep}
+              snapCounter={snapCounter}
             />
           </main>
           <ProcessingBar

@@ -194,7 +194,8 @@ export function PcbCanvas({
     useEffect(() => {
         const isMilestone = (workflowStep === 1 || workflowStep === 2) && workflowStep !== lastSnapStep.current;
         const isCounterJump = snapCounter !== lastSnapCounter.current;
-        const isAiphase = workflowStep === 3 || workflowStep === 4;
+        // AI Phase: Either milestone reached, or we are currently processing a non-initial task (Optimize/Explore)
+        const isAiphase = (workflowStep === 3 || workflowStep === 4) || (isProcessing && !isInitialProcessing);
         const shouldBeLive = isAiphase && isProcessing && isAutoTracking;
 
         // Trigger snap if milestone/counter changes (and we have a viewport)
