@@ -35,12 +35,28 @@ export function PcbCanvas({
     snapCounter
 }) {
     const svgRef = useRef(null);
-    const viewportSizeRef = useRef({ width: 0, height: 0 });
-    const [camera, setCamera] = useState({ x: 0, y: 0, z: 1 });
+    const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
+    const [camera, setCamera] = useState(() => {
+        const saved = localStorage.getItem('pcb_camera_state');
+        if (saved) {
+            try { return JSON.parse(saved); } catch (e) { }
+        }
+        return { x: 0, y: 0, z: 1 };
+    });
     const [isPanning, setIsPanning] = useState(false);
     const [lastPos, setLastPos] = useState({ x: 0, y: 0 });
     const [draggingId, setDraggingId] = useState(null);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+    const hasInitializedFit = useRef(!!localStorage.getItem('pcb_camera_state'));
+
+    // Persist camera
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            localStorage.setItem('pcb_camera_state', JSON.stringify(camera));
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [camera]);
 
     const getMousePos = (e) => {
         if (!svgRef.current) return { x: 0, y: 0 };
@@ -123,18 +139,16 @@ export function PcbCanvas({
     const TRACKING_MODES = { NONE: 'none', SNAP: 'snap', LIVE: 'live' };
     const [trackingMode, setTrackingMode] = useState(TRACKING_MODES.NONE);
     const [isAutoTracking, setIsAutoTracking] = useState(true);
-    const hasInitializedFit = useRef(false);
 
     useEffect(() => {
         if (!svgRef.current) return;
         const resizeObs = new ResizeObserver(entries => {
             const entry = entries[0];
             if (entry) {
-                // Rounding to avoid sub-pixel jitter
-                viewportSizeRef.current = {
+                setViewportSize({
                     width: Math.round(entry.contentRect.width),
                     height: Math.round(entry.contentRect.height)
-                };
+                });
             }
         });
         resizeObs.observe(svgRef.current);
@@ -177,7 +191,7 @@ export function PcbCanvas({
         const bbW = (bounds.maxCol - bounds.minCol + 1) * SP;
         const bbH = (bounds.maxRow - bounds.minRow + 1) * SP;
 
-        const viewport = viewportSizeRef.current;
+        const viewport = viewportSize;
         if (viewport.width === 0) return; // Prevent infinity zoom on initial load
 
         // Normalize: Match updatePhysics behavior by using full height for consistent centering
@@ -189,24 +203,28 @@ export function PcbCanvas({
 
         snapLockRef.current = { targetCX, targetCY, fitZoom };
         setTrackingMode(TRACKING_MODES.SNAP);
-    }, [bounds]);
+    }, [bounds, viewportSize]);
 
     useEffect(() => {
         const isMilestone = (workflowStep === 1 || workflowStep === 2) && workflowStep !== lastSnapStep.current;
         const isCounterJump = snapCounter !== lastSnapCounter.current;
-        // AI Phase: Either milestone reached, or we are currently processing a non-initial task (Optimize/Explore)
-        const isAiphase = (workflowStep === 3 || workflowStep === 4) || (isProcessing && !isInitialProcessing);
-        const shouldBeLive = isAiphase && isProcessing && isAutoTracking;
-
-        // Trigger snap if milestone/counter changes (and we have a viewport)
         const justFinished = wasProcessing.current && !isProcessing;
 
-        if (isMilestone || isCounterJump || justFinished || (isInitialProcessing && viewportSizeRef.current.width > 0)) {
+        // Conditions for an automatic snap
+        const shouldSnap = isMilestone || isCounterJump || justFinished || isInitialProcessing || (!hasInitializedFit.current && bounds);
+
+        if (shouldSnap && viewportSize.width > 0) {
             startSnap();
             hasInitializedFit.current = true;
             lastSnapStep.current = workflowStep;
             lastSnapCounter.current = snapCounter;
-        } else if (shouldBeLive && trackingMode !== TRACKING_MODES.LIVE && !draggingId) {
+        }
+
+        // Live Mode Detection
+        const isAiphase = (workflowStep === 3 || workflowStep === 4) || (isProcessing && !isInitialProcessing);
+        const shouldBeLive = isAiphase && isProcessing && isAutoTracking;
+
+        if (shouldBeLive && trackingMode !== TRACKING_MODES.LIVE && !draggingId && trackingMode !== TRACKING_MODES.SNAP) {
             setTrackingMode(TRACKING_MODES.LIVE);
         } else if (!shouldBeLive && trackingMode === TRACKING_MODES.LIVE) {
             setTrackingMode(TRACKING_MODES.NONE);
@@ -215,17 +233,11 @@ export function PcbCanvas({
         wasProcessing.current = isProcessing;
         if (workflowStep === 0) {
             lastSnapStep.current = 0;
-            lastSnapCounter.current = snapCounter;
+            lastSnapCounter.current = 0;
+            hasInitializedFit.current = false;
+            localStorage.removeItem('pcb_camera_state');
         }
-    }, [workflowStep, snapCounter, isInitialProcessing, draggingId, isProcessing, isAutoTracking, startSnap, trackingMode]);
-
-    // Late Initial Snap: Catch the board once dimensions arrive
-    useEffect(() => {
-        if (!hasInitializedFit.current && viewportSizeRef.current.width > 0 && bounds) {
-            startSnap();
-            hasInitializedFit.current = true;
-        }
-    }, [bounds, startSnap]);
+    }, [workflowStep, snapCounter, isInitialProcessing, isProcessing, isAutoTracking, draggingId, bounds, viewportSize, startSnap, trackingMode]);
 
     const zoomVelRef = useRef(0);
     const panVelRef = useRef({ x: 0, y: 0 });
@@ -233,8 +245,8 @@ export function PcbCanvas({
     const targetBoundsRef = useRef(null);
     const lastTimeRef = useRef(0);
     const rAFRef = useRef(null);
-    const simPan = useRef({ x: 0, y: 0 });
-    const simZoom = useRef(1);
+    const simPan = useRef({ x: camera.x, y: camera.y });
+    const simZoom = useRef(camera.z);
 
     const lastUpdateKeyRef = useRef("");
     const zoomCountRef = useRef(0);
@@ -248,7 +260,7 @@ export function PcbCanvas({
         const dt = Math.min((time - lastTimeRef.current) / 1000, 0.1);
         lastTimeRef.current = time;
 
-        const viewport = viewportSizeRef.current;
+        const viewport = viewportSize;
         if (viewport.width === 0) {
             rAFRef.current = requestAnimationFrame(updatePhysics);
             return;
