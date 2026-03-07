@@ -127,24 +127,45 @@ export function Topbar({
           border-bottom: 1px solid var(--border);
           display: flex;
           align-items: center;
-          gap: 4px;
+          gap: 0;
           padding: 0 16px;
           flex-shrink: 0;
           z-index: 100;
         }
         .logo {
           font-family: 'Outfit', sans-serif;
-          font-size: 1.1em;
+          font-size: 1.6rem;
+          line-height: 1;
           font-weight: 800;
           color: var(--txt0);
-          margin-right: 12px;
+          width: calc(var(--lsb-width) - 16px);
+          margin: 0;
           white-space: nowrap;
-          letter-spacing: -0.02em;
+          letter-spacing: -0.03em;
+          display: flex;
+          align-items: baseline;
         }
         .logo em {
           color: var(--blu-bright);
           font-style: normal;
           font-weight: 600;
+        }
+
+        .sep {
+          width: 1px;
+          height: 24px;
+          background: repeating-linear-gradient(
+            0deg,
+            var(--border),
+            var(--border) 2px,
+            transparent 2px,
+            transparent 4px
+          );
+          margin: 0;
+        }
+        
+        .btn-group, .workflow-track, .tbtn {
+          margin: 0 8px;
         }
         
         .btn-group {
