@@ -199,7 +199,9 @@ export function PcbCanvas({
         const shouldBeLive = isAiphase && isProcessing && isAutoTracking;
 
         // Trigger snap if milestone/counter changes (and we have a viewport)
-        if (isMilestone || isCounterJump || (isInitialProcessing && viewportSizeRef.current.width > 0)) {
+        const justFinished = wasProcessing.current && !isProcessing;
+
+        if (isMilestone || isCounterJump || justFinished || (isInitialProcessing && viewportSizeRef.current.width > 0)) {
             startSnap();
             hasInitializedFit.current = true;
             lastSnapStep.current = workflowStep;
@@ -294,22 +296,31 @@ export function PcbCanvas({
 
             // 2. DERIVE NEXT PAN (Using nextZ for Snap to prevent wobble)
             if (isSnap) {
+                // Snap mode: Use full viewport for initial placement consistency across Load/Route
                 simPan.current.x = viewport.width / 2 - targetCX * nextZ;
                 simPan.current.y = viewport.height / 2 - targetCY * nextZ;
                 smoothCenterRef.current = { x: targetCX, y: targetCY };
             } else {
                 const worldCX = smoothCenterRef.current.x;
                 const worldCY = smoothCenterRef.current.y;
+
+                // Adaptive Viewport: Dodge the bottom bar if it's there
+                const pbHeight = isProcessing ? 240 : 0;
+                const targetAvailableHeight = viewport.height - pbHeight;
+
                 const targetViewportCX = viewport.width / 2;
-                const targetViewportCY = viewport.height / 2;
+                const targetViewportCY = targetAvailableHeight / 2;
 
                 const bbW = (b.maxCol - b.minCol + 1) * SP;
                 const bbH = (b.maxRow - b.minRow + 1) * SP;
-                const currentCoverage = Math.max((bbW * curZ) / viewport.width, (bbH * curZ) / viewport.height);
+
+                // Track against the current available area
+                const currentCoverage = Math.max((bbW * curZ) / viewport.width, (bbH * curZ) / targetAvailableHeight);
                 const errorX = targetViewportCX - (worldCX * curZ + simPan.current.x);
                 const errorY = targetViewportCY - (worldCY * curZ + simPan.current.y);
+
                 const deadzoneX = viewport.width * CAMERA_CONFIG.PAN_DEADZONE_X;
-                const deadzoneY = viewport.height * CAMERA_CONFIG.PAN_DEADZONE_Y;
+                const deadzoneY = targetAvailableHeight * CAMERA_CONFIG.PAN_DEADZONE_Y;
 
                 const isZoomViolated = currentCoverage > CAMERA_CONFIG.ZOOM_OUT_THRESHOLD || currentCoverage < CAMERA_CONFIG.ZOOM_IN_THRESHOLD;
                 const isPanViolated = Math.abs(errorX) > deadzoneX || Math.abs(errorY) > deadzoneY;
