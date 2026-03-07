@@ -34,15 +34,16 @@ export function Topbar({
 
       <div className="workflow-track">
         <button
-          className={`flow-btn ${workflowStep >= 1 ? 'active' : ''}`}
+          className={`flow-btn ${workflowStep >= 1 && !(workflowStep === 1 && isProcessing) ? 'completed' : ''} ${workflowStep === 1 && isProcessing ? 'processing' : ''} ${workflowStep === 0 && !isProcessing ? 'next' : ''}`}
           onClick={() => onStepClick(1)}
+          disabled={isProcessing}
           style={{ '--flow-color': '#4da0ff' }}
         >
           <FileJson size={16} />
           Load
         </button>
         <button
-          className={`flow-btn ${workflowStep >= 2 ? 'active' : ''}`}
+          className={`flow-btn ${workflowStep >= 2 && !(workflowStep === 2 && isProcessing) ? 'completed' : ''} ${workflowStep === 2 && isProcessing ? 'processing' : ''} ${workflowStep === 1 && !isProcessing ? 'next' : ''}`}
           onClick={() => onStepClick(2)}
           disabled={workflowStep < 1 || isProcessing}
           style={{ '--flow-color': 'var(--grn-bright)' }}
@@ -51,7 +52,7 @@ export function Topbar({
           Route
         </button>
         <button
-          className={`flow-btn ${workflowStep >= 3 ? 'active' : ''}`}
+          className={`flow-btn ${workflowStep >= 3 && !(workflowStep === 3 && isProcessing) ? 'completed' : ''} ${workflowStep === 3 && isProcessing ? 'processing' : ''} ${workflowStep === 2 && !isProcessing ? 'next' : ''}`}
           onClick={() => onStepClick(3)}
           disabled={workflowStep < 2 || isProcessing}
           style={{ '--flow-color': 'var(--blu-bright)' }}
@@ -60,7 +61,7 @@ export function Topbar({
           Optimize
         </button>
         <button
-          className={`flow-btn ${workflowStep >= 4 ? 'active' : ''}`}
+          className={`flow-btn ${workflowStep >= 4 && !(workflowStep === 4 && isProcessing) ? 'completed' : ''} ${workflowStep === 4 && isProcessing ? 'processing' : ''} ${workflowStep === 3 && !isProcessing ? 'next' : ''}`}
           onClick={() => onStepClick(4)}
           disabled={workflowStep < 3 || isProcessing}
           style={{ '--flow-color': '#a371f7' }}
@@ -214,46 +215,107 @@ export function Topbar({
           );
         }
         
-        .flow-btn.active {
+        .flow-btn.completed {
+          background: rgba(255,255,255,0.06);
+          color: var(--txt1);
+          z-index: 1;
+        }
+
+        .flow-btn.next {
           background: var(--bg3);
           color: var(--txt0);
-          box-shadow: 0 2px 6px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
           z-index: 2;
         }
 
-        /* Color accent for the current active/completed stages */
-        .flow-btn.active svg {
-          color: var(--flow-color);
-          filter: drop-shadow(0 0 5px var(--flow-color));
+        .flow-btn.processing {
+          background-color: var(--bg4);
+          background-image: linear-gradient(90deg, 
+            transparent 0%, 
+            color-mix(in srgb, var(--flow-color), transparent 85%) 50%, 
+            transparent 100%
+          );
+          background-size: 200% 100%;
+          color: var(--txt0);
+          z-index: 5;
+          filter: drop-shadow(0 0 10px color-mix(in srgb, var(--flow-color), transparent 60%));
+          animation: flow-scan-bg 1.5s infinite linear;
+          opacity: 1 !important; /* Force visibility even if disabled */
         }
 
-        /* Marker for current step */
-        .flow-btn.active::before {
+        /* Pulsing indicator for the target step */
+        @keyframes flow-pulse {
+          0% { opacity: 0.6; transform: scaleX(1); }
+          50% { opacity: 1; transform: scaleX(1.05); }
+          100% { opacity: 0.6; transform: scaleX(1); }
+        }
+
+        /* Scanning effect for processing background */
+        @keyframes flow-scan-bg {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+
+        .flow-btn.completed svg {
+          color: var(--flow-color);
+          opacity: 0.6;
+        }
+
+        .flow-btn.next svg,
+        .flow-btn.processing svg {
+          color: var(--flow-color);
+          filter: drop-shadow(0 0 8px var(--flow-color));
+        }
+
+        /* Marker for states - Move to TOP and make FULL width */
+        .flow-btn.completed::before,
+        .flow-btn.next::before,
+        .flow-btn.processing::before {
           content: '';
           position: absolute;
-          bottom: 0px;
-          left: 15%;
-          right: 15%;
-          height: 2px;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 3px;
           background: var(--flow-color);
-          box-shadow: 0 0 8px var(--flow-color);
-          border-radius: 2px;
-          opacity: 0.8;
+          pointer-events: none;
+        }
+
+        .flow-btn.completed::before {
+          opacity: 0.2;
+        }
+
+        .flow-btn.next::before {
+          opacity: 0.9;
+          box-shadow: 0 0 10px var(--flow-color);
+          animation: flow-pulse 2s infinite ease-in-out;
+        }
+
+        .flow-btn.processing::before {
+          opacity: 1;
+          box-shadow: 0 0 15px var(--flow-color);
+          animation: flow-pulse 0.8s infinite ease-in-out;
         }
 
         .flow-btn:hover:not(:disabled) {
           background: rgba(255,255,255,0.03);
           color: var(--txt0);
-          z-index: 3;
+          z-index: 10;
         }
-        .flow-btn.active:hover:not(:disabled) {
-          background: var(--bg4);
+        .flow-btn.next:hover:not(:disabled),
+        .flow-btn.processing:hover:not(:disabled) {
+          background-color: var(--bg4);
         }
 
-        .flow-btn:disabled {
+        .flow-btn:disabled:not(.processing):not(.completed) {
           opacity: 0.15;
           cursor: not-allowed;
           filter: grayscale(1);
+        }
+        
+        .flow-btn.completed:disabled {
+          cursor: not-allowed;
+          opacity: 0.8; /* Keep it visible even when disabled */
         }
       `}} />
     </header>
