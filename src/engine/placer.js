@@ -2,14 +2,14 @@
 var bboxCache = null;
 var numNetsCache = 0;
 
-function setupHpwl(numNets) {
+export function setupHpwl(numNets) {
   numNetsCache = numNets;
   if (!bboxCache || bboxCache.length < numNets * 4) {
     bboxCache = new Int32Array(numNets * 4);
   }
 }
 
-function hpwl(components) {
+export function hpwl(components) {
   // Reset existing bounding boxes
   for (let i = 0; i < numNetsCache * 4; i += 4) {
     bboxCache[i] = 1000000;    // minC
@@ -43,12 +43,12 @@ function hpwl(components) {
   return total;
 }
 
-function hasOverlap(a, b) {
+export function hasOverlap(a, b) {
   return a.ox < b.ox + b.w && a.ox + a.w > b.ox &&
     a.oy < b.oy + b.h && a.oy + a.h > b.oy;
 }
 
-function moveComp(comp, ox, oy) {
+export function moveComp(comp, ox, oy) {
   comp.ox = ox; comp.oy = oy;
   const pins = comp.pins;
   for (let i = 0; i < pins.length; i++) {
@@ -58,7 +58,7 @@ function moveComp(comp, ox, oy) {
   }
 }
 
-function anyOverlap(comp, all) {
+export function anyOverlap(comp, all) {
   for (let i = 0; i < all.length; i++) {
     const o = all[i];
     if (o !== comp && hasOverlap(comp, o)) return true;
@@ -67,7 +67,7 @@ function anyOverlap(comp, all) {
 }
 
 // In-place rotation to prevent GC pauses
-function rotateCompInPlace(c) {
+export function rotateComp90InPlace(c) {
   const oldW = c.w;
   const oldH = c.h;
 
@@ -88,7 +88,7 @@ function rotateCompInPlace(c) {
   }
 }
 
-function unrotateCompInPlace(c) {
+export function unrotateComp90InPlace(c) {
   const oldW = c.w;
   const oldH = c.h;
 
@@ -109,7 +109,7 @@ function unrotateCompInPlace(c) {
   }
 }
 
-async function anneal(components, cols, rows, onProgress, shouldCancel) {
+export async function anneal(components, cols, rows, onProgress, shouldCancel) {
   if (components.length === 0) return;
 
   function yld() { return new Promise(r => setTimeout(r, 0)); }
@@ -144,14 +144,13 @@ async function anneal(components, cols, rows, onProgress, shouldCancel) {
       if (shouldCancel && shouldCancel()) return;
       const c = components[Math.floor(Math.random() * components.length)];
       const oldOx = c.ox, oldOy = c.oy;
-      const oldW = c.w, oldH = c.h;
 
       // Try rotation in-place (1 to 3 times for 90, 180, 270 deg)
       let rotationSteps = 0;
       if (Math.random() < 0.4) {
         rotationSteps = Math.floor(Math.random() * 3) + 1;
         for (let r = 0; r < rotationSteps; r++) {
-          rotateCompInPlace(c);
+          rotateComp90InPlace(c);
         }
       }
 
@@ -163,15 +162,15 @@ async function anneal(components, cols, rows, onProgress, shouldCancel) {
       else if (randDir < 0.75) doy = mag;
       else doy = -mag;
 
-      const nox = Math.max(1, Math.min(cols - c.w - 1, c.ox + dox));
-      const noy = Math.max(1, Math.min(rows - c.h - 1, c.oy + doy));
+      const nox = Math.max(-50000, Math.min(50000, c.ox + dox));
+      const noy = Math.max(-50000, Math.min(50000, c.oy + doy));
 
       moveComp(c, nox, noy);
 
       let overlap = anyOverlap(c, components);
       if (overlap) {
         // Revert 
-        for (let r = 0; r < rotationSteps; r++) unrotateCompInPlace(c);
+        for (let r = 0; r < rotationSteps; r++) unrotateComp90InPlace(c);
         moveComp(c, oldOx, oldOy);
         continue;
       }
@@ -183,7 +182,7 @@ async function anneal(components, cols, rows, onProgress, shouldCancel) {
         cur = ns;
       } else {
         // Revert
-        for (let r = 0; r < rotationSteps; r++) unrotateCompInPlace(c);
+        for (let r = 0; r < rotationSteps; r++) unrotateComp90InPlace(c);
         moveComp(c, oldOx, oldOy);
       }
     }
