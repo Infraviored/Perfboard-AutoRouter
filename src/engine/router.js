@@ -119,7 +119,12 @@ export function incrementalReroute(components, wires, movedComps) {
   const affectedNets = new Set();
   for (const mc of moved) {
     for (const p of mc.pins) {
-      if (p.net) affectedNets.add(p.net);
+      if (p.net) {
+        // Only reroute if this net already has at least one wire segment (auto or manual)
+        if (wires.some(w => w.net === p.net)) {
+          affectedNets.add(p.net);
+        }
+      }
     }
   }
 

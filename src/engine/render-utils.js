@@ -125,24 +125,107 @@ export function generateRatsnestSVG(components, wires = [], isDragging = false) 
     const { net, pins } = netObj;
     if (pins.length < 2) continue;
 
-    // If this net has a successful (non-failed) wire, hide the ratsnest
-    const isRouted = wires.some(w => w.net === net && !w.failed);
-    if (isRouted) continue;
+    const netWires = wires.filter(w => w.net === net && !w.failed);
 
-    const conn = new Set([0]);
-    while (conn.size < pins.length) {
-      let bD = Infinity, bI = -1, bJ = -1;
-      conn.forEach(i => pins.forEach((p, j) => {
-        if (conn.has(j)) return;
-        const d = Math.abs(pins[i].col - p.col) + Math.abs(pins[i].row - p.row);
-        if (d < bD) { bD = d; bI = i; bJ = j; }
-      }));
+    // Coordinate-based connectivity: map each coordinate occupied by the net to a group ID
+    const groups = pins.map((p, i) => i);
+    const parent = Array.from({ length: pins.length }, (_, i) => i);
+    const findParent = (i) => {
+      while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; }
+      return i;
+    };
+    const union = (i, j) => {
+      const rootI = findParent(i), rootJ = findParent(j);
+      if (rootI !== rootJ) parent[rootI] = rootJ;
+    };
+
+    // 1. Map each grid coordinate used by this net to the set of pins it can "see"
+    const coordMap = new Map(); // "col,row" -> Set of root parents
+
+    // Seed coordMap with pin locations
+    pins.forEach((p, i) => {
+      const key = `${p.col},${p.row}`;
+      if (!coordMap.has(key)) coordMap.set(key, new Set());
+      coordMap.get(key).add(i);
+    });
+
+    // 2. For each wire, all coordinates in that wire are now connected
+    // This is effectively a flood-fill across all segments
+    let changed = true;
+    while (changed) {
+      changed = false;
+      netWires.forEach(w => {
+        const path = w.path;
+        if (!path) return;
+
+        // Find all groups currently touching this wire
+        const touchingGroupRoots = new Set();
+        path.forEach(pt => {
+          const key = `${pt.col},${pt.row}`;
+          if (coordMap.has(key)) {
+            coordMap.get(key).forEach(pIdx => touchingGroupRoots.add(findParent(pIdx)));
+          }
+        });
+
+        if (touchingGroupRoots.size > 1) {
+          const roots = Array.from(touchingGroupRoots);
+          const first = roots[0];
+          for (let i = 1; i < roots.length; i++) {
+            union(first, roots[i]);
+            changed = true;
+          }
+        }
+
+        // Mark all path points as belonging to the unified root
+        const newRoot = findParent(Array.from(touchingGroupRoots)[0] ?? -1);
+        if (newRoot !== -1) {
+          path.forEach(pt => {
+            const key = `${pt.col},${pt.row}`;
+            if (!coordMap.has(key)) {
+              coordMap.set(key, new Set());
+              changed = true;
+            }
+            if (!coordMap.get(key).has(newRoot)) {
+              coordMap.get(key).add(newRoot);
+              changed = true;
+            }
+          });
+        }
+      });
+    }
+
+    // 3. Final Grouping
+    const finalGroupsMap = new Map();
+    pins.forEach((p, i) => {
+      const root = findParent(i);
+      if (!finalGroupsMap.has(root)) finalGroupsMap.set(root, []);
+      finalGroupsMap.get(root).push(i);
+    });
+    const finalGroups = Array.from(finalGroupsMap.values());
+
+    if (finalGroups.length <= 1) continue;
+
+    // 4. MST between groups
+    const connectedGroups = new Set([0]);
+    while (connectedGroups.size < finalGroups.length) {
+      let bD = Infinity, bI = -1, bJ = -1, pI = -1, pJ = -1;
+      connectedGroups.forEach(gi => {
+        finalGroups.forEach((groupJ, gj) => {
+          if (connectedGroups.has(gj)) return;
+          finalGroups[gi].forEach(pi => {
+            groupJ.forEach(pj => {
+              const d = Math.abs(pins[pi].col - pins[pj].col) + Math.abs(pins[pi].row - pins[pj].row);
+              if (d < bD) { bD = d; bI = gi; bJ = gj; pI = pi; pJ = pj; }
+            });
+          });
+        });
+      });
+
       if (bJ === -1) break;
-      out += `<line x1="${pins[bI].col * SP + SP / 2}" y1="${pins[bI].row * SP + SP / 2}" x2="${pins[bJ].col * SP + SP / 2}" y2="${pins[bJ].row * SP + SP / 2}" stroke="${netColor(net)}" opacity="0.75" stroke-width="2" stroke-dasharray="6 4"/>`;
-      conn.add(bJ);
+      out += `<line x1="${pins[pI].col * SP + SP / 2}" y1="${pins[pI].row * SP + SP / 2}" x2="${pins[pJ].col * SP + SP / 2}" y2="${pins[pJ].row * SP + SP / 2}" stroke="${netColor(net)}" opacity="0.35" stroke-width="1.5" stroke-dasharray="4 4"/>`;
+      connectedGroups.add(bJ);
     }
   }
-  cachedRatsnest = out;
   return out;
 }
 
