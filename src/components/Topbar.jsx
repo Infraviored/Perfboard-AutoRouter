@@ -23,6 +23,7 @@ export function Topbar({
   onClearWires,
   onReset,
   onExportSVG,
+  onRouteOnly,
   hasWires,
   isProcessing
 }) {
@@ -92,6 +93,10 @@ export function Topbar({
         <button className="tbtn" onClick={onExportState} title="Export State">
           <Upload size={16} />
           Export
+        </button>
+        <button className="tbtn" onClick={onRouteOnly} title="Connect Airwires" disabled={isProcessing}>
+          <Zap size={16} />
+          Connect
         </button>
       </div>
 

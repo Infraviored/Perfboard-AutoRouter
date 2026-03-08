@@ -603,6 +603,7 @@ Use this format:
         onExportState={handleExportState}
         onClearWires={handleClearWires}
         onReset={handleReset}
+        onRouteOnly={handleRouteOnly}
         onExportSVG={() => { /* logic */ }}
         hasWires={board.wires.length > 0}
         isProcessing={status.isProcessing}
