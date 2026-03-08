@@ -536,7 +536,16 @@ Use this format:
       if (e.ctrlKey && e.key === 'y') { e.preventDefault(); handleRedo(); }
       if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); handleRoute(); }
       if (e.shiftKey && e.key === 'R') { e.preventDefault(); handleRoute(); }
-      if (e.key === 'v') { e.preventDefault(); setTool('sel'); }
+
+      // Fix: 'v' shortcut should not prevent default if Ctrl/Cmd is held (for paste)
+      // and should only fire if we are not in a text area.
+      if (e.key === 'v' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
+          e.preventDefault();
+          setTool('sel');
+        }
+      }
+
       if (e.key === 'Delete' || e.key === 'Backspace') {
         // Only trigger if no input is focused
         if (document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
