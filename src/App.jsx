@@ -414,14 +414,20 @@ Use this format:
     } else if (confirmData.type === 'net') {
       engine.deleteWire(confirmData.targetId);
       setSelectedNet(null);
+    } else if (confirmData.type === 'reset') {
+      handleLoadTemplate();
     }
     setConfirmData({ isOpen: false, type: null, targetId: null });
     saveHistory();
   }, [confirmData, engine, activePin, handleRouteOnly, saveHistory]);
 
   const handleReset = useCallback(() => {
-    if (window.confirm('Reset everything?')) handleLoadTemplate();
-  }, [handleLoadTemplate]);
+    setConfirmData({
+      isOpen: true,
+      type: 'reset',
+      targetId: 'board'
+    });
+  }, []);
 
   const handleAddFromLibrary = useCallback((compDef) => {
     const newId = `C${board.components.length + 1}`;
@@ -681,8 +687,19 @@ Use this format:
       <PromptOverlay isOpen={isPromptOpen} onClose={() => setIsPromptOpen(false)} />
       <ConfirmOverlay
         isOpen={confirmData.isOpen}
-        title={`Delete ${confirmData.type === 'comp' ? 'Component' : (confirmData.type === 'pin' ? 'Pin Connection' : 'Route')}?`}
-        message={`Are you sure you want to ${confirmData.type === 'pin' ? 'disconnect' : 'delete'} ${confirmData.targetId}?`}
+        title={
+          confirmData.type === 'pin' ? 'Disconnect Pin' :
+            confirmData.type === 'comp' ? 'Delete Component' :
+              confirmData.type === 'net' ? 'Delete Net' :
+                confirmData.type === 'reset' ? 'Reset Workspace' : 'Confirm Action'
+        }
+        message={
+          confirmData.type === 'pin' ? `Are you sure you want to disconnect ${confirmData.targetId}? This will remove its net assignment.` :
+            confirmData.type === 'comp' ? `Are you sure you want to delete ${confirmData.targetId}? All associated wires will be removed.` :
+              confirmData.type === 'net' ? `Are you sure you want to clear all wires for net ${confirmData.targetId}?` :
+                confirmData.type === 'reset' ? 'This will clear all components and wires, reverting to the template. This cannot be undone.' :
+                  'Are you sure you want to proceed with this action?'
+        }
         onConfirm={handleConfirmDelete}
         onCancel={() => setConfirmData({ isOpen: false, type: null, targetId: null })}
       />

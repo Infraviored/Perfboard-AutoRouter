@@ -40,7 +40,7 @@ export function Topbar({
           disabled={isProcessing}
           style={{ '--flow-color': '#4da0ff' }}
         >
-          <FileJson size={16} />
+          <FileJson size={14} />
           Load
         </button>
         <button
@@ -49,7 +49,7 @@ export function Topbar({
           disabled={workflowStep < 1 || isProcessing}
           style={{ '--flow-color': 'var(--grn-bright)' }}
         >
-          <Zap size={16} />
+          <Zap size={14} />
           Route
         </button>
         <button
@@ -58,7 +58,7 @@ export function Topbar({
           disabled={workflowStep < 2 || isProcessing}
           style={{ '--flow-color': 'var(--blu-bright)' }}
         >
-          <Wrench size={16} />
+          <Wrench size={14} />
           Optimize
         </button>
         <button
@@ -67,8 +67,21 @@ export function Topbar({
           disabled={workflowStep < 3 || isProcessing}
           style={{ '--flow-color': '#a371f7' }}
         >
-          <Compass size={16} />
+          <Compass size={14} />
           Explore
+        </button>
+      </div>
+
+      <div className="sep"></div>
+
+      <div className="btn-group">
+        <button className="tbtn" onClick={onClearWires} title="Delete all wires" disabled={isProcessing}>
+          <Eraser size={16} />
+          Clear
+        </button>
+        <button className="tbtn" onClick={onRouteOnly} title="Connect Airwires" disabled={isProcessing}>
+          <Zap size={16} />
+          Connect
         </button>
       </div>
 
@@ -86,39 +99,26 @@ export function Topbar({
       <div className="sep"></div>
 
       <div className="btn-group">
-        <button className="tbtn" onClick={onImportState} title="Import State">
+        <button className="tbtn" onClick={onImportState} title="Import State (JSON)">
           <Download size={16} />
           Import
         </button>
-        <button className="tbtn" onClick={onExportState} title="Export State">
+        <button className="tbtn" onClick={onExportState} title="Export State (JSON)">
           <Upload size={16} />
           Export
         </button>
-        <button className="tbtn" onClick={onRouteOnly} title="Connect Airwires" disabled={isProcessing}>
-          <Zap size={16} />
-          Connect
-        </button>
       </div>
 
       <div className="sep"></div>
 
-      <div className="btn-group">
-        <button className="tbtn" onClick={onClearWires} disabled={isProcessing}>
-          <Eraser size={16} />
-          Clear
-        </button>
-      </div>
+      <div className="spc" style={{ flex: 1 }}></div>
 
-      <div className="sep"></div>
-
-      <button className="tbtn" onClick={onExportSVG} style={{ '--org': '#d29922' }}>
-        <ExternalLink size={16} title="Export SVG" />
-        Export
+      <button className="tbtn svg-export-btn" onClick={onExportSVG} title="Download as Vector Graphic (SVG)">
+        <ExternalLink size={16} />
+        Export SVG
       </button>
 
-      <div className="spc"></div>
-
-      <button className="tbtn red" onClick={onReset}>
+      <button className="tbtn reset-btn" onClick={onReset} title="Reset the entire project">
         <RotateCcw size={16} />
         Reset
       </button>
@@ -342,6 +342,33 @@ export function Topbar({
         .flow-btn.completed:disabled {
           cursor: not-allowed;
           opacity: 0.8; /* Keep it visible even when disabled */
+        }
+
+        .svg-export-btn {
+          color: #ffb44a;
+          background: rgba(255, 180, 74, 0.08);
+          border: 1px solid rgba(255, 180, 74, 0.2);
+          font-weight: 700;
+          box-shadow: 0 4px 15px rgba(255, 180, 74, 0.05);
+        }
+        .svg-export-btn:hover {
+          background: rgba(255, 180, 74, 0.2);
+          color: #fff;
+          border-color: #ffb44a;
+          box-shadow: 0 4px 20px rgba(255, 180, 74, 0.15);
+        }
+
+        .reset-btn {
+          color: var(--err-bright);
+          background: rgba(248, 81, 73, 0.08);
+          border: 1px solid rgba(248, 81, 73, 0.2);
+          margin-right: 0;
+        }
+        .reset-btn:hover {
+          background: var(--err-bright);
+          color: #fff;
+          border-color: var(--err-bright);
+          box-shadow: 0 4px 20px rgba(248, 81, 73, 0.25);
         }
       `}} />
     </header>
