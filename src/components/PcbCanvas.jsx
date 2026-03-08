@@ -129,13 +129,14 @@ export function PcbCanvas({
             return;
         }
 
-        // 2. Start routing ONLY if a pin of the SELECTED component is hit
+        // 2. Clicked while NOT in routing mode
         if (pinHit && pinHit.compId === selectedId) {
+            // Started routing IMMEDIATELY because it's already selected and we hit a pin
             setRoutingMode({ startPin: pinHit, currentPos: { col, row } });
             setDraggingId(null);
             onPreviewRoute?.(pinHit, { col, row });
         } else if (compHit) {
-            // Standard selection and dragging (this handles hits on pins of unselected components too)
+            // Standard selection and dragging
             setDraggingId(compHit.id);
             setDragOffset({ x: worldX - compHit.ox * SP, y: worldY - compHit.oy * SP });
             onSelect?.(compHit.id);
