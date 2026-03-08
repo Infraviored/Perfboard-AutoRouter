@@ -176,20 +176,22 @@ export function generateRatsnestSVG(components, wires = [], isDragging = false) 
           }
         }
 
-        // Mark all path points as belonging to the unified root
-        const newRoot = findParent(Array.from(touchingGroupRoots)[0] ?? -1);
-        if (newRoot !== -1) {
-          path.forEach(pt => {
-            const key = `${pt.col},${pt.row}`;
-            if (!coordMap.has(key)) {
-              coordMap.set(key, new Set());
-              changed = true;
-            }
-            if (!coordMap.get(key).has(newRoot)) {
-              coordMap.get(key).add(newRoot);
-              changed = true;
-            }
-          });
+        // Mark all path points as belonging to the unified root, if any groups are touching
+        if (touchingGroupRoots.size > 0) {
+          const newRoot = findParent(Array.from(touchingGroupRoots)[0]);
+          if (newRoot !== -1) {
+            path.forEach(pt => {
+              const key = `${pt.col},${pt.row}`;
+              if (!coordMap.has(key)) {
+                coordMap.set(key, new Set());
+                changed = true;
+              }
+              if (!coordMap.get(key).has(newRoot)) {
+                coordMap.get(key).add(newRoot);
+                changed = true;
+              }
+            });
+          }
         }
       });
     }

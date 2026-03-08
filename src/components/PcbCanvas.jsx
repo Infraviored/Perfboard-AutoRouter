@@ -11,13 +11,12 @@ import {
     hitWire,
     netColor
 } from "../engine/render-utils.js";
-import { CAMERA_CONFIG } from "../engine/config";
+import { CAMERA_CONFIG } from "../engine/config.js";
 import {
     Plus,
     Minus,
     Maximize,
-    Crosshair,
-    Grid3X3
+    Crosshair
 } from 'lucide-react';
 
 export function PcbCanvas({
@@ -190,7 +189,10 @@ export function PcbCanvas({
         if (draggingId) onMoveEnd?.();
         setDraggingId(null);
         setIsPanning(false);
-        e.target.releasePointerCapture(e.pointerId);
+        const target = e.currentTarget;
+        if (target && target.hasPointerCapture && target.hasPointerCapture(e.pointerId)) {
+            target.releasePointerCapture(e.pointerId);
+        }
     };
 
     // Keyboard ESC to cancel routing
@@ -244,6 +246,7 @@ export function PcbCanvas({
             maxRow = Math.max(maxRow, c.oy + c.h);
         }
         for (const w of wires) {
+            if (!w.path) continue;
             for (const p of w.path) {
                 minCol = Math.min(minCol, p.col);
                 minRow = Math.min(minRow, p.row);
@@ -447,7 +450,7 @@ export function PcbCanvas({
             }
         }
         rAFRef.current = requestAnimationFrame(updatePhysics);
-    }, [trackingMode, isAutoTracking, isPanning, draggingId, SP]);
+    }, [trackingMode, isAutoTracking, isPanning, draggingId, SP, viewportSize, isProcessing]);
 
 
     useEffect(() => {
@@ -517,10 +520,10 @@ export function PcbCanvas({
                                 points={seg.path.map(pt => `${pt.col * SP + SP / 2},${pt.row * SP + SP / 2}`).join(' ')}
                                 fill="none"
                                 stroke={seg.isCrossing ? '#ff2222' : netColor(routingMode.startPin.pin.net)}
-                                stroke-width="5"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-dasharray={seg.isCrossing ? "5 5" : ""}
+                                strokeWidth="5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeDasharray={seg.isCrossing ? "5 5" : ""}
                                 style={{
                                     pointerEvents: 'none',
                                     filter: `drop-shadow(0 0 8px ${seg.isCrossing ? '#ff2222' : netColor(routingMode.startPin.pin.net)})`

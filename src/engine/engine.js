@@ -298,11 +298,44 @@ export class AutorouterEngine {
     }
 
     deleteComponent(id) {
+        // Collect all nets associated with the component being deleted
+        const comp = this.components.find(c => c.id === id);
+        const affectedNets = new Set();
+        if (comp && Array.isArray(comp.pins)) {
+            comp.pins.forEach(p => {
+                if (p && p.net != null) {
+                    affectedNets.add(p.net);
+                }
+            });
+        }
+
+        // Remove the component itself
         this.components = this.components.filter(c => c.id !== id);
-        // Clean up wires that might be referencing pins that no longer exist
-        // or just let the router handle it on next pass. 
-        // For now, let's keep wires as is or clear them if they belong to this component?
-        // Actually, deleting a component should probably clear wires of nets that lose pins.
+
+        // For nets touched by this component, remove wires if the net
+        // no longer has at least two pins remaining on the board.
+        if (affectedNets.size > 0) {
+            const netPinCounts = new Map();
+
+            // Recompute pin counts for affected nets across remaining components
+            this.components.forEach(c => {
+                if (!Array.isArray(c.pins)) return;
+                c.pins.forEach(p => {
+                    if (!p || p.net == null) return;
+                    if (!affectedNets.has(p.net)) return;
+                    const current = netPinCounts.get(p.net) || 0;
+                    netPinCounts.set(p.net, current + 1);
+                });
+            });
+
+            // Drop wires whose nets have fewer than 2 remaining pins
+            this.wires = this.wires.filter(w => {
+                if (!w || w.net == null) return true;
+                if (!affectedNets.has(w.net)) return true;
+                const count = netPinCounts.get(w.net) || 0;
+                return count >= 2;
+            });
+        }
         this.tick++;
         this.notify();
     }
