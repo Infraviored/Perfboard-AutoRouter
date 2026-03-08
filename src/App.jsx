@@ -5,10 +5,10 @@ import { Topbar } from './components/Topbar.jsx';
 import { SidebarLeft } from './components/SidebarLeft.jsx';
 import { SidebarRight } from './components/SidebarRight.jsx';
 import { ProcessingBar } from './components/ProcessingBar.jsx';
-import { Toast } from './components/Toast.jsx';
 import { LibraryOverlay } from './components/LibraryOverlay.jsx';
 import { CompEditorOverlay } from './components/CompEditorOverlay.jsx';
 import { PromptOverlay } from './components/PromptOverlay.jsx';
+import { ConfirmOverlay } from './components/ConfirmOverlay.jsx';
 import { TEMPLATE, processTemplate } from './engine/templates.js';
 import { getAllNets } from './engine/router.js';
 import { scoreState } from './engine/optimizer-algorithms.js';
@@ -85,8 +85,37 @@ function App() {
     localStorage.setItem('pcb_workflow_step', workflowStep.toString());
   }, [workflowStep]);
 
+  // Sync board components back to JSON input live
+  useEffect(() => {
+    if (board.components.length === 0) return;
+
+    // We only update if the board tick changed (meaning an operation happened)
+    const nets = getAllNets(board.components);
+    const doc = {
+      components: board.components.map(c => ({
+        id: c.id,
+        name: c.name,
+        value: c.value,
+        pins: c.pins.map(p => ({
+          offset: [p.col, p.row],
+          label: p.lbl,
+          net: p.net || ''
+        }))
+      })),
+      connections: nets.map(n => ({
+        net: n.net,
+        count: n.pins.length
+      }))
+    };
+
+    const newJson = JSON.stringify(doc, null, 2);
+    // Only set if different to avoid infinite loops or unnecessary re-renders
+    if (newJson !== jsonInput) {
+      setJsonInput(newJson);
+    }
+  }, [board.components, board.tick]);
+
   const [status, setStatus] = useState({ title: '', progress: 0, best: '', isProcessing: false, isInitial: false });
-  const [toast, setToast] = useState({ msg: '', type: 'ok' });
   const [selectedId, setSelectedId] = useState(null);
   const [selectedNet, setSelectedNet] = useState(null);
   const [hoveredNet, setHoveredNet] = useState(null);
@@ -99,6 +128,9 @@ function App() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isPromptOpen, setIsPromptOpen] = useState(false);
   const [editingComp, setEditingComp] = useState(null);
+  const [confirmData, setConfirmData] = useState({ isOpen: false, type: null, targetId: null });
+  const [activePin, setActivePin] = useState(null);
+  const [previewPath, setPreviewPath] = useState(null);
 
   // History for Undo/Redo
   const [history, setHistory] = useState([]);
@@ -141,9 +173,7 @@ function App() {
         setSnapCounter(c => c + 1);
         saveHistory();
       }
-    } catch (e) {
-      setToast({ msg: 'Parse error: ' + e.message, type: 'err' });
-    }
+    } catch (e) { }
   }, [engine, jsonInput, saveHistory]);
 
   const handleRoute = useCallback(async () => {
@@ -164,8 +194,8 @@ function App() {
       } else {
         setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: '' }));
       }
+      setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: '' }));
     } catch (e) {
-      setToast({ msg: 'Error: ' + e.message, type: 'err' });
       setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: '' }));
     }
     saveHistory();
@@ -248,7 +278,6 @@ Use this format:
   ]
 }`;
     navigator.clipboard.writeText(prompt);
-    setToast({ msg: 'Prompt template copied!', type: 'ok' });
   }, []);
 
   const handleRouteOnly = useCallback(async () => {
@@ -305,6 +334,81 @@ Use this format:
     saveHistory();
   }, [engine, saveHistory]);
 
+  const handleManualRoute = useCallback(async (start, end, path) => {
+    if (!path) {
+      setPreviewPath(null);
+      return;
+    }
+    const netA = start.pin.net;
+    let netB = null;
+    if (typeof end === 'object' && end !== null) {
+      netB = end.pin.net;
+    } else if (typeof end === 'string') {
+      netB = end;
+    }
+
+    let targetNet = netA || netB;
+
+    if (!targetNet) {
+      const netsList = getAllNets(board.components);
+      let i = 1;
+      while (netsList.some(n => n.net === `NET_${i}`)) i++;
+      targetNet = `NET_${i}`;
+    }
+
+    if (netA && netB && netA !== netB) {
+      engine.mergeNets(netB, netA);
+      targetNet = netA;
+    } else {
+      engine.updatePinNet(start.compId, start.pinIdx, targetNet);
+      if (typeof end === 'object' && end !== null) {
+        engine.updatePinNet(end.compId, end.pinIdx, targetNet);
+      }
+    }
+
+    engine.addManualWire(targetNet, path);
+    saveHistory();
+    setPreviewPath(null);
+    handleRouteOnly();
+  }, [board.components, engine, saveHistory, handleRouteOnly]);
+
+  const handlePreviewRoute = useCallback(async (startPin, currentPos, targetNet = null) => {
+    setActivePin(startPin);
+    if (!startPin || !currentPos) {
+      setPreviewPath(null);
+      return;
+    }
+    const path = await engine.previewManualRoute(startPin, currentPos, targetNet);
+    setPreviewPath(path);
+  }, [engine]);
+
+  const requestDelete = useCallback(() => {
+    if (activePin) {
+      setConfirmData({ isOpen: true, type: 'pin', targetId: `${activePin.compId}.${activePin.pin.lbl}` });
+    } else if (selectedId) {
+      setConfirmData({ isOpen: true, type: 'comp', targetId: selectedId });
+    } else if (selectedNet) {
+      setConfirmData({ isOpen: true, type: 'net', targetId: selectedNet });
+    }
+  }, [activePin, selectedId, selectedNet]);
+
+  const handleConfirmDelete = useCallback(() => {
+    if (confirmData.type === 'pin' && activePin) {
+      engine.updatePinNet(activePin.compId, activePin.pinIdx, '');
+      setActivePin(null);
+      setPreviewPath(null);
+      handleRouteOnly();
+    } else if (confirmData.type === 'comp') {
+      engine.deleteComponent(confirmData.targetId);
+      setSelectedId(null);
+    } else if (confirmData.type === 'net') {
+      engine.deleteWire(confirmData.targetId);
+      setSelectedNet(null);
+    }
+    setConfirmData({ isOpen: false, type: null, targetId: null });
+    saveHistory();
+  }, [confirmData, engine, activePin, handleRouteOnly, saveHistory]);
+
   const handleReset = useCallback(() => {
     if (window.confirm('Reset everything?')) handleLoadTemplate();
   }, [handleLoadTemplate]);
@@ -347,7 +451,6 @@ Use this format:
     engine.setState({ components: board.components.map(c => c.id === updated.id ? updated : c), wires: [] });
     setIsEditorOpen(false);
     saveHistory();
-    setToast({ msg: 'Component saved', type: 'ok' });
   }, [board.components, engine, saveHistory]);
 
 
@@ -378,10 +481,8 @@ Use this format:
               rows: parsed.rows || board.rows
             });
             saveHistory();
-            setToast({ msg: 'State imported successfully', type: 'ok' });
           }
         } catch (err) {
-          setToast({ msg: 'Import error: ' + err.message, type: 'err' });
         }
       };
       reader.readAsText(file);
@@ -395,7 +496,6 @@ Use this format:
       onStateChange: (newState) => setBoard(prev => ({ ...prev, ...newState })),
       onProgress: (p, t) => setStatus(prev => ({ ...prev, progress: p, title: t })),
       onStatusUpdate: (upd) => setStatus(prev => ({ ...prev, ...upd })),
-      onToast: (msg, type) => setToast({ msg, type }),
       onBestSnapshot: (snapshot) => {
         // Deep clone the snapshot so the treadmill doesn't mutate its path points!
         const safeWires = snapshot.wires.map(w => ({
@@ -421,10 +521,17 @@ Use this format:
       if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); handleRoute(); }
       if (e.shiftKey && e.key === 'R') { e.preventDefault(); handleRoute(); }
       if (e.key === 'v') { e.preventDefault(); setTool('sel'); }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        // Only trigger if no input is focused
+        if (document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
+          e.preventDefault();
+          requestDelete();
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, handleRoute]);
+  }, [handleUndo, handleRedo, handleRoute, requestDelete]);
 
   // --- INITIAL LOAD ---
   useEffect(() => {
@@ -508,12 +615,26 @@ Use this format:
             <PcbCanvas
               components={board.components} wires={board.wires} cols={board.cols} rows={board.rows}
               selectedId={selectedId} onSelect={(id) => {
-                setSelectedId(id);
-                if (id) setSelectedNet(null); // Clear net if comp selected
-                else setSelectedNet(null);
+                if (id) {
+                  setSelectedId(id);
+                  setSelectedNet(null);
+                } else {
+                  setSelectedId(null);
+                }
+              }}
+              onSelectNet={(net) => {
+                if (net) {
+                  setSelectedNet(net);
+                  setSelectedId(null);
+                } else {
+                  setSelectedNet(null);
+                }
               }}
               activeNets={activeNets}
               onMove={handleMoveComp} onRotate={handleRotateComp} onMoveEnd={saveHistory}
+              onManualRoute={handleManualRoute}
+              onPreviewRoute={handlePreviewRoute}
+              previewPath={previewPath}
               tick={board.tick} isProcessing={status.isProcessing || !!status.results}
               isInitialProcessing={status.isInitial}
               workflowStep={workflowStep}
@@ -544,16 +665,33 @@ Use this format:
           activeNets={activeNets}
         />
       </div>
-      <Toast key={toast.msg} msg={toast.msg} type={toast.type} onClear={() => setToast({ msg: '', type: 'ok' })} />
       <LibraryOverlay isOpen={isLibraryOpen} onClose={() => setIsLibraryOpen(false)} onSelect={handleAddFromLibrary} />
       <CompEditorOverlay key={editingComp?.id} isOpen={isEditorOpen} component={editingComp} onClose={() => setIsEditorOpen(false)} onSave={handleSaveEdit} />
       <PromptOverlay isOpen={isPromptOpen} onClose={() => setIsPromptOpen(false)} />
+      <ConfirmOverlay
+        isOpen={confirmData.isOpen}
+        title={`Delete ${confirmData.type === 'comp' ? 'Component' : (confirmData.type === 'pin' ? 'Pin Connection' : 'Route')}?`}
+        message={`Are you sure you want to ${confirmData.type === 'pin' ? 'disconnect' : 'delete'} ${confirmData.targetId}?`}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmData({ isOpen: false, type: null, targetId: null })}
+      />
       <style dangerouslySetInnerHTML={{
         __html: `
         .app-main { display: flex; flex-direction: column; height: 100vh; width: 100vw; overflow: hidden; background: var(--bg0); }
         #layout { display: flex; flex: 1; overflow: hidden; min-height: 0; }
         #ca-col { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; overflow: hidden; }
         #ca { flex: 1; position: relative; background: #050706; overflow: hidden; border-radius: 4px; margin: 4px; box-shadow: inset 0 0 40px rgba(0,0,0,0.8); min-height: 0; }
+
+        @keyframes active-pin-blink {
+          0% { r: 6.16; fill: #fff; opacity: 1; filter: drop-shadow(0 0 5px #fff); }
+          50% { r: 8.4; fill: var(--active-color); opacity: 0.8; filter: drop-shadow(0 0 10px var(--active-color)); }
+          100% { r: 6.16; fill: #fff; opacity: 1; filter: drop-shadow(0 0 5px #fff); }
+        }
+        .active-pin {
+          animation: active-pin-blink 0.8s infinite ease-in-out;
+          stroke: #fff;
+          stroke-width: 2px;
+        }
       `}} />
     </div>
   );

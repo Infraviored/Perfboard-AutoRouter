@@ -6,7 +6,10 @@ import {
     generateRatsnestSVG,
     renderCompSVG,
     generateBoundingBoxSVG,
-    hitComp
+    hitComp,
+    hitPin,
+    hitWire,
+    netColor
 } from "../engine/render-utils.js";
 import { CAMERA_CONFIG } from "../engine/config";
 import {
@@ -32,7 +35,13 @@ export function PcbCanvas({
     isProcessing,
     isInitialProcessing,
     workflowStep,
-    snapCounter
+    snapCounter,
+    onManualRoute,
+    onPreviewRoute,
+    previewPath,
+    previewNet,
+    selectedNet,
+    onSelectNet
 }) {
     const svgRef = useRef(null);
     const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
@@ -47,6 +56,14 @@ export function PcbCanvas({
     const [lastPos, setLastPos] = useState({ x: 0, y: 0 });
     const [draggingId, setDraggingId] = useState(null);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+    const [routingMode, setRoutingMode] = useState(null); // { startPin, currentPos }
+
+    // Sink routing mode if preview is cleared externally
+    useEffect(() => {
+        if (!previewPath && routingMode) {
+            setRoutingMode(null);
+        }
+    }, [previewPath, routingMode]);
 
     const hasInitializedFit = useRef(!!localStorage.getItem('pcb_camera_state'));
 
@@ -89,24 +106,71 @@ export function PcbCanvas({
         const col = Math.floor(worldX / SP);
         const row = Math.floor(worldY / SP);
 
-        const hit = hitComp(col, row, components);
-        if (hit) {
-            setDraggingId(hit.id);
-            setDragOffset({ x: worldX - hit.ox * SP, y: worldY - hit.oy * SP });
-            onSelect?.(hit.id);
+        const pinHit = hitPin(col, row, components);
+        const wireHit = hitWire(col, row, wires);
+        const compHit = hitComp(col, row, components);
+
+        // 1. If in routing mode and hit a pin OR a wire, commit the route
+        if (routingMode && (pinHit || wireHit)) {
+            if (pinHit) {
+                if (pinHit.compId !== routingMode.startPin.compId || pinHit.pinIdx !== routingMode.startPin.pinIdx) {
+                    onManualRoute?.(routingMode.startPin, pinHit, previewPath);
+                    setRoutingMode(null);
+                    onPreviewRoute?.(null);
+                } else {
+                    setRoutingMode(null);
+                    onPreviewRoute?.(null);
+                }
+            } else if (wireHit) {
+                onManualRoute?.(routingMode.startPin, wireHit.net, previewPath);
+                setRoutingMode(null);
+                onPreviewRoute?.(null);
+            }
+            return;
+        }
+
+        // 2. Start routing ONLY if a pin of the SELECTED component is hit
+        if (pinHit && pinHit.compId === selectedId) {
+            setRoutingMode({ startPin: pinHit, currentPos: { col, row } });
+            setDraggingId(null);
+            onPreviewRoute?.(pinHit, { col, row });
+        } else if (compHit) {
+            // Standard selection and dragging (this handles hits on pins of unselected components too)
+            setDraggingId(compHit.id);
+            setDragOffset({ x: worldX - compHit.ox * SP, y: worldY - compHit.oy * SP });
+            onSelect?.(compHit.id);
+        } else if (wireHit) {
+            // Wire selection
+            onSelectNet?.(wireHit.net);
+            onSelect?.(null);
         } else {
+            // Pan or Reset
             setIsPanning(true);
             setLastPos(pos);
             onSelect?.(null);
+            onSelectNet?.(null);
+            if (routingMode) {
+                setRoutingMode(null);
+                onPreviewRoute?.(null);
+            }
         }
         e.target.setPointerCapture(e.pointerId);
     };
 
     const handlePointerMove = (e) => {
         const pos = getMousePos(e);
-        if (draggingId) {
-            const worldX = (pos.x - camera.x) / camera.z;
-            const worldY = (pos.y - camera.y) / camera.z;
+        const worldX = (pos.x - camera.x) / camera.z;
+        const worldY = (pos.y - camera.y) / camera.z;
+        const col = Math.floor(worldX / SP);
+        const row = Math.floor(worldY / SP);
+
+        if (routingMode) {
+            if (routingMode.currentPos.col !== col || routingMode.currentPos.row !== row) {
+                setRoutingMode(prev => ({ ...prev, currentPos: { col, row } }));
+                const targetWire = hitWire(col, row, wires);
+                onPreviewRoute?.(routingMode.startPin, { col, row }, targetWire?.net);
+            }
+        } else if (draggingId) {
             const nx = Math.round((worldX - dragOffset.x) / SP);
             const ny = Math.round((worldY - dragOffset.y) / SP);
             onMove?.(draggingId, nx, ny);
@@ -127,6 +191,18 @@ export function PcbCanvas({
         setIsPanning(false);
         e.target.releasePointerCapture(e.pointerId);
     };
+
+    // Keyboard ESC to cancel routing
+    useEffect(() => {
+        const handleEsc = (e) => {
+            if (e.key === 'Escape' && routingMode) {
+                setRoutingMode(null);
+                onPreviewRoute?.(null);
+            }
+        };
+        window.addEventListener('keydown', handleEsc);
+        return () => window.removeEventListener('keydown', handleEsc);
+    }, [routingMode, onPreviewRoute]);
 
     const handleMouseDown = (e) => {
         if (e.button === 2 && draggingId) {
@@ -394,11 +470,11 @@ export function PcbCanvas({
     const background = useMemo(() => generateBackgroundSVG(cols, rows, bounds), [cols, rows, bounds]);
     const wiresSvg = useMemo(() => generateWiresSVG(wires, activeNets), [wires, activeNets, tick]);
     const ratsnestSvg = useMemo(() => generateRatsnestSVG(components, wires, !!draggingId), [components, wires, draggingId, tick]);
-    const componentsSvg = useMemo(() => components.map(c => renderCompSVG(c, c.id === selectedId)).join(''), [components, selectedId, tick]);
+    const componentsSvg = useMemo(() => components.map(c => renderCompSVG(c, c.id === selectedId, routingMode?.startPin)).join(''), [components, selectedId, routingMode, tick]);
     const boundingBoxSvg = useMemo(() => generateBoundingBoxSVG(components, wires), [components, wires, tick]);
 
     return (
-        <div className={`canvas-container ${isProcessing ? 'pb-active' : ''}`} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} onMouseDown={handleMouseDown} onWheel={handleWheel} onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', cursor: (isPanning || draggingId) ? 'grabbing' : 'crosshair', background: '#050706', '--pb-height': '240px' }}>
+        <div className={`canvas-container ${isProcessing ? 'pb-active' : ''}`} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} onMouseDown={handleMouseDown} onWheel={handleWheel} onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', cursor: routingMode ? 'crosshair' : (isPanning || draggingId ? 'grabbing' : 'crosshair'), background: '#050706', '--pb-height': '240px' }}>
             <svg ref={svgRef} width="100%" height="100%" style={{ display: 'block' }}>
                 <g transform={`translate(${camera.x}, ${camera.y}) scale(${camera.z})`}>
                     <g dangerouslySetInnerHTML={{ __html: background }} />
@@ -406,6 +482,19 @@ export function PcbCanvas({
                     <g dangerouslySetInnerHTML={{ __html: ratsnestSvg }} />
                     <g dangerouslySetInnerHTML={{ __html: componentsSvg }} />
                     <g dangerouslySetInnerHTML={{ __html: boundingBoxSvg }} />
+
+                    {routingMode && previewPath && (
+                        <polyline
+                            points={previewPath.map(pt => `${pt.col * SP + SP / 2},${pt.row * SP + SP / 2}`).join(' ')}
+                            fill="none"
+                            stroke={netColor(routingMode.startPin.pin.net)}
+                            stroke-width="5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-dasharray="10 5"
+                            style={{ pointerEvents: 'none', filter: `drop-shadow(0 0 8px ${netColor(routingMode.startPin.pin.net)})` }}
+                        />
+                    )}
                 </g>
             </svg>
 

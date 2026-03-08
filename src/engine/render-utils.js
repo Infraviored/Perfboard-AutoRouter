@@ -106,6 +106,7 @@ export function generateWiresSVG(wires, activeNets = []) {
 
     const isActive = activeNets.includes(w.net);
     const strokeW = isActive ? 3.8 : 2.8;
+    if (!w.path) return;
     const pts = w.path.map(pt => `${pt.col * SP + SP / 2},${pt.row * SP + SP / 2}`).join(' ');
     const color = netColor(w.net);
 
@@ -145,7 +146,7 @@ export function generateRatsnestSVG(components, wires = [], isDragging = false) 
   return out;
 }
 
-export function renderCompSVG(c, isSelected = false) {
+export function renderCompSVG(c, isSelected = false, activePin = null) {
   const bx = c.ox * SP + SP * .08, by = c.oy * SP + SP * .08;
   const bw = c.w * SP - SP * .16, bh = c.h * SP - SP * .16;
   const mainColor = boostColor(compColor(c));
@@ -171,10 +172,11 @@ export function renderCompSVG(c, isSelected = false) {
   out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="${mainColor}" opacity="${tintOp}" style="pointer-events:none"/>`;
 
   // 2. Draw Pins
-  c.pins.forEach(p => {
+  c.pins.forEach((p, idx) => {
     const px = p.col * SP + SP / 2, py = p.row * SP + SP / 2;
+    const isActive = activePin && activePin.compId === c.id && activePin.pinIdx === idx;
     // Centered pin design: Label inside the colored pad
-    out += `<circle cx="${px}" cy="${py}" r="${SP * .22}" fill="${netColor(p.net)}"/>`;
+    out += `<circle cx="${px}" cy="${py}" r="${SP * .22}" fill="${netColor(p.net)}" class="${isActive ? 'active-pin' : ''}" style="${isActive ? `--active-color: ${netColor(p.net)}` : ''}"/>`;
     out += `<text x="${px}" y="${py}" dy=".35em" fill="#fff" font-family="'Outfit', sans-serif" font-weight="900" font-size="${Math.min(SP * .22, 6)}" text-anchor="middle" paint-order="stroke" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${p.lbl}</text>`;
   });
 
@@ -233,4 +235,20 @@ export function hitComp(col, row, components) {
     col >= c.ox && col < c.ox + c.w &&
     row >= c.oy && row < c.oy + c.h
   ) || null;
+}
+
+export function hitPin(col, row, components) {
+  for (const c of components) {
+    for (let i = 0; i < c.pins.length; i++) {
+      const p = c.pins[i];
+      if (p.col === col && p.row === row) {
+        return { compId: c.id, pinIdx: i, pin: p };
+      }
+    }
+  }
+  return null;
+}
+
+export function hitWire(col, row, wires) {
+  return wires.find(w => !w.failed && w.path && w.path.some(pt => pt.col === col && pt.row === row)) || null;
 }

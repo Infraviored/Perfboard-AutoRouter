@@ -4,8 +4,7 @@ import { saveComps, restoreComps } from './state-utils.js';
 import { moveComp, rotateComp90InPlace, anneal, anyOverlap } from './placer.js';
 
 export async function doOptimizeFootprint(components, wires, cols, rows, config, options = {}) {
-    const { onProgress, onStatusUpdate, onStateChange, onBestSnapshot, onToast } = options;
-    const toast = onToast;
+    const { onProgress, onStatusUpdate, onStateChange, onBestSnapshot } = options;
     const setProg = onProgress;
     const setBestLine = (msg) => onStatusUpdate?.({ best: msg });
 
@@ -55,7 +54,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
         onBestSnapshot?.({ components: hydratedComps, wires: wsClone });
     };
 
-    if (!components.length) { toast?.('No components to optimize', 'warn'); return; }
+    if (!components.length) return;
 
 
     setBestLine('');
@@ -327,8 +326,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
 
 
 export async function doPlateauExplore(components, wires, cols, rows, options = {}) {
-    const { onProgress, onStatusUpdate, onStateChange, onToast } = options;
-    const toast = (m, t) => onToast?.(m, t);
+    const { onProgress, onStatusUpdate, onStateChange } = options;
     const setProg = (p, m) => onProgress?.(p, m);
     const setBestLine = (m) => onStatusUpdate?.({ best: m });
 
@@ -336,7 +334,7 @@ export async function doPlateauExplore(components, wires, cols, rows, options = 
     let gCancelRequested = false;
     const checkCancel = () => options.checkCancel ? options.checkCancel() : gCancelRequested;
 
-    if (!components.length) { toast('No components loaded', 'warn'); return; }
+    if (!components.length) return;
 
     const startSnapshot = saveComps(components);
     let bestWires = await route(components, cols, rows, () => { }, checkCancel);
