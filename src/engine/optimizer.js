@@ -60,7 +60,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
     setBestLine('');
 
     const startSnapshot = saveComps(components);
-    const startWires = await route(components, uiCols, uiRows, () => { }, checkCancel);
+    const startWires = await route(components, uiCols, uiRows, () => { }, checkCancel, wires);
     const startScore = scoreState(components, startWires);
     currentWires = startWires;
 
@@ -75,7 +75,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
     const vRows = 1e6;
 
     setProg?.(0, `Preparing virtual workspace...`);
-    currentWires = await route(components, vCols, vRows, () => { }, false, checkCancel);
+    currentWires = await route(components, vCols, vRows, () => { }, checkCancel, currentWires);
 
     // Track Absolute Best
     let globalBestScore = scoreState(components, currentWires);
@@ -115,7 +115,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
 
                 moveComp(c, nx, ny);
             }
-            currentWires = await route(components, vCols, vRows, () => { }, checkCancel);
+            currentWires = await route(components, vCols, vRows, () => { }, checkCancel, currentWires);
             recenterComponents(components, currentWires);
             localBestScore = scoreState(components, currentWires);
             localBestComps = saveComps(components);
@@ -151,7 +151,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                     }, checkCancel);
 
                     // Re-route after SA since positions changed
-                    currentWires = await route(components, vCols, vRows, () => { }, checkCancel);
+                    currentWires = await route(components, vCols, vRows, () => { }, checkCancel, currentWires);
                     recenterComponents(components, currentWires);
 
                     if (stagnation >= deepThresh) stagnation = 0;
@@ -193,7 +193,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                     }
                 }
                 // Re-route after micro-mutations so wires aren't "detached"
-                currentWires = await route(components, vCols, vRows, () => { }, checkCancel);
+                currentWires = await route(components, vCols, vRows, () => { }, checkCancel, currentWires);
                 recenterComponents(components, currentWires);
             }
 
@@ -278,7 +278,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
             if (checkCancel()) break;
             const preEval = saveComps(components);
 
-            const testWires = await route(components, vCols, vRows, () => { }, checkCancel);
+            const testWires = await route(components, vCols, vRows, () => { }, checkCancel, currentWires);
             recenterComponents(components, testWires);
             const testScore = scoreState(components, testWires);
 
@@ -337,7 +337,7 @@ export async function doPlateauExplore(components, wires, cols, rows, options = 
     if (!components.length) return;
 
     const startSnapshot = saveComps(components);
-    let bestWires = await route(components, cols, rows, () => { }, checkCancel);
+    let bestWires = await route(components, cols, rows, () => { }, checkCancel, currentWires);
     let bestScore = scoreState(components, bestWires);
     const startScore = bestScore;
     currentWires = bestWires;
@@ -395,7 +395,7 @@ export async function doPlateauExplore(components, wires, cols, rows, options = 
             if (checkCancel()) break;
 
             restoreComps(components, n.comps);
-            const testWires = await route(components, cols, rows, () => { }, checkCancel);
+            const testWires = await route(components, cols, rows, () => { }, checkCancel, currentWires);
             n.wires = testWires;
             n.score = scoreState(components, testWires);
 

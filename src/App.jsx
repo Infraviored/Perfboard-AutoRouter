@@ -366,11 +366,21 @@ Use this format:
       }
     }
 
-    engine.addManualWire(targetNet, path);
-    saveHistory();
+    const hasCrossing = path.some(p => p.isCrossing);
+
+    if (hasCrossing) {
+      // Intent confirmed, but path is illegal. 
+      // Ask the autorouter to find a legal path given the new net connectivity.
+      // We don't add the dashed manual wire to the board.
+      await engine.route();
+    } else {
+      // Legal manual connection! Add it as a permanent trace.
+      engine.addManualWire(targetNet, path);
+    }
+
     setPreviewPath(null);
-    handleRouteOnly();
-  }, [board.components, engine, saveHistory, handleRouteOnly]);
+    saveHistory();
+  }, [board.components, engine, saveHistory]);
 
   const handlePreviewRoute = useCallback(async (startPin, currentPos, targetNet = null) => {
     setActivePin(startPin);

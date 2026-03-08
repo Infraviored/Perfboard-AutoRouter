@@ -1,7 +1,7 @@
 // grid.js
-const BLOCKED_COMP = 1;
-const BLOCKED_PIN = 2;
-const BLOCKED_WIRE = 4;
+export const BLOCKED_COMP = 1;
+export const BLOCKED_PIN = 2;
+export const BLOCKED_WIRE = 4;
 
 // High-performance Binary Min-Heap for A*
 class MinHeap {
@@ -92,8 +92,7 @@ export class Grid {
   canTerminate(c, r) {
     if (!this.inBounds(c, r)) return false;
     const v = this.cells[this.idx(c, r)];
-    if (v & BLOCKED_WIRE) return false;
-    // We can terminate on pins, but not on plain component body.
+    // We can terminate on pins or wires, but not on plain component body.
     return !((v & BLOCKED_COMP) && !(v & BLOCKED_PIN));
   }
 
@@ -108,8 +107,8 @@ export class Grid {
     comp.pins.forEach(p => this.set(p.col, p.row, BLOCKED_PIN));
   }
 
-  // Optimized Multi-Target A*
-  astarMultiTarget(startIndices, targetIndices) {
+  // Optimized Multi-Target A* with optional soft obstacles (for manual preview)
+  astarMultiTarget(startIndices, targetIndices, soft = false) {
     const key = (c, r) => (r - this.minRow) * this.cols + (c - this.minCol);
     const size = this.cols * this.rows;
 
@@ -153,11 +152,14 @@ export class Grid {
       if (targetMap[currKey] === 1) {
         const path = [];
         let k = currKey;
-        while (k !== -1 && !startIndices.has(k)) {
-          path.unshift({ col: (k % this.cols) + this.minCol, row: Math.floor(k / this.cols) + this.minRow });
+        while (k !== -1) {
+          const col = (k % this.cols) + this.minCol;
+          const row = Math.floor(k / this.cols) + this.minRow;
+          const isCrossing = (this.cells[k] & BLOCKED_WIRE) !== 0;
+          path.unshift({ col, row, isCrossing });
+          if (startIndices.has(k)) break;
           k = parent[k];
         }
-        if (k !== -1) path.unshift({ col: (k % this.cols) + this.minCol, row: Math.floor(k / this.cols) + this.minRow });
 
         // Return path and which target we successfully hit
         return { path, hitTargetIdx: currKey };
@@ -169,9 +171,22 @@ export class Grid {
         if (!this.inBounds(nc, nr)) continue;
 
         const nk = key(nc, nr);
+        const cellVal = this.cells[nk];
         const isTarget = targetMap[nk] === 1;
 
-        if (!isTarget && !this.isFree(nc, nr)) continue;
+        // Hard block: Component body or pins of other nets
+        if (!isTarget && (cellVal & (BLOCKED_COMP | BLOCKED_PIN))) continue;
+
+        // Wire collision logic
+        let traversalCost = 1.0;
+        if (cellVal & BLOCKED_WIRE) {
+          if (soft) {
+            traversalCost = 10000.0; // High cost for manual preview jump
+          } else {
+            if (!isTarget) continue; // HARD COLLISION for standard routing
+          }
+        }
+
         if (isTarget && !this.canTerminate(nc, nr)) continue;
 
         let moveCost = 1.0;
@@ -183,6 +198,7 @@ export class Grid {
             moveCost += 1.5; // Turn penalty
           }
         }
+        moveCost += (traversalCost - 1.0);
 
         const ng = gScore[currKey] + moveCost;
         if (ng < gScore[nk]) {

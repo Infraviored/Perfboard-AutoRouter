@@ -1,4 +1,4 @@
-import { Grid } from './grid.js';
+import { Grid, BLOCKED_WIRE } from './grid.js';
 
 export const getAllNets = function (components) {
   const m = {};
@@ -10,7 +10,7 @@ export const getAllNets = function (components) {
   }));
   return Object.entries(m).map(([net, pins]) => ({ net, pins }));
 }
-export const route = async function (components, cols, rows, onProg, shouldCancel = null) {
+export const route = async function (components, cols, rows, onProg, shouldCancel = null, existingWires = []) {
   const nets = getAllNets(components);
 
   let minCol = Infinity, maxCol = -Infinity, minRow = Infinity, maxRow = -Infinity;
@@ -33,43 +33,70 @@ export const route = async function (components, cols, rows, onProg, shouldCance
   components.forEach(c => grid.registerComp(c));
 
   const wires = [];
+  // Preserve manual wires and mark them on the grid first
+  existingWires.forEach(w => {
+    if (w.manual && !w.failed && w.path) {
+      grid.markWire(w.path);
+      wires.push(w);
+    }
+  });
+
+  // Calculate which nets still need routing (exclude pins already connected by manual wires?)
+  // For simplicity, we just route everything else normally.
   for (let netIdx = 0; netIdx < nets.length; netIdx++) {
     if (shouldCancel && shouldCancel()) break;
     const net = nets[netIdx];
     if (onProg) onProg((netIdx + 1) / nets.length, net.net);
 
-    // We use the multi-target A* logic: 
-    // 1. Start with first pin
-    // 2. Target indices are the rest of the pins
-    // 3. Repeat until all pins in net are connected
-
     const pins = [...net.pins];
     const routedIndices = new Set();
-    const first = pins.shift();
-    routedIndices.add(grid.idx(first.col, first.row));
 
-    while (pins.length > 0) {
+    // 1. Temporarily UNBLOCK manual bits of our own net so we can use them
+    const manualWiresOfNet = wires.filter(w => w.manual && w.net === net.net);
+    manualWiresOfNet.forEach(mw => {
+      mw.path.forEach(pt => {
+        const idx = grid.idx(pt.col, pt.row);
+        routedIndices.add(idx);
+        grid.clear(pt.col, pt.row, BLOCKED_WIRE); // Clear so we can pass through/into our own net
+      });
+    });
+
+    const unroutedPins = pins.filter(p => !routedIndices.has(grid.idx(p.col, p.row)));
+
+    if (routedIndices.size === 0 && unroutedPins.length > 0) {
+      const first = unroutedPins.shift();
+      routedIndices.add(grid.idx(first.col, first.row));
+    }
+
+    const netResultWires = [];
+    while (unroutedPins.length > 0) {
       if (shouldCancel && shouldCancel()) break;
-      const targetIndices = pins.map(p => grid.idx(p.col, p.row));
+      const targetIndices = unroutedPins.map(p => grid.idx(p.col, p.row));
 
-      // Grid.astarMultiTarget(startIndices, targetIndices)
-      const result = grid.astarMultiTarget(routedIndices, targetIndices);
+      const result = grid.astarMultiTarget(routedIndices, targetIndices); // STRICT
 
       if (result && result.path) {
-        wires.push({ net: net.net, path: result.path, failed: false });
-        // Mark the path cells as blocked for other nets
-        grid.markWire(result.path);
-        // Add all path nodes to routed indices for this net
+        netResultWires.push({ net: net.net, path: result.path, failed: false });
+        // DO NOT mark grid yet! We might block our own next segment.
         result.path.forEach(pt => routedIndices.add(grid.idx(pt.col, pt.row)));
-        // Remove the pin we hit from the unrouted list
-        const hitIdx = pins.findIndex(p => grid.idx(p.col, p.row) === result.hitTargetIdx);
-        if (hitIdx !== -1) pins.splice(hitIdx, 1);
+        const hitIdx = unroutedPins.findIndex(p => grid.idx(p.col, p.row) === result.hitTargetIdx);
+        if (hitIdx !== -1) unroutedPins.splice(hitIdx, 1);
       } else {
-        // Failed to route to any of the remaining pins
-        const failPin = pins.shift();
-        wires.push({ net: net.net, path: [first, failPin], failed: true });
+        const failPin = unroutedPins.shift();
+        const firstIdx = [...routedIndices][0];
+        const fallbackA = { col: (firstIdx % grid.cols) + grid.minCol, row: Math.floor(firstIdx / grid.cols) + grid.minRow };
+        netResultWires.push({ net: net.net, path: [fallbackA, failPin], failed: true });
       }
     }
+
+    // 2. NOW we are done with the net. Mark ALL its wires on the grid permanently.
+    netResultWires.forEach(rw => {
+      wires.push(rw);
+      if (!rw.failed) grid.markWire(rw.path);
+    });
+    manualWiresOfNet.forEach(mw => {
+      grid.markWire(mw.path); // Restore block for others
+    });
 
     if (netIdx % 2 === 1) await new Promise(r => setTimeout(r, 0));
   }
@@ -140,6 +167,7 @@ export function incrementalReroute(components, wires, movedComps) {
 
   const grid = new Grid(gridCols, gridRows, gridMinC, gridMinR);
   components.forEach(c => grid.registerComp(c));
+  // Mark all kept wires on grid
   keptWires.forEach(w => { if (!w.failed && w.path) grid.markWire(w.path); });
 
   // 5. Route only the affected nets
@@ -154,29 +182,65 @@ export function incrementalReroute(components, wires, movedComps) {
     if (pins.length < 2) continue;
 
     const routedIndices = new Set();
-    const first = pins.shift();
-    routedIndices.add(grid.idx(first.col, first.row));
 
-    while (pins.length > 0) {
-      const targetIndices = pins.map(p => grid.idx(p.col, p.row));
-      const result = grid.astarMultiTarget(routedIndices, targetIndices);
+    // 1. Unblock own-net manual segments
+    const manualWiresOfNet = wires.filter(w => w.manual && w.net === net.net);
+    manualWiresOfNet.forEach(mw => {
+      let isDisplacedManual = false;
+      for (const mc of moved) {
+        if (mc.routeUnder) continue;
+        const ox = mc.ox, oy = mc.oy, ox2 = mc.ox + mc.w, oy2 = mc.oy + mc.h;
+        if (mw.path.some(pt => pt.col >= ox && pt.col < ox2 && pt.row >= oy && pt.row < oy2)) {
+          isDisplacedManual = true;
+          break;
+        }
+      }
+
+      if (!isDisplacedManual) {
+        // Do NOT mark grid yet, but do add to seeds
+        newWires.push(mw);
+        mw.path.forEach(pt => {
+          const idx = grid.idx(pt.col, pt.row);
+          routedIndices.add(idx);
+          grid.clear(pt.col, pt.row, BLOCKED_WIRE);
+        });
+      }
+    });
+
+    const unroutedPins = pins.filter(p => !routedIndices.has(grid.idx(p.col, p.row)));
+
+    if (routedIndices.size === 0 && unroutedPins.length > 0) {
+      const first = unroutedPins.shift();
+      routedIndices.add(grid.idx(first.col, first.row));
+    }
+
+    const netResultWires = [];
+    while (unroutedPins.length > 0) {
+      const targetIndices = unroutedPins.map(p => grid.idx(p.col, p.row));
+      const result = grid.astarMultiTarget(routedIndices, targetIndices); // STRICT
 
       if (result && result.path) {
-        newWires.push({ net: net.net, path: result.path, failed: false });
-        grid.markWire(result.path);
+        netResultWires.push({ net: net.net, path: result.path, failed: false });
         result.path.forEach(pt => routedIndices.add(grid.idx(pt.col, pt.row)));
-        const hitIdx = pins.findIndex(p => grid.idx(p.col, p.row) === result.hitTargetIdx);
-        if (hitIdx !== -1) pins.splice(hitIdx, 1);
+        const hitIdx = unroutedPins.findIndex(p => grid.idx(p.col, p.row) === result.hitTargetIdx);
+        if (hitIdx !== -1) unroutedPins.splice(hitIdx, 1);
       } else {
-        const failPin = pins.shift();
-        newWires.push({
-          net: net.net,
-          path: [{ col: first.col, row: first.row }, { col: failPin.col, row: failPin.row }],
-          failed: true
-        });
         allRouted = false;
+        const failPin = unroutedPins.shift();
+        const firstIdx = [...routedIndices][0];
+        const fallbackA = { col: (firstIdx % grid.cols) + grid.minCol, row: Math.floor(firstIdx / grid.cols) + grid.minRow };
+        netResultWires.push({ net: net.net, path: [fallbackA, failPin], failed: true });
       }
     }
+
+    // Mark ALL pieces of this net on grid now that we're done
+    netResultWires.forEach(rw => {
+      newWires.push(rw);
+      if (!rw.failed) grid.markWire(rw.path);
+    });
+    manualWiresOfNet.forEach(mw => {
+      grid.markWire(mw.path);
+    });
   }
 
   return { success: allRouted, wires: newWires };

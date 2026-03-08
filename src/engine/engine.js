@@ -128,11 +128,30 @@ export class AutorouterEngine {
             this.cols,
             this.rows,
             (p, m) => this.onProgress?.(p * 100, m),
-            () => this.gCancelRequested
+            () => this.gCancelRequested,
+            this.wires
         );
         this.wires = testWires;
         this.notify();
         return scoreState(this.components, testWires);
+    }
+
+    async route() {
+        this.gCancelRequested = false;
+        this.onStatusUpdate?.({ title: 'Rerouting...', isProcessing: true });
+        const manualOnly = this.wires.filter(w => w.manual);
+        const res = await route(
+            this.components,
+            this.cols,
+            this.rows,
+            (p, m) => this.onProgress?.(p * 100, m),
+            () => this.gCancelRequested,
+            manualOnly
+        );
+        this.wires = res;
+        this.onStatusUpdate?.({ isProcessing: false });
+        this.notify();
+        return res;
     }
 
     async placeAndRoute(compDefs) {
@@ -268,7 +287,7 @@ export class AutorouterEngine {
             }
         });
 
-        const res = grid.astarMultiTarget(startIndices, targetIndices);
+        const res = grid.astarMultiTarget(startIndices, targetIndices, true);
         return res ? res.path : null;
     }
 
@@ -304,7 +323,7 @@ export class AutorouterEngine {
     }
 
     addManualWire(net, path) {
-        this.wires.push({ net, path, failed: false });
+        this.wires.push({ net, path, failed: false, manual: true });
         this.tick++;
         this.notify();
     }

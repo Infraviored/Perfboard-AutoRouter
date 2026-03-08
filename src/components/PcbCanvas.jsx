@@ -483,18 +483,50 @@ export function PcbCanvas({
                     <g dangerouslySetInnerHTML={{ __html: componentsSvg }} />
                     <g dangerouslySetInnerHTML={{ __html: boundingBoxSvg }} />
 
-                    {routingMode && previewPath && (
-                        <polyline
-                            points={previewPath.map(pt => `${pt.col * SP + SP / 2},${pt.row * SP + SP / 2}`).join(' ')}
-                            fill="none"
-                            stroke={netColor(routingMode.startPin.pin.net)}
-                            stroke-width="5"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-dasharray="10 5"
-                            style={{ pointerEvents: 'none', filter: `drop-shadow(0 0 8px ${netColor(routingMode.startPin.pin.net)})` }}
-                        />
-                    )}
+                    {routingMode && previewPath && (() => {
+                        const segments = [];
+                        let current = [];
+                        let currentCrossing = false;
+
+                        // Start point
+                        if (previewPath.length > 0) {
+                            current.push(previewPath[0]);
+                            currentCrossing = false; // Initial segment is from pin, usually clean
+                        }
+
+                        for (let i = 1; i < previewPath.length; i++) {
+                            const pt = previewPath[i];
+                            const prev = previewPath[i - 1];
+                            const isCross = pt.isCrossing;
+
+                            if (isCross !== currentCrossing) {
+                                // Close current, start new
+                                segments.push({ path: current, isCrossing: currentCrossing });
+                                current = [prev, pt];
+                                currentCrossing = isCross;
+                            } else {
+                                current.push(pt);
+                            }
+                        }
+                        segments.push({ path: current, isCrossing: currentCrossing });
+
+                        return segments.map((seg, i) => (
+                            <polyline
+                                key={i}
+                                points={seg.path.map(pt => `${pt.col * SP + SP / 2},${pt.row * SP + SP / 2}`).join(' ')}
+                                fill="none"
+                                stroke={seg.isCrossing ? '#ff2222' : netColor(routingMode.startPin.pin.net)}
+                                stroke-width="5"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-dasharray={seg.isCrossing ? "5 5" : ""}
+                                style={{
+                                    pointerEvents: 'none',
+                                    filter: `drop-shadow(0 0 8px ${seg.isCrossing ? '#ff2222' : netColor(routingMode.startPin.pin.net)})`
+                                }}
+                            />
+                        ));
+                    })()}
                 </g>
             </svg>
 
