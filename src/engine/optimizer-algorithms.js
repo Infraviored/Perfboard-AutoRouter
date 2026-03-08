@@ -265,16 +265,21 @@ export async function enumeratePlateauNeighbors(components, wires, baseBox, base
         if (onProgress) onProgress(totalEvals, maxTotalEvals, `${cId} rot${rot}`);
         if (totalEvals > maxTotalEvals || gCancelRequested) break;
 
-        // Measure changes primarily via area bounds for now to quickly filter candidates.
-        const cBounds = footprintBoxMetrics(components, wires);
+        // Measure changes primarily via component bounds to avoid being masked by stale wires
+        const compBounds = calculateComponentBounds(components);
+        const w2 = compBounds.maxCol - compBounds.minCol + 1;
+        const h2 = compBounds.maxRow - compBounds.minRow + 1;
+        const compArea = w2 * h2;
+        const compPerim = (w2 + h2) * 2;
 
-        if (cBounds.area > baseBox.area) continue;
-        if (cBounds.area === baseBox.area && cBounds.perim > baseBox.perim) continue;
+        if (compArea > baseBox.area) continue;
+        // Even if area is same, if perim is better, it's a candidate
+        // Note: we compare against baseBox.area which includes wires, but that's okay as a ceiling.
 
         out.push({
           key: preKey,
           comps: saveComps(components),
-          score: { comp: baseScore.comp, area: cBounds.area, perim: cBounds.perim, wl: baseScore.wl }, // placeholder, full routing evaluated by caller
+          score: { comp: baseScore.comp, area: compArea, perim: compPerim, wl: baseScore.wl }, // placeholder, full routing evaluated by caller
           compId: cId,
           desc: `${cId}@(${ox},${oy}) rot${rot}`
         });
