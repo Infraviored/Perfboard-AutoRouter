@@ -28,7 +28,7 @@ export function Topbar({
 }) {
   return (
     <header id="topbar">
-      <div className="logo">Perfboard<em>Designer</em></div>
+      <div className="logo">Hole<em>Route</em></div>
 
       <div className="sep"></div>
 
