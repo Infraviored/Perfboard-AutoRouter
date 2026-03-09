@@ -96,7 +96,7 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
     const areaGain = s.area > 0 ? Math.round((s.area - f.area) / s.area * 100) : 0;
     const wlGain = s.wl > 0 ? Math.round((s.wl - f.wl) / s.wl * 100) : 0;
 
-    const improved = f.area < s.area || f.wl < s.wl;
+    const improved = results.improved;
     const title = results.title || (improved ? "Optimization Successful" : "No Improvement Found");
 
     barContent = (

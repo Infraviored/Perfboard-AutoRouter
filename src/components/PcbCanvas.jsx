@@ -46,7 +46,11 @@ export function PcbCanvas({
     const [camera, setCamera] = useState(() => {
         const saved = localStorage.getItem('pcb_camera_state');
         if (saved) {
-            try { return JSON.parse(saved); } catch (e) { }
+            try {
+                const s = JSON.parse(saved);
+                s.z = Math.min(Math.max(s.z || 1, 0.1), 10.0);
+                return s;
+            } catch (e) { }
         }
         return { x: 0, y: 0, z: 1 };
     });
@@ -84,7 +88,7 @@ export function PcbCanvas({
         const pos = getMousePos(e);
         const delta = e.deltaY > 0 ? 0.9 : 1.1;
 
-        const curZ = simZoom.current;
+        const curZ = Math.max(simZoom.current || 1, 0.01);
         const curP = simPan.current;
         const newZ = Math.min(Math.max(curZ * delta, 0.1), 10.0);
         const newP = {

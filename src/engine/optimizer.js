@@ -343,10 +343,11 @@ export async function doPlateauExplore(components, wires, cols, rows, options = 
     if (!components.length) return;
 
     const startSnapshot = saveComps(components);
-    let bestWires = await route(components, cols, rows, () => { }, checkCancel, currentWires);
-    let bestScore = scoreState(components, bestWires);
-    const startScore = bestScore;
-    currentWires = bestWires;
+    const startWires = await route(components, cols, rows, () => { }, checkCancel, currentWires);
+    const startScore = scoreState(components, startWires);
+    let bestWires = startWires;
+    let bestScore = startScore;
+    currentWires = startWires;
 
     onStateChange?.({ components, wires: bestWires });
 
@@ -440,7 +441,7 @@ export async function doPlateauExplore(components, wires, cols, rows, options = 
     const improved = isScoreBetter(finalScore, startScore);
     if (!improved) {
         restoreComps(components, startSnapshot);
-        currentWires = bestWires; // Start wires
+        currentWires = startWires;
     }
 
     setBestLine('');

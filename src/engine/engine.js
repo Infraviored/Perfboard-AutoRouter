@@ -91,8 +91,8 @@ export class AutorouterEngine {
 
         if (res.improved) {
             this.wires = res.wires;
-            this.notify();
         }
+        this.notify();
         return res;
     }
 
@@ -120,8 +120,8 @@ export class AutorouterEngine {
 
         if (res.improved) {
             this.wires = res.wires;
-            this.notify();
         }
+        this.notify();
         return res;
     }
 
@@ -307,7 +307,7 @@ export class AutorouterEngine {
         const affectedNets = new Set();
         if (comp && Array.isArray(comp.pins)) {
             comp.pins.forEach(p => {
-                if (p && p.net != null) {
+                if (p && p.net) {
                     affectedNets.add(p.net);
                 }
             });

@@ -273,6 +273,7 @@ export async function enumeratePlateauNeighbors(components, wires, baseBox, base
         const compPerim = (w2 + h2) * 2;
 
         if (compArea > baseBox.area) continue;
+        if (compArea === baseBox.area && compPerim > baseBox.perim) continue;
         // Even if area is same, if perim is better, it's a candidate
         // Note: we compare against baseBox.area which includes wires, but that's okay as a ceiling.
 
