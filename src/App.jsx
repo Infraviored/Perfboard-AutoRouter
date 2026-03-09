@@ -173,7 +173,9 @@ function App() {
         setSnapCounter(c => c + 1);
         saveHistory();
       }
-    } catch (e) { }
+    } catch (e) {
+      console.error('Failed to load circuit:', e);
+    }
   }, [engine, jsonInput, saveHistory]);
 
   const handleRoute = useCallback(async () => {
@@ -196,6 +198,7 @@ function App() {
       }
       setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: '' }));
     } catch (e) {
+      console.error('Failed to route:', e);
       setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: '' }));
     }
     saveHistory();
@@ -504,6 +507,8 @@ Use this format:
             saveHistory();
           }
         } catch (err) {
+          console.error('Failed to import PCB state from file:', err);
+          window.alert('Failed to import PCB file. Please make sure it is valid JSON in the expected format.');
         }
       };
       reader.readAsText(file);
@@ -540,7 +545,7 @@ Use this format:
       if (e.ctrlKey && e.key === 'z') { e.preventDefault(); handleUndo(); }
       if (e.ctrlKey && e.key === 'y') { e.preventDefault(); handleRedo(); }
       if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); handleRoute(); }
-      if (e.shiftKey && e.key === 'R') { e.preventDefault(); handleRoute(); }
+      if (e.shiftKey && e.key === 'R') { e.preventDefault(); handleRouteOnly(); }
 
       // Fix: 'v' shortcut should not prevent default if Ctrl/Cmd is held (for paste)
       // and should only fire if we are not in a text area.

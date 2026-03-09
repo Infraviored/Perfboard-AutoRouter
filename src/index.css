@@ -223,6 +223,18 @@ h3,
   border-color: var(--blu-bright);
 }
 
+.btn.grn {
+  background: var(--grn);
+  border-color: var(--grn-bright);
+}
+.btn.grn:hover { background: var(--grn-bright); color: #000; }
+
+.btn.blu {
+  background: var(--blu);
+  border-color: var(--blu-bright);
+}
+.btn.blu:hover { background: var(--blu-bright); color: #000; }
+
 .btn.is-loading {
   background: rgba(31, 111, 235, 0.1);
   border-color: var(--blu-bright);

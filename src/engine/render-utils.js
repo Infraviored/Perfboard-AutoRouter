@@ -115,10 +115,8 @@ export function generateWiresSVG(wires, activeNets = []) {
   return out;
 }
 
-let cachedRatsnest = '';
-let lastComponents = null;
 
-export function generateRatsnestSVG(components, wires = [], isDragging = false) {
+export function generateRatsnestSVG(components, wires = []) {
   const nets = getAllNets(components);
   let out = '';
   for (const netObj of nets) {
@@ -128,7 +126,6 @@ export function generateRatsnestSVG(components, wires = [], isDragging = false) 
     const netWires = wires.filter(w => w.net === net && !w.failed);
 
     // Coordinate-based connectivity: map each coordinate occupied by the net to a group ID
-    const groups = pins.map((p, i) => i);
     const parent = Array.from({ length: pins.length }, (_, i) => i);
     const findParent = (i) => {
       while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; }
@@ -210,14 +207,14 @@ export function generateRatsnestSVG(components, wires = [], isDragging = false) 
     // 4. MST between groups
     const connectedGroups = new Set([0]);
     while (connectedGroups.size < finalGroups.length) {
-      let bD = Infinity, bI = -1, bJ = -1, pI = -1, pJ = -1;
+      let bD = Infinity, bJ = -1, pI = -1, pJ = -1;
       connectedGroups.forEach(gi => {
         finalGroups.forEach((groupJ, gj) => {
           if (connectedGroups.has(gj)) return;
           finalGroups[gi].forEach(pi => {
             groupJ.forEach(pj => {
               const d = Math.abs(pins[pi].col - pins[pj].col) + Math.abs(pins[pi].row - pins[pj].row);
-              if (d < bD) { bD = d; bI = gi; bJ = gj; pI = pi; pJ = pj; }
+              if (d < bD) { bD = d; bJ = gj; pI = pi; pJ = pj; }
             });
           });
         });

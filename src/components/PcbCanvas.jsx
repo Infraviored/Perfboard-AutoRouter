@@ -52,7 +52,7 @@ export function PcbCanvas({
         return { x: 0, y: 0, z: 1 };
     });
     const [isPanning, setIsPanning] = useState(false);
-    const [lastPos, setLastPos] = useState({ x: 0, y: 0 });
+    const lastPos = useRef({ x: 0, y: 0 });
     const [draggingId, setDraggingId] = useState(null);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
     const [routingMode, setRoutingMode] = useState(null); // { startPin, currentPos }
@@ -146,7 +146,7 @@ export function PcbCanvas({
         } else {
             // Pan or Reset
             setIsPanning(true);
-            setLastPos(pos);
+            lastPos.current = pos;
             onSelect?.(null);
             onSelectNet?.(null);
             if (routingMode) {
@@ -154,7 +154,7 @@ export function PcbCanvas({
                 onPreviewRoute?.(null);
             }
         }
-        e.target.setPointerCapture(e.pointerId);
+        e.currentTarget.setPointerCapture(e.pointerId);
     };
 
     const handlePointerMove = (e) => {
@@ -176,11 +176,11 @@ export function PcbCanvas({
             onMove?.(draggingId, nx, ny);
         } else if (isPanning) {
             const newP = {
-                x: camera.x + (pos.x - lastPos.x),
-                y: camera.y + (pos.y - lastPos.y)
+                x: camera.x + (pos.x - lastPos.current.x),
+                y: camera.y + (pos.y - lastPos.current.y)
             };
             setCamera(prev => ({ ...prev, x: newP.x, y: newP.y }));
-            setLastPos(pos);
+            lastPos.current = pos;
             simPan.current = { ...newP };
         }
     };

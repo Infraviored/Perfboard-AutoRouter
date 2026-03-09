@@ -1,7 +1,7 @@
 import { route, incrementalReroute } from './router.js';
 import { Grid } from './grid.js';
 import { doOptimizeFootprint, doPlateauExplore } from './optimizer.js';
-import { scoreState, doRecursivePushPacking, recenterComponents } from './optimizer-algorithms.js';
+import { scoreState, recenterComponents } from './optimizer-algorithms.js';
 import { placeInitial } from './initial-placement.js';
 import { anneal, moveComp, rotateComp90InPlace } from './placer.js';
 import { saveComps, restoreComps, completion } from './state-utils.js';
@@ -89,8 +89,10 @@ export class AutorouterEngine {
             options
         );
 
-        this.wires = res.wires || this.wires;
-        this.notify();
+        if (res.improved) {
+            this.wires = res.wires;
+            this.notify();
+        }
         return res;
     }
 
@@ -116,8 +118,10 @@ export class AutorouterEngine {
             options
         );
 
-        this.wires = res.wires || this.wires;
-        this.notify();
+        if (res.improved) {
+            this.wires = res.wires;
+            this.notify();
+        }
         return res;
     }
 

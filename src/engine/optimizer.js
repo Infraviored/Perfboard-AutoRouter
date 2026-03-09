@@ -1,5 +1,5 @@
 import { route } from './router.js';
-import { scoreState, formatScore, calculateFootprintArea, footprintBoxMetrics, calculateComponentBounds, doRecursivePushPacking, tryRotateOptimize, explorePlateauStates, tryGlobalNudge, tryShrinkAlongWires, tryWireAbsorption, tryAffinityPacking, tryChainedCompaction, tryClusterRotateOptimize, isScoreBetter, recenterComponents, stateKeyForPlateau, enumeratePlateauNeighbors } from './optimizer-algorithms.js';
+import { scoreState, formatScore, footprintBoxMetrics, calculateComponentBounds, doRecursivePushPacking, tryRotateOptimize, explorePlateauStates, tryGlobalNudge, tryShrinkAlongWires, tryWireAbsorption, tryAffinityPacking, tryChainedCompaction, tryClusterRotateOptimize, isScoreBetter, recenterComponents, stateKeyForPlateau, enumeratePlateauNeighbors } from './optimizer-algorithms.js';
 import { saveComps, restoreComps } from './state-utils.js';
 import { moveComp, rotateComp90InPlace, anneal, anyOverlap } from './placer.js';
 
@@ -318,10 +318,16 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
     // Removed translateFootprintToTopLeftUI(); to stop jumping to top-left
 
     const finalScore = scoreState(components, currentWires);
+    const improved = isScoreBetter(finalScore, startScore);
+    if (!improved) {
+        restoreComps(components, startSnapshot);
+        currentWires = startWires;
+    }
+
     setBestLine('');
     flashUIState();
 
-    return { improved: true, score: finalScore, wires: currentWires, startScore: startScore };
+    return { improved, score: improved ? finalScore : startScore, wires: currentWires, startScore: startScore };
 }
 
 
@@ -431,6 +437,12 @@ export async function doPlateauExplore(components, wires, cols, rows, options = 
     }
 
     const finalScore = scoreState(components, currentWires);
+    const improved = isScoreBetter(finalScore, startScore);
+    if (!improved) {
+        restoreComps(components, startSnapshot);
+        currentWires = bestWires; // Start wires
+    }
+
     setBestLine('');
-    return { improved: isScoreBetter(finalScore, startScore), score: finalScore, wires: currentWires, startScore: startScore };
+    return { improved, score: improved ? finalScore : startScore, wires: currentWires, startScore: startScore };
 }

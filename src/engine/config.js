@@ -5,7 +5,7 @@
  */
 export const CAMERA_CONFIG = {
     // How much of the viewport the PCB bounding box should attempt to fill.
-    // 0.82 = 82% of the screen.
+    // 0.6 = 60% of the screen.
     TARGET_COVERAGE: 0.6,
 
     // The maximum zoom level the 'auto-zoom-to-fit' logic will allow.
@@ -14,13 +14,13 @@ export const CAMERA_CONFIG = {
     // DEADZONES (HYSTERESIS)
     // The camera will stay perfectly still as long as the PCB is within these bounds.
 
-    // ZOOM: Only act if board is larger than 95% or smaller than 70% of viewport.
+    // ZOOM: Only act if board is larger than 75% or smaller than 45% of viewport.
     ZOOM_OUT_THRESHOLD: 0.75,
     ZOOM_IN_THRESHOLD: 0.45,
 
-    // PAN: Only act if the PCB center drifts more than 10% away from the screen center.
-    PAN_DEADZONE_X: 0.05, // 10% of width
-    PAN_DEADZONE_Y: 0.05, // 10% of height
+    // PAN: Only act if the PCB center drifts more than 5% away from the screen center.
+    PAN_DEADZONE_X: 0.05, // 5% of width
+    PAN_DEADZONE_Y: 0.05, // 5% of height
 
     // PHYSICS STRENGTH
     // Higher values make the camera "snappier" and faster.
