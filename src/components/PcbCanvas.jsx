@@ -38,7 +38,6 @@ export function PcbCanvas({
     onManualRoute,
     onPreviewRoute,
     previewPath,
-    previewNet,
     selectedNet,
     onSelectNet
 }) {
@@ -87,10 +86,10 @@ export function PcbCanvas({
 
         const curZ = simZoom.current;
         const curP = simPan.current;
-        const newZ = curZ * delta;
+        const newZ = Math.min(Math.max(curZ * delta, 0.1), 10.0);
         const newP = {
-            x: pos.x - (pos.x - curP.x) * delta,
-            y: pos.y - (pos.y - curP.y) * delta
+            x: pos.x - (pos.x - curP.x) * (newZ / curZ),
+            y: pos.y - (pos.y - curP.y) * (newZ / curZ)
         };
 
         setCamera({ x: newP.x, y: newP.y, z: newZ });

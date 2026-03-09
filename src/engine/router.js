@@ -243,7 +243,9 @@ export function incrementalReroute(components, wires, movedComps) {
       newWires.push(rw);
       if (!rw.failed) grid.markWire(rw.path);
     });
-    manualWiresOfNet.forEach(mw => {
+
+    const keptManualsOfNet = newWires.filter(w => w.manual && w.net === net.net);
+    keptManualsOfNet.forEach(mw => {
       grid.markWire(mw.path);
     });
   }

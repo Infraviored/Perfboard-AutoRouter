@@ -97,7 +97,7 @@ function App() {
         name: c.name,
         value: c.value,
         pins: c.pins.map(p => ({
-          offset: [p.col, p.row],
+          offset: [p.dCol, p.dRow],
           label: p.lbl,
           net: p.net || ''
         }))
@@ -294,40 +294,6 @@ Use this format:
     saveHistory();
   }, [engine, saveHistory]);
 
-  const handleOptimizeFootprint = useCallback(async () => {
-    setBestSnapshot(null);
-    setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
-    const res = await engine.optimize();
-    if (res) {
-      setStatus(prev => ({ ...prev, isProcessing: false, results: res }));
-      setTimeout(() => {
-        setStatus(prev => ({ ...prev, results: null }));
-        setBestSnapshot(null);
-      }, 4000);
-    } else {
-      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
-      setBestSnapshot(null);
-    }
-    saveHistory();
-  }, [engine, saveHistory]);
-
-  const handlePlateauExplore = useCallback(async () => {
-    setBestSnapshot(null);
-    setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
-    const res = await engine.plateau();
-    if (res) {
-      setStatus(prev => ({ ...prev, isProcessing: false, results: res }));
-      setTimeout(() => {
-        setStatus(prev => ({ ...prev, results: null }));
-        setBestSnapshot(null);
-      }, 4000);
-    } else {
-      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
-      setBestSnapshot(null);
-    }
-    saveHistory();
-  }, [engine, saveHistory]);
-
   const handleClearWires = useCallback(() => {
     engine.setState({ wires: [] });
     saveHistory();
@@ -427,7 +393,7 @@ Use this format:
     }
     setConfirmData({ isOpen: false, type: null, targetId: null });
     saveHistory();
-  }, [confirmData, engine, activePin, handleRouteOnly, saveHistory]);
+  }, [confirmData, engine, activePin, handleRouteOnly, handleLoadTemplate, saveHistory]);
 
   const handleReset = useCallback(() => {
     setConfirmData({
@@ -644,7 +610,6 @@ Use this format:
           }} onOpenLibrary={() => setIsLibraryOpen(true)}
           onAddNewComponent={() => { setEditingComp(null); setIsEditorOpen(true); }}
           onEditComponent={(id) => { setEditingComp(board.components.find(x => x.id === id)); setIsEditorOpen(true); }}
-          isProcessing={status.isProcessing}
         />
         <div id="ca-col">
           <main id="ca">
