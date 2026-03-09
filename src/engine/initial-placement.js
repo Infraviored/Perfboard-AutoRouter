@@ -1,4 +1,4 @@
-import { moveComp, rotateComp90InPlace } from './placer.js';
+import { rotateComp90InPlace } from './placer.js';
 
 export function placeInitial(compDefs, startX = 50, startY = 50) {
   const components = [];

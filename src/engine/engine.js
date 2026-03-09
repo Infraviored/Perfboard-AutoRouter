@@ -247,7 +247,7 @@ export class AutorouterEngine {
     }
 
     updateIncrementalWires(movedComp) {
-        const { success, wires } = incrementalReroute(this.components, this.wires, movedComp);
+        const { wires } = incrementalReroute(this.components, this.wires, movedComp);
         this.wires = wires;
     }
 

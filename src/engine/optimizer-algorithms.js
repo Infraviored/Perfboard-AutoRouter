@@ -424,7 +424,7 @@ export function tryTranslateWithPush(comp, dx, dy, cols, rows, visited, depth, c
 }
 
 
-export async function tryShrinkAlongWires(components, currentWires, bestScore, cols, rows, gCancelRequested = false) {
+export async function tryShrinkAlongWires(components, currentWires, bestScore, cols, rows) {
   const original = saveComps(components);
   const originalWires = currentWires;
 
@@ -1211,7 +1211,7 @@ export async function explorePlateauStates(components, currentWires, bestScore, 
 }
 
 
-export async function tryRotateOptimize(components, wires, cols, rows, gCancelRequested = false) {
+export async function tryRotateOptimize(components, wires) {
   let bestScore = scoreState(components, wires);
   let bestWires = wires;
   let improved = false;
@@ -1297,7 +1297,6 @@ export async function doRecursivePushPacking(components, wires, cols, rows, gCan
     });
 
     const oldStates = saveComps(components);
-    const posBefore = components.map(c => ({ ox: c.ox, oy: c.oy, w: c.w, h: c.h }));
     const movedSet = [];
 
     for (let c of sorted) {

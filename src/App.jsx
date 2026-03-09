@@ -21,7 +21,9 @@ function App() {
       try {
         const parsed = JSON.parse(saved);
         return new AutorouterEngine(parsed.cols || 30, parsed.rows || 20);
-      } catch (e) { }
+      } catch (e) {
+        console.warn("Failed to parse saved board state for engine", e);
+      }
     }
     return new AutorouterEngine(30, 20);
   }, []);
@@ -39,7 +41,9 @@ function App() {
           rows: parsed.rows || 20,
           tick: 0
         };
-      } catch (e) { }
+      } catch (e) {
+        console.warn("Failed to parse saved board state", e);
+      }
     }
     return { components: [], wires: [], cols: 30, rows: 20, tick: 0 };
   });
@@ -113,13 +117,12 @@ function App() {
     if (newJson !== jsonInput) {
       setJsonInput(newJson);
     }
-  }, [board.components, board.tick]);
+  }, [board.components, board.tick, jsonInput]);
 
   const [status, setStatus] = useState({ title: '', progress: 0, best: '', isProcessing: false, isInitial: false });
   const [selectedId, setSelectedId] = useState(null);
   const [selectedNet, setSelectedNet] = useState(null);
   const [hoveredNet, setHoveredNet] = useState(null);
-  const [tool, setTool] = useState('sel');
   const [bestSnapshot, setBestSnapshot] = useState(null);
 
 
@@ -272,16 +275,6 @@ function App() {
     }
   }, [history, historyIndex, engine]);
 
-  const handleCopyPrompt = useCallback(() => {
-    const prompt = `Act as an expert electronics designer. Generate a JSON circuit definition for the following request: "Simple ESP32 power controller with relay".
-Use this format:
-{
-  "components": [
-    { "id": "U1", "name": "ESP32", "pins": [{"offset": [0,0], "label": "GND", "net": "GND"}] }
-  ]
-}`;
-    navigator.clipboard.writeText(prompt);
-  }, []);
 
   const handleRouteOnly = useCallback(async () => {
     setStatus(prev => ({ ...prev, isProcessing: true }));
@@ -513,14 +506,7 @@ Use this format:
       if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); handleRoute(); }
       if (e.shiftKey && e.key === 'R') { e.preventDefault(); handleRouteOnly(); }
 
-      // Fix: 'v' shortcut should not prevent default if Ctrl/Cmd is held (for paste)
-      // and should only fire if we are not in a text area.
-      if (e.key === 'v' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        if (document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
-          e.preventDefault();
-          setTool('sel');
-        }
-      }
+      // Removed tool switching logic
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
         // Only trigger if no input is focused
@@ -532,7 +518,7 @@ Use this format:
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, handleRoute, requestDelete]);
+  }, [handleUndo, handleRedo, handleRoute, handleRouteOnly, requestDelete]);
 
   // --- INITIAL LOAD ---
   useEffect(() => {

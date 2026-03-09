@@ -24,7 +24,6 @@ export function Topbar({
   onReset,
   onExportSVG,
   onRouteOnly,
-  hasWires,
   isProcessing
 }) {
   return (

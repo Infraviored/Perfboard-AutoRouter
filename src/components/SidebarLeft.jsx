@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { boostColor, compColor } from '../engine/render-utils.js';
 import {
   Plus,
@@ -10,13 +10,8 @@ import {
 } from 'lucide-react';
 
 export function SidebarLeft({
-  cols,
-  rows,
-  onApplyBoard,
-  onCutToBoundingBox,
   jsonInput,
   setJsonInput,
-  onLoadTemplate,
   components,
   selectedId,
   onSelectComponent,
@@ -25,12 +20,6 @@ export function SidebarLeft({
   onEditComponent,
   onOpenPrompt
 }) {
-  const [localCols, setLocalCols] = useState(cols);
-  const [localRows, setLocalRows] = useState(rows);
-
-  const handleApply = () => {
-    onApplyBoard(parseInt(localCols), parseInt(localRows));
-  };
 
   return (
     <aside id="lsb">

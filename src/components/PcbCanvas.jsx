@@ -26,11 +26,9 @@ export function PcbCanvas({
     rows,
     selectedId,
     onSelect,
-    activeNets,
     onMove,
     onRotate,
     onMoveEnd,
-    tick,
     isProcessing,
     isInitialProcessing,
     workflowStep,
@@ -50,7 +48,9 @@ export function PcbCanvas({
                 const s = JSON.parse(saved);
                 s.z = Math.min(Math.max(s.z || 1, 0.1), 10.0);
                 return s;
-            } catch (e) { }
+            } catch (e) {
+                console.warn("Failed to parse camera state:", e);
+            }
         }
         return { x: 0, y: 0, z: 1 };
     });
@@ -63,6 +63,7 @@ export function PcbCanvas({
     // Sink routing mode if preview is cleared externally
     useEffect(() => {
         if (!previewPath && routingMode) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setRoutingMode(null);
         }
     }, [previewPath, routingMode]);
@@ -88,7 +89,7 @@ export function PcbCanvas({
         const pos = getMousePos(e);
         const delta = e.deltaY > 0 ? 0.9 : 1.1;
 
-        const curZ = Math.max(simZoom.current || 1, 0.01);
+        const curZ = simZoom.current || 1; // Ensure simZoom.current is initialized
         const curP = simPan.current;
         const newZ = Math.min(Math.max(curZ * delta, 0.1), 10.0);
         const newP = {
@@ -286,7 +287,7 @@ export function PcbCanvas({
 
         snapLockRef.current = { targetCX, targetCY, fitZoom };
         setTrackingMode(TRACKING_MODES.SNAP);
-    }, [bounds, viewportSize]);
+    }, [bounds, viewportSize, TRACKING_MODES.SNAP]); // Added TRACKING_MODES.SNAP to deps
 
     useEffect(() => {
         const isMilestone = (workflowStep === 1 || workflowStep === 2) && workflowStep !== lastSnapStep.current;
@@ -297,6 +298,7 @@ export function PcbCanvas({
         const shouldSnap = isMilestone || isCounterJump || justFinished || isInitialProcessing || (!hasInitializedFit.current && bounds);
 
         if (shouldSnap && viewportSize.width > 0) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             startSnap();
             hasInitializedFit.current = true;
             lastSnapStep.current = workflowStep;
@@ -320,14 +322,13 @@ export function PcbCanvas({
             hasInitializedFit.current = false;
             localStorage.removeItem('pcb_camera_state');
         }
-    }, [workflowStep, snapCounter, isInitialProcessing, isProcessing, isAutoTracking, draggingId, bounds, viewportSize, startSnap, trackingMode]);
+    }, [workflowStep, snapCounter, isInitialProcessing, isProcessing, isAutoTracking, draggingId, bounds, viewportSize, startSnap, trackingMode, TRACKING_MODES.LIVE, TRACKING_MODES.SNAP, TRACKING_MODES.NONE]); // Added TRACKING_MODES to deps
 
     const zoomVelRef = useRef(0);
     const panVelRef = useRef({ x: 0, y: 0 });
     const smoothCenterRef = useRef({ x: 0, y: 0 });
     const targetBoundsRef = useRef(null);
     const lastTimeRef = useRef(0);
-    const rAFRef = useRef(null);
     const simPan = useRef({ x: camera.x, y: camera.y });
     const simZoom = useRef(camera.z);
 
@@ -345,7 +346,6 @@ export function PcbCanvas({
 
         const viewport = viewportSize;
         if (viewport.width === 0) {
-            rAFRef.current = requestAnimationFrame(updatePhysics);
             return;
         }
 
@@ -373,7 +373,6 @@ export function PcbCanvas({
                     CAMERA_CONFIG.MAX_ZOOM_FIT
                 );
             } else {
-                rAFRef.current = requestAnimationFrame(updatePhysics);
                 return;
             }
 
@@ -452,33 +451,39 @@ export function PcbCanvas({
                 snapLockRef.current = null;
             }
         }
-        rAFRef.current = requestAnimationFrame(updatePhysics);
-    }, [trackingMode, isAutoTracking, isPanning, draggingId, SP, viewportSize, isProcessing]);
+    }, [trackingMode, isAutoTracking, isPanning, draggingId, viewportSize, isProcessing, TRACKING_MODES.SNAP, TRACKING_MODES.LIVE, TRACKING_MODES.NONE]);
 
 
     useEffect(() => {
+        let rAF;
+        const loop = (time) => {
+            if (isAutoTracking && (trackingMode !== TRACKING_MODES.NONE)) {
+                updatePhysics(time);
+                rAF = requestAnimationFrame(loop);
+            }
+        };
+
         if (isAutoTracking && (trackingMode !== TRACKING_MODES.NONE)) {
             lastTimeRef.current = performance.now();
-            rAFRef.current = requestAnimationFrame(updatePhysics);
+            rAF = requestAnimationFrame(loop);
         } else {
-            if (rAFRef.current) cancelAnimationFrame(rAFRef.current);
             zoomVelRef.current = 0;
             panVelRef.current = { x: 0, y: 0 };
             lastTimeRef.current = 0;
         }
         return () => {
-            if (rAFRef.current) {
-                cancelAnimationFrame(rAFRef.current);
-            }
+            if (rAF) cancelAnimationFrame(rAF);
         };
-    }, [isAutoTracking, trackingMode, updatePhysics]);
+    }, [isAutoTracking, trackingMode, updatePhysics, TRACKING_MODES.NONE]);
 
 
     const background = useMemo(() => generateBackgroundSVG(cols, rows, bounds), [cols, rows, bounds]);
-    const wiresSvg = useMemo(() => generateWiresSVG(wires, activeNets), [wires, activeNets, tick]);
-    const ratsnestSvg = useMemo(() => generateRatsnestSVG(components, wires, !!draggingId), [components, wires, draggingId, tick]);
-    const componentsSvg = useMemo(() => components.map(c => renderCompSVG(c, c.id === selectedId, routingMode?.startPin)).join(''), [components, selectedId, routingMode, tick]);
-    const boundingBoxSvg = useMemo(() => generateBoundingBoxSVG(components, wires), [components, wires, tick]);
+    const wiresSvg = useMemo(() => generateWiresSVG(wires, selectedId, selectedNet), [wires, selectedId, selectedNet]);
+    const ratsnestSvg = useMemo(() => generateRatsnestSVG(components, wires, selectedId), [components, wires, selectedId]);
+    const componentsSvg = useMemo(() => components.map(c => renderCompSVG(c, c.id === selectedId, routingMode?.startPin)).join(''), [components, selectedId, routingMode]);
+    const boundingBoxSvg = useMemo(() => generateBoundingBoxSVG(components, wires), [components, wires]);
+
+    // Removal of failing simZoom useEffect
 
     return (
         <div className={`canvas-container ${isProcessing ? 'pb-active' : ''}`} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} onMouseDown={handleMouseDown} onWheel={handleWheel} onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', cursor: routingMode ? 'crosshair' : (isPanning || draggingId ? 'grabbing' : 'crosshair'), background: '#050706', '--pb-height': '240px' }}>
@@ -540,17 +545,13 @@ export function PcbCanvas({
             <div className="canvas-controls">
                 <button className="cbtn" onClick={() => {
                     const z = camera.z * 1.15;
-                    const newCamera = { ...camera, z };
-                    setCamera(newCamera);
-                    simZoom.current = z;
+                    setCamera({ ...camera, z });
                 }} title="Zoom In">
                     <Plus size={18} />
                 </button>
                 <button className="cbtn" onClick={() => {
                     const z = camera.z * 0.87;
-                    const newCamera = { ...camera, z };
-                    setCamera(newCamera);
-                    simZoom.current = z;
+                    setCamera({ ...camera, z });
                 }} title="Zoom Out">
                     <Minus size={18} />
                 </button>

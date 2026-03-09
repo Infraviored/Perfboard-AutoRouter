@@ -1,0 +1,328 @@
+{
+  "components": [
+    {
+      "id": "J1",
+      "name": "Power",
+      "value": "2-pin",
+      "routeUnder": false,
+      "w": 1,
+      "h": 2,
+      "ox": 0,
+      "oy": 1,
+      "pins": [
+        {
+          "col": 0,
+          "row": 1,
+          "net": "VCC",
+          "lbl": "+",
+          "dCol": 0,
+          "dRow": 0,
+          "netId": 0
+        },
+        {
+          "col": 0,
+          "row": 2,
+          "net": "GND",
+          "lbl": "-",
+          "dCol": 0,
+          "dRow": 1,
+          "netId": 1
+        }
+      ]
+    },
+    {
+      "id": "R1",
+      "name": "Resistor",
+      "value": "10k",
+      "routeUnder": false,
+      "w": 1,
+      "h": 3,
+      "ox": -1,
+      "oy": -2,
+      "pins": [
+        {
+          "col": -1,
+          "row": 0,
+          "net": "VCC",
+          "lbl": "1",
+          "dCol": 0,
+          "dRow": 2,
+          "netId": 0
+        },
+        {
+          "col": -1,
+          "row": -2,
+          "net": "GATE",
+          "lbl": "2",
+          "dCol": 0,
+          "dRow": 0,
+          "netId": 2
+        }
+      ]
+    },
+    {
+      "id": "Q1",
+      "name": "N-MOSFET",
+      "value": "IRLZ44N",
+      "routeUnder": false,
+      "w": 1,
+      "h": 3,
+      "ox": 1,
+      "oy": -2,
+      "pins": [
+        {
+          "col": 1,
+          "row": -2,
+          "net": "GATE",
+          "lbl": "G",
+          "dCol": 0,
+          "dRow": 0,
+          "netId": 2
+        },
+        {
+          "col": 1,
+          "row": -1,
+          "net": "DRAIN",
+          "lbl": "D",
+          "dCol": 0,
+          "dRow": 1,
+          "netId": 3
+        },
+        {
+          "col": 1,
+          "row": 0,
+          "net": "SOURCE",
+          "lbl": "S",
+          "dCol": 0,
+          "dRow": 2,
+          "netId": 4
+        }
+      ]
+    },
+    {
+      "id": "RL1",
+      "name": "Relay",
+      "value": "5V coil",
+      "routeUnder": false,
+      "w": 1,
+      "h": 2,
+      "ox": 0,
+      "oy": -1,
+      "pins": [
+        {
+          "col": 0,
+          "row": 0,
+          "net": "VCC",
+          "lbl": "A",
+          "dCol": 0,
+          "dRow": 1,
+          "netId": 0
+        },
+        {
+          "col": 0,
+          "row": -1,
+          "net": "DRAIN",
+          "lbl": "B",
+          "dCol": 0,
+          "dRow": 0,
+          "netId": 3
+        }
+      ]
+    },
+    {
+      "id": "C1",
+      "name": "Cap",
+      "value": "100uF",
+      "routeUnder": false,
+      "w": 1,
+      "h": 2,
+      "ox": -1,
+      "oy": 1,
+      "pins": [
+        {
+          "col": -1,
+          "row": 1,
+          "net": "VCC",
+          "lbl": "+",
+          "dCol": 0,
+          "dRow": 0,
+          "netId": 0
+        },
+        {
+          "col": -1,
+          "row": 2,
+          "net": "GND",
+          "lbl": "-",
+          "dCol": 0,
+          "dRow": 1,
+          "netId": 1
+        }
+      ]
+    },
+    {
+      "id": "D1",
+      "name": "Diode",
+      "value": "1N4007",
+      "routeUnder": false,
+      "w": 1,
+      "h": 2,
+      "ox": 1,
+      "oy": 1,
+      "pins": [
+        {
+          "col": 1,
+          "row": 1,
+          "net": "SOURCE",
+          "lbl": "K",
+          "dCol": 0,
+          "dRow": 0,
+          "netId": 4
+        },
+        {
+          "col": 1,
+          "row": 2,
+          "net": "GND",
+          "lbl": "A",
+          "dCol": 0,
+          "dRow": 1,
+          "netId": 1
+        }
+      ]
+    }
+  ],
+  "wires": [
+    {
+      "net": "DRAIN",
+      "path": [
+        {
+          "col": 1,
+          "row": -1,
+          "isCrossing": false
+        },
+        {
+          "col": 0,
+          "row": -1,
+          "isCrossing": false
+        }
+      ],
+      "failed": false
+    },
+    {
+      "net": "SOURCE",
+      "path": [
+        {
+          "col": 1,
+          "row": 0,
+          "isCrossing": false
+        },
+        {
+          "col": 1,
+          "row": 1,
+          "isCrossing": false
+        }
+      ],
+      "failed": false
+    },
+    {
+      "net": "GND",
+      "path": [
+        {
+          "col": 0,
+          "row": 2,
+          "isCrossing": false
+        },
+        {
+          "col": 1,
+          "row": 2,
+          "isCrossing": false
+        }
+      ],
+      "failed": false
+    },
+    {
+      "net": "GND",
+      "path": [
+        {
+          "col": 0,
+          "row": 2,
+          "isCrossing": false
+        },
+        {
+          "col": -1,
+          "row": 2,
+          "isCrossing": false
+        }
+      ],
+      "failed": false
+    },
+    {
+      "net": "VCC",
+      "path": [
+        {
+          "col": 0,
+          "row": 1,
+          "isCrossing": false
+        },
+        {
+          "col": 0,
+          "row": 0,
+          "isCrossing": false
+        }
+      ],
+      "failed": false
+    },
+    {
+      "net": "VCC",
+      "path": [
+        {
+          "col": 0,
+          "row": 1,
+          "isCrossing": false
+        },
+        {
+          "col": -1,
+          "row": 1,
+          "isCrossing": false
+        }
+      ],
+      "failed": false
+    },
+    {
+      "net": "VCC",
+      "path": [
+        {
+          "col": -1,
+          "row": 1,
+          "isCrossing": false
+        },
+        {
+          "col": -1,
+          "row": 0,
+          "isCrossing": false
+        }
+      ],
+      "failed": false
+    },
+    {
+      "net": "GATE",
+      "path": [
+        {
+          "col": -1,
+          "row": -2,
+          "isCrossing": false
+        },
+        {
+          "col": 0,
+          "row": -2,
+          "isCrossing": false
+        },
+        {
+          "col": 1,
+          "row": -2,
+          "isCrossing": false
+        }
+      ],
+      "failed": false
+    }
+  ]
+}
