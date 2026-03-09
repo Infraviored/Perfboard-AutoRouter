@@ -26,9 +26,11 @@ export function PcbCanvas({
     rows,
     selectedId,
     onSelect,
+    activeNets,
     onMove,
     onRotate,
     onMoveEnd,
+    tick,
     isProcessing,
     isInitialProcessing,
     workflowStep,
@@ -478,10 +480,10 @@ export function PcbCanvas({
 
 
     const background = useMemo(() => generateBackgroundSVG(cols, rows, bounds), [cols, rows, bounds]);
-    const wiresSvg = useMemo(() => generateWiresSVG(wires, selectedId, selectedNet), [wires, selectedId, selectedNet]);
-    const ratsnestSvg = useMemo(() => generateRatsnestSVG(components, wires, selectedId), [components, wires, selectedId]);
-    const componentsSvg = useMemo(() => components.map(c => renderCompSVG(c, c.id === selectedId, routingMode?.startPin)).join(''), [components, selectedId, routingMode]);
-    const boundingBoxSvg = useMemo(() => generateBoundingBoxSVG(components, wires), [components, wires]);
+    const wiresSvg = useMemo(() => generateWiresSVG(wires, activeNets), [wires, activeNets, tick]);
+    const ratsnestSvg = useMemo(() => generateRatsnestSVG(components, wires, selectedId), [components, wires, selectedId, tick]);
+    const componentsSvg = useMemo(() => components.map(c => renderCompSVG(c, c.id === selectedId, routingMode?.startPin)).join(''), [components, selectedId, routingMode, tick]);
+    const boundingBoxSvg = useMemo(() => generateBoundingBoxSVG(components, wires), [components, wires, tick]);
 
     // Removal of failing simZoom useEffect
 
