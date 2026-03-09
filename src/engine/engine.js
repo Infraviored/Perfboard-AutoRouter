@@ -1,4 +1,5 @@
 import { route, incrementalReroute } from './router.js';
+import { Grid } from './grid.js';
 import { doOptimizeFootprint, doPlateauExplore } from './optimizer.js';
 import { scoreState, doRecursivePushPacking, recenterComponents } from './optimizer-algorithms.js';
 import { placeInitial } from './initial-placement.js';
@@ -30,16 +31,14 @@ export class AutorouterEngine {
         this.onStateChange = null;
         this.onProgress = null;
         this.onStatusUpdate = null;
-        this.onToast = null;
         this.onBestSnapshot = null;
         this.tick = 0;
     }
 
-    setCallbacks({ onStateChange, onProgress, onStatusUpdate, onToast, onBestSnapshot }) {
+    setCallbacks({ onStateChange, onProgress, onStatusUpdate, onBestSnapshot }) {
         if (onStateChange) this.onStateChange = onStateChange;
         if (onProgress) this.onProgress = onProgress;
         if (onStatusUpdate) this.onStatusUpdate = onStatusUpdate;
-        if (onToast) this.onToast = onToast;
         if (onBestSnapshot) this.onBestSnapshot = onBestSnapshot;
     }
 
@@ -71,7 +70,6 @@ export class AutorouterEngine {
         const options = {
             onProgress: this.onProgress,
             onStatusUpdate: this.onStatusUpdate,
-            onToast: this.onToast,
             checkCancel: () => this.gCancelRequested,
             onStateChange: (state) => {
                 this.components = state.components;
@@ -91,10 +89,9 @@ export class AutorouterEngine {
             options
         );
 
-        if (res.improved) {
-            this.wires = res.wires;
-            this.notify();
-        }
+        this.wires = res.wires || this.wires;
+        this.notify();
+        return res;
     }
 
     async plateau() {
@@ -102,7 +99,6 @@ export class AutorouterEngine {
         const options = {
             onProgress: this.onProgress,
             onStatusUpdate: this.onStatusUpdate,
-            onToast: this.onToast,
             checkCancel: () => this.gCancelRequested,
             onStateChange: (state) => {
                 this.components = state.components;
@@ -120,10 +116,9 @@ export class AutorouterEngine {
             options
         );
 
-        if (res.improved) {
-            this.wires = res.wires;
-            this.notify();
-        }
+        this.wires = res.wires || this.wires;
+        this.notify();
+        return res;
     }
 
     async routeOnly() {
@@ -133,16 +128,34 @@ export class AutorouterEngine {
             this.cols,
             this.rows,
             (p, m) => this.onProgress?.(p * 100, m),
-            () => this.gCancelRequested
+            () => this.gCancelRequested,
+            this.wires
         );
         this.wires = testWires;
         this.notify();
         return scoreState(this.components, testWires);
     }
 
-    async placeAndRoute(compDefs, autoOptimize = false) {
+    async route() {
+        this.gCancelRequested = false;
+        this.onStatusUpdate?.({ title: 'Rerouting...', isProcessing: true });
+        const manualOnly = this.wires.filter(w => w.manual);
+        const res = await route(
+            this.components,
+            this.cols,
+            this.rows,
+            (p, m) => this.onProgress?.(p * 100, m),
+            () => this.gCancelRequested,
+            manualOnly
+        );
+        this.wires = res;
+        this.onStatusUpdate?.({ isProcessing: false });
+        this.notify();
+        return res;
+    }
+
+    async placeAndRoute(compDefs) {
         if (!compDefs || compDefs.length === 0) {
-            this.onToast?.('No components to place', 'warn');
             return;
         }
 
@@ -191,15 +204,16 @@ export class AutorouterEngine {
         }
 
         if (bestComps) {
+            const startScore = scoreState(this.components, this.wires);
             this.components = placeInitial(compDefs, this.cols, this.rows); // Reset structure
             restoreComps(this.components, bestComps);
             this.wires = bestWires;
 
             this.notify();
-            if (bestCompletion < 1.0) {
-                this.onToast?.(`Best completion: ${Math.round(bestCompletion * 100)}%`, 'warn');
-            }
+            const finalScore = scoreState(this.components, this.wires);
+            return { score: finalScore, startScore };
         }
+        return null;
     }
 
     moveComponent(id, ox, oy) {
@@ -233,9 +247,100 @@ export class AutorouterEngine {
         this.wires = wires;
     }
 
+    async previewManualRoute(startPin, currentPos, targetNet = null) {
+        // Fast A* for single path
+        let minCol = Infinity, maxCol = -Infinity, minRow = Infinity, maxRow = -Infinity;
+        this.components.forEach(c => {
+            minCol = Math.min(minCol, c.ox); maxCol = Math.max(maxCol, c.ox + c.w - 1);
+            minRow = Math.min(minRow, c.oy); maxRow = Math.max(maxRow, c.oy + c.h - 1);
+        });
+        const pad = 15;
+        const gridMinC = Math.min(minCol - pad, startPin.pin.col, currentPos.col);
+        const gridMinR = Math.min(minRow - pad, startPin.pin.row, currentPos.row);
+        const gridCols = Math.max(maxCol - minCol + pad * 2, Math.abs(currentPos.col - gridMinC) + pad, Math.abs(startPin.pin.col - gridMinC) + pad);
+        const gridRows = Math.max(maxRow - minRow + pad * 2, Math.abs(currentPos.row - gridMinR) + pad, Math.abs(startPin.pin.row - gridMinR) + pad);
+
+        const grid = new Grid(gridCols, gridRows, gridMinC, gridMinR);
+        this.components.forEach(c => grid.registerComp(c));
+
+        const startNet = startPin.pin.net;
+        const startIndices = new Set([grid.idx(startPin.pin.col, startPin.pin.row)]);
+        const targetIndices = [grid.idx(currentPos.col, currentPos.row)];
+
+        this.wires.forEach(w => {
+            if (!w.failed && w.path) {
+                const isStartNet = startNet && w.net === startNet;
+                const isTargetNet = targetNet && w.net === targetNet;
+
+                if (isStartNet || isTargetNet) {
+                    // Same net: don't block. Also add as valid start/end points
+                    w.path.forEach(pt => {
+                        if (grid.inBounds(pt.col, pt.row)) {
+                            const kidx = grid.idx(pt.col, pt.row);
+                            if (isStartNet) startIndices.add(kidx);
+                            if (isTargetNet) targetIndices.push(kidx);
+                        }
+                    });
+                } else {
+                    grid.markWire(w.path);
+                }
+            }
+        });
+
+        const res = grid.astarMultiTarget(startIndices, targetIndices, true);
+        return res ? res.path : null;
+    }
+
     initializeBoard(compDefs) {
         this.components = placeInitial(compDefs, this.cols, this.rows);
         this.wires = [];
+        this.notify();
+    }
+
+    deleteComponent(id) {
+        this.components = this.components.filter(c => c.id !== id);
+        // Clean up wires that might be referencing pins that no longer exist
+        // or just let the router handle it on next pass. 
+        // For now, let's keep wires as is or clear them if they belong to this component?
+        // Actually, deleting a component should probably clear wires of nets that lose pins.
+        this.tick++;
+        this.notify();
+    }
+
+    deleteWire(net) {
+        this.wires = this.wires.filter(w => w.net !== net);
+        this.tick++;
+        this.notify();
+    }
+
+    updatePinNet(compId, pinIdx, net) {
+        const c = this.components.find(x => x.id === compId);
+        if (c && c.pins[pinIdx]) {
+            c.pins[pinIdx].net = net;
+            this.tick++;
+            this.notify();
+        }
+    }
+
+    addManualWire(net, path) {
+        this.wires.push({ net, path, failed: false, manual: true });
+        this.tick++;
+        this.notify();
+    }
+
+    mergeNets(oldNet, newNet) {
+        if (!oldNet || !newNet || oldNet === newNet) return;
+        // Update pins
+        this.components.forEach(c => {
+            c.pins.forEach(p => {
+                if (p.net === oldNet) p.net = newNet;
+            });
+        });
+        // Update wires
+        this.wires.forEach(w => {
+            if (w.net === oldNet) w.net = newNet;
+        });
+        this.tick++;
         this.notify();
     }
 }

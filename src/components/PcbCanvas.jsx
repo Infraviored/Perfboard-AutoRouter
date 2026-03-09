@@ -1,13 +1,24 @@
-import React, { useRef, useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
+    SP,
+    generateBackgroundSVG,
     generateWiresSVG,
     generateRatsnestSVG,
     renderCompSVG,
-    SP,
+    generateBoundingBoxSVG,
     hitComp,
-    generateBackgroundSVG,
-    generateBoundingBoxSVG
-} from '../engine/render-utils.js';
+    hitPin,
+    hitWire,
+    netColor
+} from "../engine/render-utils.js";
+import { CAMERA_CONFIG } from "../engine/config";
+import {
+    Plus,
+    Minus,
+    Maximize,
+    Crosshair,
+    Grid3X3
+} from 'lucide-react';
 
 export function PcbCanvas({
     components,
@@ -16,93 +27,184 @@ export function PcbCanvas({
     rows,
     selectedId,
     onSelect,
-    hoveredNet,
+    activeNets,
     onMove,
     onRotate,
     onMoveEnd,
     tick,
-    isProcessing
+    isProcessing,
+    isInitialProcessing,
+    workflowStep,
+    snapCounter,
+    onManualRoute,
+    onPreviewRoute,
+    previewPath,
+    previewNet,
+    selectedNet,
+    onSelectNet
 }) {
     const svgRef = useRef(null);
-    const [zoom, setZoom] = useState(1.0);
-    const [pan, setPan] = useState({ x: 20, y: 20 });
+    const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
+    const [camera, setCamera] = useState(() => {
+        const saved = localStorage.getItem('pcb_camera_state');
+        if (saved) {
+            try { return JSON.parse(saved); } catch (e) { }
+        }
+        return { x: 0, y: 0, z: 1 };
+    });
     const [isPanning, setIsPanning] = useState(false);
-    const lastPos = useRef({ x: 0, y: 0 });
-
+    const [lastPos, setLastPos] = useState({ x: 0, y: 0 });
     const [draggingId, setDraggingId] = useState(null);
-    const [dragOffset, setDragOffset] = useState({ dc: 0, dr: 0 });
-    const moveRaf = useRef(null);
+    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+    const [routingMode, setRoutingMode] = useState(null); // { startPin, currentPos }
 
-    // Handle Wheel Zoom
-    const handleWheel = useCallback((e) => {
+    // Sink routing mode if preview is cleared externally
+    useEffect(() => {
+        if (!previewPath && routingMode) {
+            setRoutingMode(null);
+        }
+    }, [previewPath, routingMode]);
+
+    const hasInitializedFit = useRef(!!localStorage.getItem('pcb_camera_state'));
+
+    // Persist camera
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            localStorage.setItem('pcb_camera_state', JSON.stringify(camera));
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [camera]);
+
+    const getMousePos = (e) => {
+        if (!svgRef.current) return { x: 0, y: 0 };
+        const rect = svgRef.current.getBoundingClientRect();
+        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    };
+
+    const handleWheel = (e) => {
         e.preventDefault();
+        const pos = getMousePos(e);
         const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        setZoom(prev => Math.min(Math.max(prev * delta, 0.1), 5));
-    }, []);
+
+        const curZ = simZoom.current;
+        const curP = simPan.current;
+        const newZ = curZ * delta;
+        const newP = {
+            x: pos.x - (pos.x - curP.x) * delta,
+            y: pos.y - (pos.y - curP.y) * delta
+        };
+
+        setCamera({ x: newP.x, y: newP.y, z: newZ });
+        simPan.current = { ...newP };
+        simZoom.current = newZ;
+    };
 
     const handlePointerDown = (e) => {
-        const isRight = e.button === 2;
-        const isPanAction = e.button === 1 || isRight || (e.button === 0 && e.altKey);
+        const pos = getMousePos(e);
+        const worldX = (pos.x - camera.x) / camera.z;
+        const worldY = (pos.y - camera.y) / camera.z;
+        const col = Math.floor(worldX / SP);
+        const row = Math.floor(worldY / SP);
 
-        const rect = svgRef.current.getBoundingClientRect();
-        const x = (e.clientX - rect.left - pan.x) / zoom;
-        const y = (e.clientY - rect.top - pan.y) / zoom;
-        const gc = Math.floor(x / SP);
-        const gr = Math.floor(y / SP);
+        const pinHit = hitPin(col, row, components);
+        const wireHit = hitWire(col, row, wires);
+        const compHit = hitComp(col, row, components);
 
-        if (isRight && draggingId) {
-            onRotate?.(draggingId);
-            e.preventDefault();
+        // 1. If in routing mode and hit a pin OR a wire, commit the route
+        if (routingMode && (pinHit || wireHit)) {
+            if (pinHit) {
+                if (pinHit.compId !== routingMode.startPin.compId || pinHit.pinIdx !== routingMode.startPin.pinIdx) {
+                    onManualRoute?.(routingMode.startPin, pinHit, previewPath);
+                    setRoutingMode(null);
+                    onPreviewRoute?.(null);
+                } else {
+                    setRoutingMode(null);
+                    onPreviewRoute?.(null);
+                }
+            } else if (wireHit) {
+                onManualRoute?.(routingMode.startPin, wireHit.net, previewPath);
+                setRoutingMode(null);
+                onPreviewRoute?.(null);
+            }
             return;
         }
 
-        if (isPanAction) {
+        // 2. Clicked while NOT in routing mode
+        if (pinHit && pinHit.compId === selectedId) {
+            // Started routing IMMEDIATELY because it's already selected and we hit a pin
+            setRoutingMode({ startPin: pinHit, currentPos: { col, row } });
+            setDraggingId(null);
+            onPreviewRoute?.(pinHit, { col, row });
+        } else if (compHit) {
+            // Standard selection and dragging
+            setDraggingId(compHit.id);
+            setDragOffset({ x: worldX - compHit.ox * SP, y: worldY - compHit.oy * SP });
+            onSelect?.(compHit.id);
+        } else if (wireHit) {
+            // Wire selection
+            onSelectNet?.(wireHit.net);
+            onSelect?.(null);
+        } else {
+            // Pan or Reset
             setIsPanning(true);
-            lastPos.current = { x: e.clientX, y: e.clientY };
-            e.preventDefault();
-        } else if (e.button === 0) {
-            const hit = hitComp(gc, gr, components);
-            if (hit) {
-                onSelect?.(hit.id);
-                setDraggingId(hit.id);
-                setDragOffset({ dc: gc - hit.ox, dr: gr - hit.oy });
-                e.target.setPointerCapture(e.pointerId);
-            } else {
-                onSelect?.(null);
+            setLastPos(pos);
+            onSelect?.(null);
+            onSelectNet?.(null);
+            if (routingMode) {
+                setRoutingMode(null);
+                onPreviewRoute?.(null);
             }
         }
+        e.target.setPointerCapture(e.pointerId);
     };
 
     const handlePointerMove = (e) => {
-        if (isPanning) {
-            const dx = e.clientX - lastPos.current.x;
-            const dy = e.clientY - lastPos.current.y;
-            setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
-            lastPos.current = { x: e.clientX, y: e.clientY };
-        } else if (draggingId) {
-            const rect = svgRef.current.getBoundingClientRect();
-            const x = (e.clientX - rect.left - pan.x) / zoom;
-            const y = (e.clientY - rect.top - pan.y) / zoom;
-            const gc = Math.floor(x / SP);
-            const gr = Math.floor(y / SP);
+        const pos = getMousePos(e);
+        const worldX = (pos.x - camera.x) / camera.z;
+        const worldY = (pos.y - camera.y) / camera.z;
+        const col = Math.floor(worldX / SP);
+        const row = Math.floor(worldY / SP);
 
-            if (moveRaf.current) cancelAnimationFrame(moveRaf.current);
-            moveRaf.current = requestAnimationFrame(() => {
-                onMove?.(draggingId, gc - dragOffset.dc, gr - dragOffset.dr);
-            });
+        if (routingMode) {
+            if (routingMode.currentPos.col !== col || routingMode.currentPos.row !== row) {
+                setRoutingMode(prev => ({ ...prev, currentPos: { col, row } }));
+                const targetWire = hitWire(col, row, wires);
+                onPreviewRoute?.(routingMode.startPin, { col, row }, targetWire?.net);
+            }
+        } else if (draggingId) {
+            const nx = Math.round((worldX - dragOffset.x) / SP);
+            const ny = Math.round((worldY - dragOffset.y) / SP);
+            onMove?.(draggingId, nx, ny);
+        } else if (isPanning) {
+            const newP = {
+                x: camera.x + (pos.x - lastPos.x),
+                y: camera.y + (pos.y - lastPos.y)
+            };
+            setCamera(prev => ({ ...prev, x: newP.x, y: newP.y }));
+            setLastPos(pos);
+            simPan.current = { ...newP };
         }
     };
 
     const handlePointerUp = (e) => {
-        if (draggingId) {
-            if (moveRaf.current) cancelAnimationFrame(moveRaf.current);
-            onMoveEnd?.();
-            setDraggingId(null);
-        }
+        if (draggingId) onMoveEnd?.();
+        setDraggingId(null);
         setIsPanning(false);
+        e.target.releasePointerCapture(e.pointerId);
     };
 
-    // Right-click rotation during drag often needs mousedown for multi-button mouse reliability
+    // Keyboard ESC to cancel routing
+    useEffect(() => {
+        const handleEsc = (e) => {
+            if (e.key === 'Escape' && routingMode) {
+                setRoutingMode(null);
+                onPreviewRoute?.(null);
+            }
+        };
+        window.addEventListener('keydown', handleEsc);
+        return () => window.removeEventListener('keydown', handleEsc);
+    }, [routingMode, onPreviewRoute]);
+
     const handleMouseDown = (e) => {
         if (e.button === 2 && draggingId) {
             onRotate?.(draggingId);
@@ -111,175 +213,383 @@ export function PcbCanvas({
         }
     };
 
-    // We add a 'forceCenterToggle' state to allow manual recentering via button click or resize events
-    const [forceCenterToggle, setForceCenterToggle] = useState(false);
+    const TRACKING_MODES = { NONE: 'none', SNAP: 'snap', LIVE: 'live' };
+    const [trackingMode, setTrackingMode] = useState(TRACKING_MODES.NONE);
+    const [isAutoTracking, setIsAutoTracking] = useState(true);
 
-    // Watch for actual container dimension changes (e.g. ProcessingBar sliding up/down)
     useEffect(() => {
         if (!svgRef.current) return;
-        const resizeObs = new ResizeObserver(() => setForceCenterToggle(true));
+        const resizeObs = new ResizeObserver(entries => {
+            const entry = entries[0];
+            if (entry) {
+                setViewportSize({
+                    width: Math.round(entry.contentRect.width),
+                    height: Math.round(entry.contentRect.height)
+                });
+            }
+        });
         resizeObs.observe(svgRef.current);
         return () => resizeObs.disconnect();
     }, []);
 
-    // Continuous smooth camera tracking during processing, or instant snap on load/manual
-    useEffect(() => {
-        if (components.length === 0) return;
-
-        let minC = Infinity, maxC = -Infinity, minRow = Infinity, maxRow = -Infinity;
-        components.forEach(c => {
-            minC = Math.min(minC, c.ox);
-            maxC = Math.max(maxC, c.ox + c.w);
-            minRow = Math.min(minRow, c.oy);
-            maxRow = Math.max(maxRow, c.oy + c.h);
-        });
-
-        const rect = svgRef.current?.getBoundingClientRect();
-        if (!rect) return;
-
-        const cx = (minC + maxC) / 2 * SP;
-        const cy = (minRow + maxRow) / 2 * SP;
-
-        const targetX = rect.width / 2 - cx * zoom;
-        const targetY = rect.height / 2 - cy * zoom;
-
-        // If 'pan' hasn't been initialized (0,0) or manual button triggered, instantly snap
-        if ((pan.x === 0 && pan.y === 0) || forceCenterToggle) {
-            setPan({ x: targetX, y: targetY });
-            if (forceCenterToggle) setForceCenterToggle(false);
-        }
-    }, [isProcessing, tick, components, zoom, pan.x, pan.y, forceCenterToggle]);
-
-    // Bounding box for background fading
     const bounds = useMemo(() => {
-        if (components.length === 0) return null;
-        let minCol = Infinity, maxCol = -Infinity, minRow = Infinity, maxRow = -Infinity;
-        components.forEach(c => {
+        if (components.length === 0 && wires.length === 0) {
+            return { minCol: 0, minRow: 0, maxCol: cols, maxRow: rows };
+        }
+        let minCol = Infinity, minRow = Infinity, maxCol = -Infinity, maxRow = -Infinity;
+        for (const c of components) {
             minCol = Math.min(minCol, c.ox);
-            maxCol = Math.max(maxCol, c.ox + c.w - 1);
             minRow = Math.min(minRow, c.oy);
-            maxRow = Math.max(maxRow, c.oy + c.h - 1);
-        });
-        wires.forEach(w => w.path?.forEach(pt => {
-            minCol = Math.min(minCol, pt.col);
-            maxCol = Math.max(maxCol, pt.col);
-            minRow = Math.min(minRow, pt.row);
-            maxRow = Math.max(maxRow, pt.row);
-        }));
-        return { minCol, maxCol, minRow, maxRow };
-    }, [components, wires, tick]);
-
-    // Labels for the board
-    const labelsSvg = useMemo(() => {
-        if (!bounds) return '';
-        let out = '';
-        const pad = 15; // wide margin for labels
-        const minC = bounds.minCol - pad, maxC = bounds.maxCol + pad;
-        const minR = bounds.minRow - pad, maxR = bounds.maxRow + pad;
-
-        // X labels
-        for (let c = minC; c <= maxC; c++) {
-            if (c % 5 !== 0) continue;
-            out += `<text x="${c * SP + SP / 2}" y="${(bounds.minRow - 0.6) * SP}" fill="rgba(0,187,144,0.3)" font-family="monospace" font-size="9" text-anchor="middle">${c}</text>`;
+            maxCol = Math.max(maxCol, c.ox + c.w);
+            maxRow = Math.max(maxRow, c.oy + c.h);
         }
-        // Y labels
-        for (let r = minR; r <= maxR; r++) {
-            if (r % 5 !== 0) continue;
-            out += `<text x="${(bounds.minCol - 0.8) * SP}" y="${r * SP + SP / 2 + 3}" fill="rgba(0,187,144,0.3)" font-family="monospace" font-size="9" text-anchor="end">${r}</text>`;
+        for (const w of wires) {
+            for (const p of w.path) {
+                minCol = Math.min(minCol, p.col);
+                minRow = Math.min(minRow, p.row);
+                maxCol = Math.max(maxCol, p.col);
+                maxRow = Math.max(maxRow, p.row);
+            }
         }
-        return out;
-    }, [bounds]);
+        if (minCol === maxCol) maxCol += 1;
+        if (minRow === maxRow) maxRow += 1;
+        return { minCol, minRow, maxCol, maxRow };
+    }, [components, wires, cols, rows]);
 
-    // Memoize SVG parts for performance
+    const snapLockRef = useRef(null);
+    const lastSnapStep = useRef(0);
+    const lastSnapCounter = useRef(0);
+    const wasProcessing = useRef(false);
+
+    const startSnap = useCallback(() => {
+        if (!bounds) return;
+        const targetCX = (bounds.minCol + bounds.maxCol + 1) / 2 * SP;
+        const targetCY = (bounds.minRow + bounds.maxRow + 1) / 2 * SP;
+        const bbW = (bounds.maxCol - bounds.minCol + 1) * SP;
+        const bbH = (bounds.maxRow - bounds.minRow + 1) * SP;
+
+        const viewport = viewportSize;
+        if (viewport.width === 0) return; // Prevent infinity zoom on initial load
+
+        // Normalize: Match updatePhysics behavior by using full height for consistent centering
+        const fitZoom = Math.min(
+            (viewport.width * CAMERA_CONFIG.TARGET_COVERAGE) / bbW,
+            (viewport.height * CAMERA_CONFIG.TARGET_COVERAGE) / bbH,
+            CAMERA_CONFIG.MAX_ZOOM_FIT
+        );
+
+        snapLockRef.current = { targetCX, targetCY, fitZoom };
+        setTrackingMode(TRACKING_MODES.SNAP);
+    }, [bounds, viewportSize]);
+
+    useEffect(() => {
+        const isMilestone = (workflowStep === 1 || workflowStep === 2) && workflowStep !== lastSnapStep.current;
+        const isCounterJump = snapCounter !== lastSnapCounter.current;
+        const justFinished = wasProcessing.current && !isProcessing;
+
+        // Conditions for an automatic snap
+        const shouldSnap = isMilestone || isCounterJump || justFinished || isInitialProcessing || (!hasInitializedFit.current && bounds);
+
+        if (shouldSnap && viewportSize.width > 0) {
+            startSnap();
+            hasInitializedFit.current = true;
+            lastSnapStep.current = workflowStep;
+            lastSnapCounter.current = snapCounter;
+        }
+
+        // Live Mode Detection
+        const isAiphase = (workflowStep === 3 || workflowStep === 4) || (isProcessing && !isInitialProcessing);
+        const shouldBeLive = isAiphase && isProcessing && isAutoTracking;
+
+        if (shouldBeLive && trackingMode !== TRACKING_MODES.LIVE && !draggingId && trackingMode !== TRACKING_MODES.SNAP) {
+            setTrackingMode(TRACKING_MODES.LIVE);
+        } else if (!shouldBeLive && trackingMode === TRACKING_MODES.LIVE) {
+            setTrackingMode(TRACKING_MODES.NONE);
+        }
+
+        wasProcessing.current = isProcessing;
+        if (workflowStep === 0) {
+            lastSnapStep.current = 0;
+            lastSnapCounter.current = 0;
+            hasInitializedFit.current = false;
+            localStorage.removeItem('pcb_camera_state');
+        }
+    }, [workflowStep, snapCounter, isInitialProcessing, isProcessing, isAutoTracking, draggingId, bounds, viewportSize, startSnap, trackingMode]);
+
+    const zoomVelRef = useRef(0);
+    const panVelRef = useRef({ x: 0, y: 0 });
+    const smoothCenterRef = useRef({ x: 0, y: 0 });
+    const targetBoundsRef = useRef(null);
+    const lastTimeRef = useRef(0);
+    const rAFRef = useRef(null);
+    const simPan = useRef({ x: camera.x, y: camera.y });
+    const simZoom = useRef(camera.z);
+
+    const lastUpdateKeyRef = useRef("");
+    const zoomCountRef = useRef(0);
+    const panCountRef = useRef(0);
+
+    useEffect(() => { targetBoundsRef.current = bounds; }, [bounds]);
+
+    const updatePhysics = useCallback((time) => {
+        if (!svgRef.current) return;
+        if (!lastTimeRef.current) lastTimeRef.current = time;
+        const dt = Math.min((time - lastTimeRef.current) / 1000, 0.1);
+        lastTimeRef.current = time;
+
+        const viewport = viewportSize;
+        if (viewport.width === 0) {
+            rAFRef.current = requestAnimationFrame(updatePhysics);
+            return;
+        }
+
+        const isSnap = trackingMode === TRACKING_MODES.SNAP;
+        const isLive = trackingMode === TRACKING_MODES.LIVE;
+        const shouldApplyPhysics = isAutoTracking && (isSnap || isLive) && !isPanning && !draggingId;
+
+        if (shouldApplyPhysics) {
+            let targetCX, targetCY, fitZoom;
+            const b = targetBoundsRef.current;
+
+            if (isSnap && snapLockRef.current) {
+                targetCX = snapLockRef.current.targetCX;
+                targetCY = snapLockRef.current.targetCY;
+                fitZoom = snapLockRef.current.fitZoom;
+            } else if (b) {
+                targetCX = (b.minCol + b.maxCol + 1) / 2 * SP;
+                targetCY = (b.minRow + b.maxRow + 1) / 2 * SP;
+                const bbW = (b.maxCol - b.minCol + 1) * SP;
+                const bbH = (b.maxRow - b.minRow + 1) * SP;
+                // Normalize: Always use full viewport height for camera math to keep LOAD/ROUTE identical
+                fitZoom = Math.min(
+                    (viewport.width * CAMERA_CONFIG.TARGET_COVERAGE) / bbW,
+                    (viewport.height * CAMERA_CONFIG.TARGET_COVERAGE) / bbH,
+                    CAMERA_CONFIG.MAX_ZOOM_FIT
+                );
+            } else {
+                rAFRef.current = requestAnimationFrame(updatePhysics);
+                return;
+            }
+
+            const curZ = simZoom.current;
+            let nextZ = curZ;
+
+            // 1. DERIVE NEXT ZOOM
+            let zoomAcc = 0;
+            if (isSnap || zoomCountRef.current > CAMERA_CONFIG.ZOOM_VIOLATION_THRESHOLD) {
+                zoomAcc = (fitZoom - curZ) * CAMERA_CONFIG.ZOOM_STRENGTH;
+            }
+            const zoomDamping = Math.pow(CAMERA_CONFIG.ZOOM_DAMPING, dt);
+            zoomVelRef.current = (zoomVelRef.current + zoomAcc * dt) * zoomDamping;
+            nextZ = curZ + zoomVelRef.current * dt;
+
+            // 2. DERIVE NEXT PAN (Using nextZ for Snap to prevent wobble)
+            if (isSnap) {
+                // Snap mode: Use full viewport for initial placement consistency across Load/Route
+                simPan.current.x = viewport.width / 2 - targetCX * nextZ;
+                simPan.current.y = viewport.height / 2 - targetCY * nextZ;
+                smoothCenterRef.current = { x: targetCX, y: targetCY };
+            } else {
+                const worldCX = smoothCenterRef.current.x;
+                const worldCY = smoothCenterRef.current.y;
+
+                // Adaptive Viewport: Dodge the bottom bar if it's there
+                const pbHeight = isProcessing ? 240 : 0;
+                const targetAvailableHeight = viewport.height - pbHeight;
+
+                const targetViewportCX = viewport.width / 2;
+                const targetViewportCY = targetAvailableHeight / 2;
+
+                const bbW = (b.maxCol - b.minCol + 1) * SP;
+                const bbH = (b.maxRow - b.minRow + 1) * SP;
+
+                // Track against the current available area
+                const currentCoverage = Math.max((bbW * curZ) / viewport.width, (bbH * curZ) / targetAvailableHeight);
+                const errorX = targetViewportCX - (worldCX * curZ + simPan.current.x);
+                const errorY = targetViewportCY - (worldCY * curZ + simPan.current.y);
+
+                const deadzoneX = viewport.width * CAMERA_CONFIG.PAN_DEADZONE_X;
+                const deadzoneY = targetAvailableHeight * CAMERA_CONFIG.PAN_DEADZONE_Y;
+
+                const isZoomViolated = currentCoverage > CAMERA_CONFIG.ZOOM_OUT_THRESHOLD || currentCoverage < CAMERA_CONFIG.ZOOM_IN_THRESHOLD;
+                const isPanViolated = Math.abs(errorX) > deadzoneX || Math.abs(errorY) > deadzoneY;
+
+                const updateKey = `zV:${isZoomViolated}-pV:${isPanViolated}-b:${b.minCol},${b.minRow}`;
+                if (updateKey !== lastUpdateKeyRef.current) {
+                    zoomCountRef.current = isZoomViolated ? zoomCountRef.current + 1 : 0;
+                    panCountRef.current = isPanViolated ? panCountRef.current + 1 : 0;
+                    lastUpdateKeyRef.current = updateKey;
+                }
+
+                let panAccX = 0, panAccY = 0;
+                if (panCountRef.current > CAMERA_CONFIG.PAN_VIOLATION_THRESHOLD) {
+                    panAccX = errorX * CAMERA_CONFIG.PAN_STRENGTH;
+                    panAccY = errorY * CAMERA_CONFIG.PAN_STRENGTH;
+                }
+
+                const panDamping = Math.pow(CAMERA_CONFIG.PAN_DAMPING, dt);
+                panVelRef.current.x = (panVelRef.current.x + panAccX * dt) * panDamping;
+                panVelRef.current.y = (panVelRef.current.y + panAccY * dt) * panDamping;
+
+                simPan.current.x += panVelRef.current.x * dt;
+                simPan.current.y += panVelRef.current.y * dt;
+                smoothCenterRef.current.x += (targetCX - smoothCenterRef.current.x) * CAMERA_CONFIG.CENTER_FOLLOW_STRENGTH * dt;
+                smoothCenterRef.current.y += (targetCY - smoothCenterRef.current.y) * CAMERA_CONFIG.CENTER_FOLLOW_STRENGTH * dt;
+            }
+
+            // 3. COMMIT ATOMIC STATE
+            simZoom.current = nextZ;
+            setCamera({ x: simPan.current.x, y: simPan.current.y, z: simZoom.current });
+
+            if (isSnap && Math.abs(fitZoom - simZoom.current) < 0.001) {
+                setTrackingMode(TRACKING_MODES.NONE);
+                snapLockRef.current = null;
+            }
+        }
+        rAFRef.current = requestAnimationFrame(updatePhysics);
+    }, [trackingMode, isAutoTracking, isPanning, draggingId, SP]);
+
+
+    useEffect(() => {
+        if (isAutoTracking && (trackingMode !== TRACKING_MODES.NONE)) {
+            lastTimeRef.current = performance.now();
+            rAFRef.current = requestAnimationFrame(updatePhysics);
+        } else {
+            if (rAFRef.current) cancelAnimationFrame(rAFRef.current);
+            zoomVelRef.current = 0;
+            panVelRef.current = { x: 0, y: 0 };
+            lastTimeRef.current = 0;
+        }
+        return () => {
+            if (rAFRef.current) {
+                cancelAnimationFrame(rAFRef.current);
+            }
+        };
+    }, [isAutoTracking, trackingMode, updatePhysics]);
+
+
     const background = useMemo(() => generateBackgroundSVG(cols, rows, bounds), [cols, rows, bounds]);
-    const wiresSvg = useMemo(() => generateWiresSVG(wires, hoveredNet), [wires, hoveredNet, tick]);
+    const wiresSvg = useMemo(() => generateWiresSVG(wires, activeNets), [wires, activeNets, tick]);
     const ratsnestSvg = useMemo(() => generateRatsnestSVG(components, wires, !!draggingId), [components, wires, draggingId, tick]);
-    const componentsSvg = useMemo(() =>
-        components.map(c => renderCompSVG(c, c.id === selectedId)).join(''),
-        [components, selectedId, tick]
-    );
+    const componentsSvg = useMemo(() => components.map(c => renderCompSVG(c, c.id === selectedId, routingMode?.startPin)).join(''), [components, selectedId, routingMode, tick]);
     const boundingBoxSvg = useMemo(() => generateBoundingBoxSVG(components, wires), [components, wires, tick]);
 
     return (
-        <div
-            className="canvas-container"
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerUp}
-            onMouseDown={handleMouseDown}
-            onWheel={handleWheel}
-            onContextMenu={(e) => e.preventDefault()}
-            style={{
-                width: '100%',
-                height: '100%',
-                position: 'relative',
-                overflow: 'hidden',
-                cursor: (isPanning || draggingId) ? 'grabbing' : 'crosshair',
-                background: '#050706'
-            }}
-        >
-            <svg
-                ref={svgRef}
-                width="100%"
-                height="100%"
-                style={{ display: 'block' }}
-            >
-                <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
+        <div className={`canvas-container ${isProcessing ? 'pb-active' : ''}`} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} onMouseDown={handleMouseDown} onWheel={handleWheel} onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', cursor: routingMode ? 'crosshair' : (isPanning || draggingId ? 'grabbing' : 'crosshair'), background: '#050706', '--pb-height': '240px' }}>
+            <svg ref={svgRef} width="100%" height="100%" style={{ display: 'block' }}>
+                <g transform={`translate(${camera.x}, ${camera.y}) scale(${camera.z})`}>
                     <g dangerouslySetInnerHTML={{ __html: background }} />
-                    <g dangerouslySetInnerHTML={{ __html: labelsSvg }} />
                     <g dangerouslySetInnerHTML={{ __html: wiresSvg }} />
                     <g dangerouslySetInnerHTML={{ __html: ratsnestSvg }} />
                     <g dangerouslySetInnerHTML={{ __html: componentsSvg }} />
                     <g dangerouslySetInnerHTML={{ __html: boundingBoxSvg }} />
+
+                    {routingMode && previewPath && (() => {
+                        const segments = [];
+                        let current = [];
+                        let currentCrossing = false;
+
+                        // Start point
+                        if (previewPath.length > 0) {
+                            current.push(previewPath[0]);
+                            currentCrossing = false; // Initial segment is from pin, usually clean
+                        }
+
+                        for (let i = 1; i < previewPath.length; i++) {
+                            const pt = previewPath[i];
+                            const prev = previewPath[i - 1];
+                            const isCross = pt.isCrossing;
+
+                            if (isCross !== currentCrossing) {
+                                // Close current, start new
+                                segments.push({ path: current, isCrossing: currentCrossing });
+                                current = [prev, pt];
+                                currentCrossing = isCross;
+                            } else {
+                                current.push(pt);
+                            }
+                        }
+                        segments.push({ path: current, isCrossing: currentCrossing });
+
+                        return segments.map((seg, i) => (
+                            <polyline
+                                key={i}
+                                points={seg.path.map(pt => `${pt.col * SP + SP / 2},${pt.row * SP + SP / 2}`).join(' ')}
+                                fill="none"
+                                stroke={seg.isCrossing ? '#ff2222' : netColor(routingMode.startPin.pin.net)}
+                                stroke-width="5"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-dasharray={seg.isCrossing ? "5 5" : ""}
+                                style={{
+                                    pointerEvents: 'none',
+                                    filter: `drop-shadow(0 0 8px ${seg.isCrossing ? '#ff2222' : netColor(routingMode.startPin.pin.net)})`
+                                }}
+                            />
+                        ));
+                    })()}
                 </g>
             </svg>
 
-            {/* Zoom & Recenter Controls */}
-            <div className="zbx">
-                <button className="zbtn" onClick={() => setZoom(z => z * 1.15)}>+</button>
-                <button className="zbtn" onClick={() => setZoom(z => z * 0.87)}>−</button>
-                <button className="zbtn" onClick={() => setForceCenterToggle(true)}>⊞</button>
+            <div className="canvas-controls">
+                <button className="cbtn" onClick={() => {
+                    const z = camera.z * 1.15;
+                    const newCamera = { ...camera, z };
+                    setCamera(newCamera);
+                    simZoom.current = z;
+                }} title="Zoom In">
+                    <Plus size={18} />
+                </button>
+                <button className="cbtn" onClick={() => {
+                    const z = camera.z * 0.87;
+                    const newCamera = { ...camera, z };
+                    setCamera(newCamera);
+                    simZoom.current = z;
+                }} title="Zoom Out">
+                    <Minus size={18} />
+                </button>
+                <button className="cbtn" onClick={() => setTrackingMode(TRACKING_MODES.SNAP)} title="Center Board">
+                    <Maximize size={18} />
+                </button>
+                <button className="cbtn" onClick={() => {
+                    const next = !isAutoTracking;
+                    setIsAutoTracking(next);
+                    if (!next) setTrackingMode(TRACKING_MODES.NONE);
+                }} title={isAutoTracking ? "Disable Auto-Tracking" : "Enable Auto-Tracking"} style={{ color: isAutoTracking ? 'var(--grn-bright)' : 'inherit' }}>
+                    <Crosshair size={18} />
+                </button>
             </div>
 
             <style dangerouslySetInnerHTML={{
                 __html: `
-        .canvas-container {
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        .zbx {
-          position: absolute;
-          right: 10px;
-          bottom: 34px;
-          display: flex;
-          flex-direction: column;
-          gap: 3px;
-          z-index: 10;
-        }
-        .zbtn {
-          width: 26px;
-          height: 26px;
-          background: var(--bg3);
-          border: 1px solid var(--border);
-          border-radius: 4px;
-          color: var(--txt0);
-          cursor: pointer;
-          font-size: 1em;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: .14s;
-        }
-        .zbtn:hover { background: var(--bg4); }
-
-        .pcb-comp {
-            transition: filter 0.2s ease;
-        }
-        .pcb-comp:hover {
-            filter: brightness(1.2);
-        }
-      `}} />
+                .canvas-container { user-select: none; -webkit-user-select: none; }
+                .canvas-controls { position: absolute; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 10; transition: bottom 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+                .canvas-container.pb-active .canvas-controls { bottom: calc(20px + var(--pb-height)); }
+                .cbtn { 
+                  width: 38px; 
+                  height: 38px; 
+                  background: var(--glass-bg); 
+                  backdrop-filter: blur(8px);
+                  border: 1px solid var(--border); 
+                  border-radius: 10px; 
+                  color: var(--txt1); 
+                  cursor: pointer; 
+                  display: flex; 
+                  align-items: center; 
+                  justify-content: center; 
+                  transition: all 0.2s; 
+                  box-shadow: var(--shadow-premium);
+                }
+                .cbtn:hover { 
+                  background: var(--bg4); 
+                  color: var(--txt0);
+                  transform: scale(1.05);
+                  border-color: var(--border2);
+                }
+                .cbtn:active { transform: scale(0.95); }
+                .pcb-comp { transition: filter 0.2s ease; }
+                .pcb-comp:hover { filter: brightness(1.2); }
+            `}} />
         </div>
     );
 }

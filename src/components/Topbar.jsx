@@ -1,67 +1,127 @@
 import React from 'react';
+import {
+  Zap,
+  Wrench,
+  Compass,
+  Undo2,
+  Redo2,
+  Download,
+  Upload,
+  RotateCcw,
+  ExternalLink,
+  Eraser,
+  FileJson
+} from 'lucide-react';
 
 export function Topbar({
-  onOptimizeFootprint,
-  onPlateauExplore,
-  onPlaceAndRoute,
-  onRouteOnly,
+  workflowStep,
+  onStepClick,
+  onUndo,
+  onRedo,
+  onImportState,
+  onExportState,
   onClearWires,
   onReset,
   onExportSVG,
-  onUndo,
-  onRedo,
-  onExportState,
-  onImportState,
-  autoOptimize,
-  setAutoOptimize,
-  tool,
-  setTool,
-  hasWires
+  onRouteOnly,
+  hasWires,
+  isProcessing
 }) {
   return (
     <header id="topbar">
       <div className="logo">Perfboard<em>Designer</em></div>
-      <div className="sep"></div>
-
-
-      <button className="tbtn grn" onClick={onPlaceAndRoute}>
-        ⚡ Place & Route <kbd>Ctrl+↵</kbd>
-      </button>
-      <button className="tbtn blu" onClick={onOptimizeFootprint} disabled={!hasWires}>🔧 Optimize Footprint</button>
-      <button className="tbtn blu" onClick={onPlateauExplore} disabled={!hasWires}>🧭 Plateau Explore</button>
 
       <div className="sep"></div>
 
-      <button className="tbtn" onClick={onUndo} title="Undo">↶</button>
-      <button className="tbtn" onClick={onRedo} title="Redo">↷</button>
-
-      <div style={{ display: 'flex', gap: '2px' }}>
-        <button className="tbtn" onClick={onImportState} title="Import State">📥 Import</button>
-        <button className="tbtn" onClick={onExportState} title="Export State">📤 Export</button>
+      <div className="workflow-track">
+        <button
+          className={`flow-btn ${workflowStep >= 1 && !(workflowStep === 1 && isProcessing) ? 'completed' : ''} ${workflowStep === 1 && isProcessing ? 'processing' : ''} ${workflowStep === 0 && !isProcessing ? 'next' : ''}`}
+          onClick={() => onStepClick(1)}
+          disabled={isProcessing}
+          style={{ '--flow-color': '#4da0ff' }}
+        >
+          <FileJson size={14} />
+          Load
+        </button>
+        <button
+          className={`flow-btn ${workflowStep >= 2 && !(workflowStep === 2 && isProcessing) ? 'completed' : ''} ${workflowStep === 2 && isProcessing ? 'processing' : ''} ${workflowStep === 1 && !isProcessing ? 'next' : ''}`}
+          onClick={() => onStepClick(2)}
+          disabled={workflowStep < 1 || isProcessing}
+          style={{ '--flow-color': 'var(--grn-bright)' }}
+        >
+          <Zap size={14} />
+          Route
+        </button>
+        <button
+          className={`flow-btn ${workflowStep >= 3 && !(workflowStep === 3 && isProcessing) ? 'completed' : ''} ${workflowStep === 3 && isProcessing ? 'processing' : ''} ${workflowStep === 2 && !isProcessing ? 'next' : ''}`}
+          onClick={() => onStepClick(3)}
+          disabled={workflowStep < 2 || isProcessing}
+          style={{ '--flow-color': 'var(--blu-bright)' }}
+        >
+          <Wrench size={14} />
+          Optimize
+        </button>
+        <button
+          className={`flow-btn ${workflowStep >= 4 && !(workflowStep === 4 && isProcessing) ? 'completed' : ''} ${workflowStep === 4 && isProcessing ? 'processing' : ''} ${workflowStep === 3 && !isProcessing ? 'next' : ''}`}
+          onClick={() => onStepClick(4)}
+          disabled={workflowStep < 3 || isProcessing}
+          style={{ '--flow-color': '#a371f7' }}
+        >
+          <Compass size={14} />
+          Explore
+        </button>
       </div>
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--txt1)', fontSize: '.75em', cursor: 'pointer', marginLeft: '8px' }}>
-        <input
-          type="checkbox"
-          checked={autoOptimize}
-          onChange={(e) => setAutoOptimize(e.target.checked)}
-          style={{ margin: 0 }}
-        />
-        Auto-optimize
-      </label>
+      <div className="sep"></div>
+
+      <div className="btn-group">
+        <button className="tbtn" onClick={onClearWires} title="Delete all wires" disabled={isProcessing}>
+          <Eraser size={16} />
+          Clear
+        </button>
+        <button className="tbtn" onClick={onRouteOnly} title="Connect Airwires" disabled={isProcessing}>
+          <Zap size={16} />
+          Connect
+        </button>
+      </div>
 
       <div className="sep"></div>
 
-      <button className="tbtn" onClick={onRouteOnly}>〰 Route Only <kbd>Shift+R</kbd></button>
-      <button className="tbtn" onClick={onClearWires}>⊘ Clear Wires</button>
+      <div className="btn-group">
+        <button className="tbtn" onClick={onUndo} title="Undo">
+          <Undo2 size={16} />
+        </button>
+        <button className="tbtn" onClick={onRedo} title="Redo">
+          <Redo2 size={16} />
+        </button>
+      </div>
 
       <div className="sep"></div>
 
-      <button className="tbtn org" onClick={onExportSVG}>⬇ Export SVG</button>
+      <div className="btn-group">
+        <button className="tbtn" onClick={onImportState} title="Import State (JSON)">
+          <Download size={16} />
+          Import
+        </button>
+        <button className="tbtn" onClick={onExportState} title="Export State (JSON)">
+          <Upload size={16} />
+          Export
+        </button>
+      </div>
 
-      <div className="spc"></div>
+      <div className="sep"></div>
 
-      <button className="tbtn red" onClick={onReset}>⟳ Reset</button>
+      <div className="spc" style={{ flex: 1 }}></div>
+
+      <button className="tbtn svg-export-btn" onClick={onExportSVG} title="Download as Vector Graphic (SVG)">
+        <ExternalLink size={16} />
+        Export SVG
+      </button>
+
+      <button className="tbtn reset-btn" onClick={onReset} title="Reset the entire project">
+        <RotateCcw size={16} />
+        Reset
+      </button>
 
       <style dangerouslySetInnerHTML={{
         __html: `
@@ -72,25 +132,243 @@ export function Topbar({
           border-bottom: 1px solid var(--border);
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 0;
           padding: 0 16px;
           flex-shrink: 0;
-          grid-area: topbar;
           z-index: 100;
         }
         .logo {
           font-family: 'Outfit', sans-serif;
-          font-size: 1.1em;
+          font-size: 1.6rem;
+          line-height: 1;
           font-weight: 800;
           color: var(--txt0);
-          margin-right: 12px;
+          width: calc(var(--lsb-width) - 16px);
+          margin: 0;
           white-space: nowrap;
-          letter-spacing: -0.02em;
+          letter-spacing: -0.03em;
+          display: flex;
+          align-items: baseline;
         }
         .logo em {
           color: var(--blu-bright);
           font-style: normal;
           font-weight: 600;
+        }
+
+        .sep {
+          width: 1px;
+          height: 24px;
+          background: repeating-linear-gradient(
+            0deg,
+            var(--border),
+            var(--border) 2px,
+            transparent 2px,
+            transparent 4px
+          );
+          margin: 0;
+        }
+        
+        .btn-group, .workflow-track, .tbtn {
+          margin: 0 8px;
+        }
+        
+        .btn-group {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+        
+        .workflow-track {
+          display: flex;
+          gap: 0;
+          padding: 2px;
+          background: rgba(0,0,0,0.22);
+          border-radius: 10px;
+          border: 1px solid var(--border);
+          box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .flow-btn {
+          background: transparent;
+          border: none;
+          color: var(--txt2);
+          padding: 7px 20px 7px 28px;
+          cursor: pointer;
+          font-size: .78em;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          position: relative;
+          border-radius: 0;
+          /* Chevron shape: points right, has hole on left */
+          clip-path: polygon(
+            calc(100% - 10px) 0%, 
+            100% 50%, 
+            calc(100% - 10px) 100%, 
+            0% 100%, 
+            10px 50%, 
+            0% 0%
+          );
+          margin-left: -9px; /* Pull into previous arrow's hole */
+        }
+        
+        .flow-btn:first-child {
+          border-radius: 8px 0 0 8px;
+          padding-left: 20px;
+          margin-left: 0;
+          /* First child: NO hole on left */
+          clip-path: polygon(
+            calc(100% - 10px) 0%, 
+            100% 50%, 
+            calc(100% - 10px) 100%, 
+            0% 100%, 
+            0% 0%
+          );
+        }
+        .flow-btn:last-child {
+          border-radius: 0 8px 8px 0;
+          padding-right: 20px;
+          /* Last child: NO point on right */
+          clip-path: polygon(
+            100% 0%, 
+            100% 100%, 
+            0% 100%, 
+            10px 50%, 
+            0% 0%
+          );
+        }
+        
+        .flow-btn.completed {
+          background: rgba(255,255,255,0.06);
+          color: var(--txt1);
+          z-index: 1;
+        }
+
+        .flow-btn.next {
+          background: var(--bg3);
+          color: var(--txt0);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
+          z-index: 2;
+        }
+
+        .flow-btn.processing {
+          background-color: var(--bg4);
+          background-image: linear-gradient(90deg, 
+            transparent 0%, 
+            color-mix(in srgb, var(--flow-color), transparent 85%) 50%, 
+            transparent 100%
+          );
+          background-size: 200% 100%;
+          color: var(--txt0);
+          z-index: 5;
+          filter: drop-shadow(0 0 10px color-mix(in srgb, var(--flow-color), transparent 60%));
+          animation: flow-scan-bg 1.5s infinite linear;
+          opacity: 1 !important; /* Force visibility even if disabled */
+        }
+
+        /* Pulsing indicator for the target step */
+        @keyframes flow-pulse {
+          0% { opacity: 0.6; transform: scaleX(1); }
+          50% { opacity: 1; transform: scaleX(1.05); }
+          100% { opacity: 0.6; transform: scaleX(1); }
+        }
+
+        /* Scanning effect for processing background */
+        @keyframes flow-scan-bg {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+
+        .flow-btn.completed svg {
+          color: var(--flow-color);
+          opacity: 0.6;
+        }
+
+        .flow-btn.next svg,
+        .flow-btn.processing svg {
+          color: var(--flow-color);
+          filter: drop-shadow(0 0 8px var(--flow-color));
+        }
+
+        /* Marker for states - Move to TOP and make FULL width */
+        .flow-btn.completed::before,
+        .flow-btn.next::before,
+        .flow-btn.processing::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 3px;
+          background: var(--flow-color);
+          pointer-events: none;
+        }
+
+        .flow-btn.completed::before {
+          opacity: 0.2;
+        }
+
+        .flow-btn.next::before {
+          opacity: 0.9;
+          box-shadow: 0 0 10px var(--flow-color);
+          animation: flow-pulse 2s infinite ease-in-out;
+        }
+
+        .flow-btn.processing::before {
+          opacity: 1;
+          box-shadow: 0 0 15px var(--flow-color);
+          animation: flow-pulse 0.8s infinite ease-in-out;
+        }
+
+        .flow-btn:hover:not(:disabled) {
+          background: rgba(255,255,255,0.03);
+          color: var(--txt0);
+          z-index: 10;
+        }
+        .flow-btn.next:hover:not(:disabled),
+        .flow-btn.processing:hover:not(:disabled) {
+          background-color: var(--bg4);
+        }
+
+        .flow-btn:disabled:not(.processing):not(.completed) {
+          opacity: 0.15;
+          cursor: not-allowed;
+          filter: grayscale(1);
+        }
+        
+        .flow-btn.completed:disabled {
+          cursor: not-allowed;
+          opacity: 0.8; /* Keep it visible even when disabled */
+        }
+
+        .svg-export-btn {
+          color: #ffb44a;
+          background: rgba(255, 180, 74, 0.08);
+          border: 1px solid rgba(255, 180, 74, 0.2);
+          font-weight: 700;
+          box-shadow: 0 4px 15px rgba(255, 180, 74, 0.05);
+        }
+        .svg-export-btn:hover {
+          background: rgba(255, 180, 74, 0.2);
+          color: #fff;
+          border-color: #ffb44a;
+          box-shadow: 0 4px 20px rgba(255, 180, 74, 0.15);
+        }
+
+        .reset-btn {
+          color: var(--err-bright);
+          background: rgba(248, 81, 73, 0.08);
+          border: 1px solid rgba(248, 81, 73, 0.2);
+          margin-right: 0;
+        }
+        .reset-btn:hover {
+          background: var(--err-bright);
+          color: #fff;
+          border-color: var(--err-bright);
+          box-shadow: 0 4px 20px rgba(248, 81, 73, 0.25);
         }
       `}} />
     </header>

@@ -95,7 +95,7 @@ export function generateBackgroundSVG(cols, rows, bounds = null) {
   `;
 }
 
-export function generateWiresSVG(wires, hoveredNet = null) {
+export function generateWiresSVG(wires, activeNets = []) {
   let out = '';
   wires.forEach(w => {
     if (w.failed) {
@@ -104,9 +104,13 @@ export function generateWiresSVG(wires, hoveredNet = null) {
       return;
     }
 
-    const strokeW = hoveredNet === w.net ? 4.5 : 2.8;
+    const isActive = activeNets.includes(w.net);
+    const strokeW = isActive ? 3.8 : 2.8;
+    if (!w.path) return;
     const pts = w.path.map(pt => `${pt.col * SP + SP / 2},${pt.row * SP + SP / 2}`).join(' ');
-    out += `<polyline points="${pts}" fill="none" stroke="${netColor(w.net)}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round"/>`;
+    const color = netColor(w.net);
+
+    out += `<polyline points="${pts}" fill="none" class="${isActive ? 'wire-active' : ''}" stroke="${color}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" style="${isActive ? `--wire-color: ${color}` : ''}"/>`;
   });
   return out;
 }
@@ -121,59 +125,155 @@ export function generateRatsnestSVG(components, wires = [], isDragging = false) 
     const { net, pins } = netObj;
     if (pins.length < 2) continue;
 
-    // If this net has a successful (non-failed) wire, hide the ratsnest
-    const isRouted = wires.some(w => w.net === net && !w.failed);
-    if (isRouted) continue;
+    const netWires = wires.filter(w => w.net === net && !w.failed);
 
-    const conn = new Set([0]);
-    while (conn.size < pins.length) {
-      let bD = Infinity, bI = -1, bJ = -1;
-      conn.forEach(i => pins.forEach((p, j) => {
-        if (conn.has(j)) return;
-        const d = Math.abs(pins[i].col - p.col) + Math.abs(pins[i].row - p.row);
-        if (d < bD) { bD = d; bI = i; bJ = j; }
-      }));
+    // Coordinate-based connectivity: map each coordinate occupied by the net to a group ID
+    const groups = pins.map((p, i) => i);
+    const parent = Array.from({ length: pins.length }, (_, i) => i);
+    const findParent = (i) => {
+      while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; }
+      return i;
+    };
+    const union = (i, j) => {
+      const rootI = findParent(i), rootJ = findParent(j);
+      if (rootI !== rootJ) parent[rootI] = rootJ;
+    };
+
+    // 1. Map each grid coordinate used by this net to the set of pins it can "see"
+    const coordMap = new Map(); // "col,row" -> Set of root parents
+
+    // Seed coordMap with pin locations
+    pins.forEach((p, i) => {
+      const key = `${p.col},${p.row}`;
+      if (!coordMap.has(key)) coordMap.set(key, new Set());
+      coordMap.get(key).add(i);
+    });
+
+    // 2. For each wire, all coordinates in that wire are now connected
+    // This is effectively a flood-fill across all segments
+    let changed = true;
+    while (changed) {
+      changed = false;
+      netWires.forEach(w => {
+        const path = w.path;
+        if (!path) return;
+
+        // Find all groups currently touching this wire
+        const touchingGroupRoots = new Set();
+        path.forEach(pt => {
+          const key = `${pt.col},${pt.row}`;
+          if (coordMap.has(key)) {
+            coordMap.get(key).forEach(pIdx => touchingGroupRoots.add(findParent(pIdx)));
+          }
+        });
+
+        if (touchingGroupRoots.size > 1) {
+          const roots = Array.from(touchingGroupRoots);
+          const first = roots[0];
+          for (let i = 1; i < roots.length; i++) {
+            union(first, roots[i]);
+            changed = true;
+          }
+        }
+
+        // Mark all path points as belonging to the unified root
+        const newRoot = findParent(Array.from(touchingGroupRoots)[0] ?? -1);
+        if (newRoot !== -1) {
+          path.forEach(pt => {
+            const key = `${pt.col},${pt.row}`;
+            if (!coordMap.has(key)) {
+              coordMap.set(key, new Set());
+              changed = true;
+            }
+            if (!coordMap.get(key).has(newRoot)) {
+              coordMap.get(key).add(newRoot);
+              changed = true;
+            }
+          });
+        }
+      });
+    }
+
+    // 3. Final Grouping
+    const finalGroupsMap = new Map();
+    pins.forEach((p, i) => {
+      const root = findParent(i);
+      if (!finalGroupsMap.has(root)) finalGroupsMap.set(root, []);
+      finalGroupsMap.get(root).push(i);
+    });
+    const finalGroups = Array.from(finalGroupsMap.values());
+
+    if (finalGroups.length <= 1) continue;
+
+    // 4. MST between groups
+    const connectedGroups = new Set([0]);
+    while (connectedGroups.size < finalGroups.length) {
+      let bD = Infinity, bI = -1, bJ = -1, pI = -1, pJ = -1;
+      connectedGroups.forEach(gi => {
+        finalGroups.forEach((groupJ, gj) => {
+          if (connectedGroups.has(gj)) return;
+          finalGroups[gi].forEach(pi => {
+            groupJ.forEach(pj => {
+              const d = Math.abs(pins[pi].col - pins[pj].col) + Math.abs(pins[pi].row - pins[pj].row);
+              if (d < bD) { bD = d; bI = gi; bJ = gj; pI = pi; pJ = pj; }
+            });
+          });
+        });
+      });
+
       if (bJ === -1) break;
-      out += `<line x1="${pins[bI].col * SP + SP / 2}" y1="${pins[bI].row * SP + SP / 2}" x2="${pins[bJ].col * SP + SP / 2}" y2="${pins[bJ].row * SP + SP / 2}" stroke="${netColor(net)}" opacity="0.75" stroke-width="2" stroke-dasharray="6 4"/>`;
-      conn.add(bJ);
+      out += `<line x1="${pins[pI].col * SP + SP / 2}" y1="${pins[pI].row * SP + SP / 2}" x2="${pins[pJ].col * SP + SP / 2}" y2="${pins[pJ].row * SP + SP / 2}" stroke="${netColor(net)}" opacity="0.35" stroke-width="1.5" stroke-dasharray="4 4"/>`;
+      connectedGroups.add(bJ);
     }
   }
-  cachedRatsnest = out;
   return out;
 }
 
-export function renderCompSVG(c, isSelected = false) {
+export function renderCompSVG(c, isSelected = false, activePin = null) {
   const bx = c.ox * SP + SP * .08, by = c.oy * SP + SP * .08;
   const bw = c.w * SP - SP * .16, bh = c.h * SP - SP * .16;
   const mainColor = boostColor(compColor(c));
 
-  let out = `<g class="pcb-comp" data-id="${c.id}">`;
+  // Use deterministic hash for "random" animation timing
+  const hash = (hashString(c.id) % 1000) / 1000;
+  const animDelay = -(hash * 5).toFixed(2) + 's';
+  const animDur = (2.5 + hash * 2).toFixed(2) + 's';
+
+  let out = `<g class="pcb-comp ${isSelected ? 'component-selected' : ''}" data-id="${c.id}" style="--comp-color: ${mainColor}; --anim-delay: ${animDelay}; --anim-dur: ${animDur}">`;
 
   // 1. Draw Component Base (balanced shine-through, solid rim)
-  const sw = 2.2; // stroke width
+  const sw = isSelected ? 3.1 : 1.9; // Balanced selecion thickness
+  const rimOp = isSelected ? 1.0 : 0.8;
+  const tintOp = isSelected ? 0.2 : 0.08;
+
   const half = sw / 2;
   // Body: Inset by half the stroke width so it doesn't overlap the inner stroke half
   out += `<rect x="${bx + half}" y="${by + half}" width="${bw - sw}" height="${bh - sw}" rx="3" fill="#080808" fill-opacity="0.8"/>`;
   // Rim: Drawn with fill="none" to ensure uniform wire visibility through the stroke
-  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="none" stroke="${mainColor}" stroke-width="${sw}" stroke-opacity="0.8"/>`;
+  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="none" class="pcb-comp-rim" stroke="${mainColor}" stroke-width="${sw}" stroke-opacity="${rimOp}"/>`;
   // subtle tint overlay (entire area)
-  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="${mainColor}" opacity="0.08" style="pointer-events:none"/>`;
+  out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="${mainColor}" opacity="${tintOp}" style="pointer-events:none"/>`;
 
   // 2. Draw Pins
-  c.pins.forEach(p => {
+  c.pins.forEach((p, idx) => {
     const px = p.col * SP + SP / 2, py = p.row * SP + SP / 2;
-    out += `<circle cx="${px}" cy="${py}" r="${SP * .28}" fill="#b87333"/>`;
-    out += `<circle cx="${px}" cy="${py}" r="${SP * .2}" fill="${netColor(p.net)}"/>`;
-    out += `<circle cx="${px}" cy="${py}" r="${SP * .09}" fill="#0d0a06"/>`;
-    out += `<text x="${px}" y="${py + SP * .42}" fill="rgba(230,230,230,.9)" font-family="monospace" font-size="${Math.min(SP * .25, 7)}" text-anchor="middle" style="pointer-events:none;user-select:none">${p.lbl}</text>`;
+    const isActive = activePin && activePin.compId === c.id && activePin.pinIdx === idx;
+    // Centered pin design: Label inside the colored pad
+    out += `<circle cx="${px}" cy="${py}" r="${SP * .22}" fill="${netColor(p.net)}" class="${isActive ? 'active-pin' : ''}" style="${isActive ? `--active-color: ${netColor(p.net)}` : ''}"/>`;
+    out += `<text x="${px}" y="${py}" dy=".35em" fill="#fff" font-family="'Outfit', sans-serif" font-weight="900" font-size="${Math.min(SP * .22, 6)}" text-anchor="middle" paint-order="stroke" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${p.lbl}</text>`;
   });
 
-  // 3. Draw Component Labels
-  out += `<text x="${bx + 3}" y="${by + SP * 0.35}" fill="#fff" font-family="'Consolas',monospace" font-size="${Math.min(SP * .3, 9)}" font-weight="bold" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${c.id}: ${c.value}</text>`;
+  // 3. Draw Component Labels (Centered, two-line layout)
+  const midX = bx + bw / 2;
+  // Shift midY only for vertical strips (h > w) with odd pin counts (h > 1) to avoid pin overlap.
+  const isVerticalStrip = c.h > c.w && c.h > 1;
+  const midY = (isVerticalStrip && c.h % 2 !== 0) ? (by + bh / 2 - SP / 2) : (by + bh / 2);
+  const fontSize = Math.min(SP * .3, 10);
 
-  if (isSelected) {
-    out += `<rect x="${c.ox * SP - 4}" y="${c.oy * SP - 4}" width="${c.w * SP + 8}" height="${c.h * SP + 8}" fill="none" stroke="#3b82f6" stroke-width="2" stroke-dasharray="4 2"/>`;
-  }
+  // Name line
+  out += `<text x="${midX}" y="${midY}" fill="#fff" font-family="'Outfit', sans-serif" font-size="${fontSize}" font-weight="800" text-anchor="middle" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${c.id}</text>`;
+  // Value line (slightly smaller and dimmer)
+  out += `<text x="${midX}" y="${midY + fontSize * 0.8}" fill="rgba(255,255,255,0.6)" font-family="'Outfit', sans-serif" font-size="${fontSize * 0.8}" font-weight="700" text-anchor="middle" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${c.value}</text>`;
 
   out += `</g>`;
   return out;
@@ -202,13 +302,15 @@ export function generateBoundingBoxSVG(components, wires = []) {
 
   if (!isFinite(minC)) return '';
 
-  const pad = 0;
-  const x = (minC - pad) * SP;
-  const y = (minR - pad) * SP;
-  const w = (maxC - minC + pad * 2) * SP;
-  const h = (maxR - minR + pad * 2) * SP;
+  const strokeWidth = 2;
+  const padPx = 3; // Exactly one line width gap
+  const x = (minC) * SP - padPx;
+  const y = (minR) * SP - padPx;
+  const w = (maxC - minC) * SP + padPx * 2;
+  const h = (maxR - minR) * SP + padPx * 2;
 
-  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="8 6" rx="4"/>`;
+  // rx=7 (4 comp radius + 3 padding) ensures parallel rounding
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="${strokeWidth}" stroke-dasharray="8 6" rx="7"/>`;
 }
 
 export function hitComp(col, row, components) {
@@ -216,4 +318,20 @@ export function hitComp(col, row, components) {
     col >= c.ox && col < c.ox + c.w &&
     row >= c.oy && row < c.oy + c.h
   ) || null;
+}
+
+export function hitPin(col, row, components) {
+  for (const c of components) {
+    for (let i = 0; i < c.pins.length; i++) {
+      const p = c.pins[i];
+      if (p.col === col && p.row === row) {
+        return { compId: c.id, pinIdx: i, pin: p };
+      }
+    }
+  }
+  return null;
+}
+
+export function hitWire(col, row, wires) {
+  return wires.find(w => !w.failed && w.path && w.path.some(pt => pt.col === col && pt.row === row)) || null;
 }
