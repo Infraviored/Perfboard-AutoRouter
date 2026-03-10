@@ -28,7 +28,7 @@ export function Topbar({
 }) {
   return (
     <header id="topbar">
-      <div className="logo">Hole<em>Route</em></div>
+      <div className="logo">board<em>route.com</em></div>
 
       <div className="sep"></div>
 

@@ -1,6 +1,6 @@
-# HoleRoute Mathematical & Algorithmic Architecture
+# boardroute.com Mathematical & Algorithmic Architecture
 
-This document serves as a technical deep-dive into the engine and mathematics powering HoleRoute. The core of this project is an advanced, heuristic-driven constraint solver and placement engine that simultaneously handles 2D bin packing, pathfinding, and graph optimization algorithms to lay out components and route wired connections on a discrete HoleRoute grid.
+This document serves as a technical deep-dive into the engine and mathematics powering boardroute.com. The core of this project is an advanced, heuristic-driven constraint solver and placement engine that simultaneously handles 2D bin packing, pathfinding, and graph optimization algorithms to lay out components and route wired connections on a discrete boardroute.com grid.
 
 ## Core Objective
 
@@ -14,7 +14,7 @@ Since finding the absolute minimum for standard placement and routing (which is 
 
 ## 1. Initial State & Representation
 
-The HoleRoute grid is represented as a discrete 2D coordinate system. 
+The boardroute.com grid is represented as a discrete 2D coordinate system. 
 - **Components** define bounding boxes (`w` x `h`) and local pin offsets.
 - **Nets** represent topological graphs of pins that must be electrically connected.
 - **Treadmill Coordinate System:** The global coordinate space is conceptually infinite. To counteract coordinate drift during continuous optimization, the entire system utilizes a center-of-mass "treadmill" translation algorithm. After any major global mutation, the bounding box of the active layout is calculated, and all atomic coordinates (components and wire paths) are translated simultaneously such that the bounding box center maps perfectly to `(0, 0)`.

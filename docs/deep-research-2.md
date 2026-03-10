@@ -34,7 +34,7 @@ This separation lets you improve the router or the placer independently.
 Implement a standard maze router:
 
 - Graph:
-  - Nodes = holes on your HoleRoute grid.
+  - Nodes = holes on your boardroute.com grid.
   - Edges = N/S/E/W neighbors if spacing rules allow a track there.
   - An edge is blocked if:
     - It lies inside a component footprint (except at pins).

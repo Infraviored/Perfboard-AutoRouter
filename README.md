@@ -1,14 +1,14 @@
-# HoleRoute: Intelligent Perfboard AutoRouter
+# boardroute.com: Intelligent Perfboard AutoRouter
 
-HoleRoute is a sophisticated web-based EDA tool specifically designed for prototyping on discrete perforated boards (perfboards/stripboards). It combines a modern React-based frontend with a powerful, heuristic-driven routing and placement engine.
+boardroute.com is a sophisticated web-based EDA tool specifically designed for prototyping on discrete perforated boards (perfboards/stripboards). It combines a modern React-based frontend with a powerful, heuristic-driven routing and placement engine.
 
-![perfboard-autorouter-demo](https://via.placeholder.com/800x450/0d1117/58a6ff?text=HoleRoute+AutoRouter+Interface)
+![perfboard-autorouter-demo](https://via.placeholder.com/800x450/0d1117/58a6ff?text=boardroute.com+AutoRouter+Interface)
 
 ---
 
 ## 🚀 Overview
 
-HoleRoute solves the complex problem of arranging electronic components and routing their connections on a standard 2.54mm grid. Unlike traditional PCB tools, it is optimized for the constraints of "through-hole" prototyping, where space is at a premium and every wire must navigate a discrete matrix of pins.
+boardroute.com solves the complex problem of arranging electronic components and routing their connections on a standard 2.54mm grid. Unlike traditional PCB tools, it is optimized for the constraints of "through-hole" prototyping, where space is at a premium and every wire must navigate a discrete matrix of pins.
 
 ### Key Features
 - **Heuristic Placement Engine:** Uses Simulated Annealing and Targeted Chain Compaction (TCC) to find the most compact component arrangement.
@@ -53,7 +53,7 @@ HoleRoute solves the complex problem of arranging electronic components and rout
 
 ## 🧠 Mathematical & Algorithmic Architecture
 
-The core of HoleRoute is an advanced, heuristic-driven constraint solver that simultaneously handles 2D bin packing, pathfinding, and graph optimization.
+The core of boardroute.com is an advanced, heuristic-driven constraint solver that simultaneously handles 2D bin packing, pathfinding, and graph optimization.
 
 ### 1. Core Objective
 The solver aims to find the global minimum of a highly non-convex, multi-objective cost function:
@@ -107,4 +107,4 @@ When standard mutations fail, `doPlateauExplore` walks across "flat" energy land
 
 ---
 
-Built with ❤️ by the HoleRoute Team.
+Built with ❤️ by the boardroute.com Team.
