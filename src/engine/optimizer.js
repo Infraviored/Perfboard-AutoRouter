@@ -3,7 +3,7 @@ import { scoreState, formatScore, footprintBoxMetrics, calculateComponentBounds,
 import { saveComps, restoreComps } from './state-utils.js';
 import { moveComp, rotateComp90InPlace, anneal, anyOverlap } from './placer.js';
 
-export async function doOptimizeFootprint(components, wires, cols, rows, config, options = {}) {
+export async function compactBoard(components, wires, cols, rows, config, options = {}) {
     const { onProgress, onStatusUpdate, onStateChange, onBestSnapshot } = options;
     const setProg = onProgress;
     const setBestLine = (msg) => onStatusUpdate?.({ best: msg });
@@ -221,7 +221,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                 }
             }
 
-            const rotRes = await tryRotateOptimize(components, currentWires, vCols, vRows, checkCancel());
+            const rotRes = await tryRotateOptimize(components, currentWires, checkCancel);
             currentWires = rotRes.wires;
 
             const nudgeRes = await tryGlobalNudge(components, currentWires, localBestScore, vCols, vRows, checkCancel());
@@ -230,7 +230,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                 currentWires = nudgeRes.wires;
             }
 
-            const shrinkRes = await tryShrinkAlongWires(components, currentWires, localBestScore, vCols, vRows, checkCancel());
+            const shrinkRes = await tryShrinkAlongWires(components, currentWires, localBestScore, vCols, vRows, checkCancel);
             if (shrinkRes.improved) {
                 localBestScore = shrinkRes.score;
                 localBestComps = saveComps(components);
@@ -266,7 +266,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                     currentWires = plateauRes.wires;
                     stagnation = 0;
 
-                    const shrink2 = await tryShrinkAlongWires(components, currentWires, localBestScore, vCols, vRows, checkCancel());
+                    const shrink2 = await tryShrinkAlongWires(components, currentWires, localBestScore, vCols, vRows, checkCancel);
                     if (shrink2.improved) {
                         localBestScore = shrink2.score;
                         localBestComps = saveComps(components);
@@ -331,7 +331,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
 }
 
 
-export async function doPlateauExplore(components, wires, cols, rows, options = {}) {
+export async function optimizeBoard(components, wires, cols, rows, options = {}) {
     const { onProgress, onStatusUpdate, onStateChange } = options;
     const setProg = (p, m) => onProgress?.(p, m);
     const setBestLine = (m) => onStatusUpdate?.({ best: m });
@@ -365,7 +365,7 @@ export async function doPlateauExplore(components, wires, cols, rows, options = 
         if (checkCancel()) break;
         setProg((step / MAX_STEPS) * 100, `Plateau explore: step ${step} / ${MAX_STEPS}`);
 
-        const shrinkRes = await tryShrinkAlongWires(components, currentWires, bestScore, cols, rows, checkCancel());
+        const shrinkRes = await tryShrinkAlongWires(components, currentWires, bestScore, cols, rows, checkCancel);
         if (shrinkRes.improved) {
             bestScore = shrinkRes.score;
             bestWires = shrinkRes.wires;

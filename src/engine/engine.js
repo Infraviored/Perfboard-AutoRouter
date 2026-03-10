@@ -1,6 +1,6 @@
 import { route, incrementalReroute } from './router.js';
 import { Grid } from './grid.js';
-import { doOptimizeFootprint, doPlateauExplore } from './optimizer.js';
+import { compactBoard, optimizeBoard } from './optimizer.js';
 import { scoreState, recenterComponents } from './optimizer-algorithms.js';
 import { placeInitial } from './initial-placement.js';
 import { anneal, moveComp, rotateComp90InPlace } from './placer.js';
@@ -80,7 +80,7 @@ export class AutorouterEngine {
             onBestSnapshot: (snapshot) => { this.onBestSnapshot?.(snapshot); }
         };
 
-        const res = await doOptimizeFootprint(
+        const res = await compactBoard(
             this.components,
             this.wires,
             this.cols,
@@ -110,7 +110,7 @@ export class AutorouterEngine {
             }
         };
 
-        const res = await doPlateauExplore(
+        const res = await optimizeBoard(
             this.components,
             this.wires,
             this.cols,

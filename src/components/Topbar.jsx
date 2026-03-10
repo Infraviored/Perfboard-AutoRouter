@@ -58,7 +58,7 @@ export function Topbar({
           style={{ '--flow-color': 'var(--blu-bright)' }}
         >
           <Wrench size={14} />
-          Optimize
+          Compact
         </button>
         <button
           className={`flow-btn ${workflowStep >= 4 && !(workflowStep === 4 && isProcessing) ? 'completed' : ''} ${workflowStep === 4 && isProcessing ? 'processing' : ''} ${workflowStep === 3 && !isProcessing ? 'next' : ''}`}
@@ -67,7 +67,7 @@ export function Topbar({
           style={{ '--flow-color': '#a371f7' }}
         >
           <Compass size={14} />
-          Explore
+          Optimize
         </button>
       </div>
 
@@ -86,12 +86,12 @@ export function Topbar({
 
       <div className="sep"></div>
 
-      <div className="btn-group">
-        <button className="tbtn" onClick={onUndo} title="Undo">
-          <Undo2 size={16} />
+      <div className="workflow-track">
+        <button className="flow-btn" onClick={onUndo} title="Undo" style={{ '--flow-color': 'var(--txt3)' }}>
+          <Undo2 size={14} />
         </button>
-        <button className="tbtn" onClick={onRedo} title="Redo">
-          <Redo2 size={16} />
+        <button className="flow-btn" onClick={onRedo} title="Redo" style={{ '--flow-color': 'var(--txt3)' }}>
+          <Redo2 size={14} />
         </button>
       </div>
 

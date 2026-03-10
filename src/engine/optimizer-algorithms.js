@@ -424,7 +424,9 @@ export function tryTranslateWithPush(comp, dx, dy, cols, rows, visited, depth, c
 }
 
 
-export async function tryShrinkAlongWires(components, currentWires, bestScore, cols, rows) {
+export async function tryShrinkAlongWires(components, currentWires, bestScore, cols, rows, checkCancel = null) {
+  const isCanceled = () => (typeof checkCancel === 'function' ? checkCancel() : !!checkCancel);
+
   const original = saveComps(components);
   const originalWires = currentWires;
 
@@ -442,6 +444,7 @@ export async function tryShrinkAlongWires(components, currentWires, bestScore, c
   for (const c of candidates) {
     const dirs = pickShrinkDirsForComp(c, components);
     for (const d of dirs) {
+      if (isCanceled()) return { improved: false, score: bestScore, wires: originalWires };
       restoreComps(components, original);
 
       // Save positions before push to detect which components actually moved
@@ -1211,7 +1214,8 @@ export async function explorePlateauStates(components, currentWires, bestScore, 
 }
 
 
-export async function tryRotateOptimize(components, wires) {
+export async function tryRotateOptimize(components, wires, checkCancel = null) {
+  const isCanceled = () => (typeof checkCancel === 'function' ? checkCancel() : !!checkCancel);
   let bestScore = scoreState(components, wires);
   let bestWires = wires;
   let improved = false;
@@ -1222,6 +1226,7 @@ export async function tryRotateOptimize(components, wires) {
     let cImproved = false;
 
     for (let rot = 1; rot <= 3; rot++) {
+      if (isCanceled()) return { improved, score: bestScore, wires: bestWires };
       rotateComp90InPlace(c);
 
       if (anyOverlap(c, components)) continue;

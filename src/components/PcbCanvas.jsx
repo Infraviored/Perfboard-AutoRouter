@@ -18,6 +18,8 @@ import {
     Maximize,
     Crosshair
 } from 'lucide-react';
+const TRACKING_MODES = { NONE: 'none', SNAP: 'snap', LIVE: 'live' };
+const { NONE, SNAP, LIVE } = TRACKING_MODES;
 
 export function PcbCanvas({
     components,
@@ -38,7 +40,6 @@ export function PcbCanvas({
     onManualRoute,
     onPreviewRoute,
     previewPath,
-    selectedNet,
     onSelectNet
 }) {
     const svgRef = useRef(null);
@@ -65,7 +66,6 @@ export function PcbCanvas({
     // Sink routing mode if preview is cleared externally
     useEffect(() => {
         if (!previewPath && routingMode) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setRoutingMode(null);
         }
     }, [previewPath, routingMode]);
@@ -221,7 +221,6 @@ export function PcbCanvas({
         }
     };
 
-    const TRACKING_MODES = { NONE: 'none', SNAP: 'snap', LIVE: 'live' };
     const [trackingMode, setTrackingMode] = useState(TRACKING_MODES.NONE);
     const [isAutoTracking, setIsAutoTracking] = useState(true);
 
@@ -288,8 +287,8 @@ export function PcbCanvas({
         );
 
         snapLockRef.current = { targetCX, targetCY, fitZoom };
-        setTrackingMode(TRACKING_MODES.SNAP);
-    }, [bounds, viewportSize, TRACKING_MODES.SNAP]); // Added TRACKING_MODES.SNAP to deps
+        setTrackingMode(SNAP);
+    }, [bounds, viewportSize]);
 
     useEffect(() => {
         const isMilestone = (workflowStep === 1 || workflowStep === 2) && workflowStep !== lastSnapStep.current;
@@ -546,14 +545,38 @@ export function PcbCanvas({
 
             <div className="canvas-controls">
                 <button className="cbtn" onClick={() => {
-                    const z = camera.z * 1.15;
-                    setCamera({ ...camera, z });
+                    const nextZ = Math.min(Math.max(simZoom.current * 1.15, 0.1), 10.0);
+                    const rect = svgRef.current.getBoundingClientRect();
+                    const cx = rect.width / 2;
+                    const cy = rect.height / 2;
+                    const curZ = simZoom.current;
+                    const curP = simPan.current;
+                    // eslint-disable-next-line react-hooks/immutability
+                    simPan.current = {
+                        x: cx - (cx - curP.x) * (nextZ / curZ),
+                        y: cy - (cy - curP.y) * (nextZ / curZ)
+                    };
+                    // eslint-disable-next-line react-hooks/immutability
+                    simZoom.current = nextZ;
+                    setCamera({ ...simPan.current, z: nextZ });
                 }} title="Zoom In">
                     <Plus size={18} />
                 </button>
                 <button className="cbtn" onClick={() => {
-                    const z = camera.z * 0.87;
-                    setCamera({ ...camera, z });
+                    const nextZ = Math.min(Math.max(simZoom.current * 0.87, 0.1), 10.0);
+                    const rect = svgRef.current.getBoundingClientRect();
+                    const cx = rect.width / 2;
+                    const cy = rect.height / 2;
+                    const curZ = simZoom.current;
+                    const curP = simPan.current;
+                    // eslint-disable-next-line react-hooks/immutability
+                    simPan.current = {
+                        x: cx - (cx - curP.x) * (nextZ / curZ),
+                        y: cy - (cy - curP.y) * (nextZ / curZ)
+                    };
+                    // eslint-disable-next-line react-hooks/immutability
+                    simZoom.current = nextZ;
+                    setCamera({ ...simPan.current, z: nextZ });
                 }} title="Zoom Out">
                     <Minus size={18} />
                 </button>

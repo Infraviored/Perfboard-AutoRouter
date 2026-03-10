@@ -117,7 +117,7 @@ function App() {
     if (newJson !== jsonInput) {
       setJsonInput(newJson);
     }
-  }, [board.components, board.tick, jsonInput]);
+  }, [board.components, board.tick]);
 
   const [status, setStatus] = useState({ title: '', progress: 0, best: '', isProcessing: false, isInitial: false });
   const [selectedId, setSelectedId] = useState(null);
@@ -207,7 +207,7 @@ function App() {
     saveHistory();
   }, [engine, jsonInput, saveHistory]);
 
-  const handleOptimize = useCallback(async () => {
+  const handleCompact = useCallback(async () => {
     setBestSnapshot(null);
     setWorkflowStep(3);
     setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
@@ -225,7 +225,7 @@ function App() {
     saveHistory();
   }, [engine, saveHistory]);
 
-  const handleExplore = useCallback(async () => {
+  const handleOptimizeBoard = useCallback(async () => {
     setBestSnapshot(null);
     setWorkflowStep(4);
     setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
@@ -253,11 +253,11 @@ function App() {
     } else if (step === 2) {
       handleRoute();
     } else if (step === 3) {
-      handleOptimize();
+      handleCompact();
     } else if (step === 4) {
-      handleExplore();
+      handleOptimizeBoard();
     }
-  }, [handleLoadCircuit, handleRoute, handleOptimize, handleExplore, engine]);
+  }, [handleLoadCircuit, handleRoute, handleCompact, handleOptimizeBoard, engine]);
 
   const handleUndo = useCallback(() => {
     if (historyIndex > 0) {
