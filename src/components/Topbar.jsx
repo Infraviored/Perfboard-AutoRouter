@@ -328,6 +328,8 @@ export function Topbar({
           background: var(--bg3);
           color: var(--txt0);
           z-index: 1;
+          opacity: 1 !important;
+          filter: none !important;
         }
 
         .flow-btn.next {
@@ -365,7 +367,7 @@ export function Topbar({
           100% { background-position: -200% 0; }
         }
 
-        .flow-btn.completed svg { color: var(--flow-color); opacity: 0.8; }
+        .flow-btn.completed svg { color: var(--flow-color); opacity: 0.9; }
         .flow-btn.next svg, .flow-btn.processing svg {
           color: var(--flow-color);
           filter: drop-shadow(0 0 8px var(--flow-color));
@@ -381,7 +383,7 @@ export function Topbar({
           background: var(--flow-color);
           pointer-events: none;
         }
-        .flow-btn.completed::before { opacity: 0.3; }
+        .flow-btn.completed::before { opacity: 0.5; }
         .flow-btn.next::before { opacity: 0.9; box-shadow: 0 0 10px var(--flow-color); animation: flow-pulse 2s infinite ease-in-out; }
         .flow-btn.processing::before { opacity: 1; box-shadow: 0 0 15px var(--flow-color); animation: flow-pulse 0.8s infinite ease-in-out; }
 
@@ -393,7 +395,8 @@ export function Topbar({
         
         .flow-btn.completed:disabled {
           cursor: not-allowed;
-          opacity: 1; /* Keep it fully visible even when disabled */
+          opacity: 1 !important;
+          filter: none !important;
         }
 
         .svg-export-btn {
