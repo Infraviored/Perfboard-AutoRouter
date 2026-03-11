@@ -30,7 +30,7 @@ export function Topbar({
     <header id="topbar">
       <div className="topbar-row-1">
         <div className="logo">board<em>route.com</em></div>
-        <div className="sep"></div>
+        <div className="sep logo-sep"></div>
         <div className="workflow-track">
           <button
             className={`flow-btn ${workflowStep >= 1 && !(workflowStep === 1 && isProcessing) ? 'completed' : ''} ${workflowStep === 1 && isProcessing ? 'processing' : ''} ${workflowStep === 0 && !isProcessing ? 'next' : ''}`}
@@ -170,7 +170,10 @@ export function Topbar({
           display: flex;
           align-items: baseline;
           flex-shrink: 0;
-          transition: width 0.3s ease;
+        }
+
+        .logo-sep {
+          margin-left: 0 !important;
         }
         
         /* Responsive Spacing */

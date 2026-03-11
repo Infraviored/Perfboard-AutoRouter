@@ -131,6 +131,7 @@ export function SidebarRight({
           display: flex;
           flex-direction: column;
           z-index: 10;
+          min-width: 0;
         }
         .sgrid {
           display: grid;
@@ -145,6 +146,8 @@ export function SidebarRight({
           padding: 10px 8px;
           text-align: center;
           transition: 0.2s;
+          min-width: 0;
+          overflow: hidden;
         }
         .scard:hover {
           background: var(--bg4);
@@ -158,6 +161,9 @@ export function SidebarRight({
           font-weight: 800;
           color: var(--txt0);
           letter-spacing: -0.02em;
+          white-space: nowrap;
+          overflow: hidden;
+          mask-image: linear-gradient(to right, black 85%, transparent 100%);
         }
         .sl {
           font-size: .6em;
@@ -166,6 +172,9 @@ export function SidebarRight({
           text-transform: uppercase;
           letter-spacing: 0.05em;
           margin-top: 4px;
+          white-space: nowrap;
+          overflow: hidden;
+          mask-image: linear-gradient(to right, black 85%, transparent 100%);
         }
 
         .progress-container {
@@ -206,10 +215,19 @@ export function SidebarRight({
           gap: 8px;
           padding: 6px 0;
           border-bottom: 1px solid var(--border);
+          min-width: 0;
+          overflow: hidden;
         }
-        .prop-icon { color: var(--txt2); }
-        .prop-label { font-size: 0.7em; color: var(--txt1); font-weight: 600; width: 45px; }
-        .prop-value { font-size: 0.8em; color: var(--txt0); font-family: 'Consolas', monospace; }
+        .prop-icon { color: var(--txt2); flex-shrink: 0; }
+        .prop-label { font-size: 0.7em; color: var(--txt1); font-weight: 600; width: 45px; flex-shrink: 0; }
+        .prop-value { 
+          font-size: 0.8em; 
+          color: var(--txt0); 
+          font-family: 'Consolas', monospace; 
+          white-space: nowrap;
+          overflow: hidden;
+          mask-image: linear-gradient(to right, black 85%, transparent 100%);
+        }
 
         .empty-selection {
           padding: 30px 20px;
@@ -277,7 +295,16 @@ export function SidebarRight({
         .net-dot {
           display: none; 
         }
-        .net-name { flex: 1; font-size: 0.8em; color: var(--txt0); font-family: 'Consolas', monospace; font-weight: 600; }
+        .net-name { 
+          flex: 1; 
+          font-size: 0.8em; 
+          color: var(--txt0); 
+          font-family: 'Consolas', monospace; 
+          font-weight: 600; 
+          white-space: nowrap;
+          overflow: hidden;
+          mask-image: linear-gradient(to right, black 85%, transparent 100%);
+        }
         .net-count { 
           font-size: 0.62em; 
           font-weight: 800; 
@@ -286,6 +313,7 @@ export function SidebarRight({
           padding: 1px 5px;
           border-radius: 4px;
           border: 1px solid var(--border);
+          flex-shrink: 0;
         }
       `}} />
     </aside>

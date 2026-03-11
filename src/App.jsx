@@ -139,6 +139,59 @@ function App() {
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
+  // --- RESIZING ---
+  const [lsbWidth, setLsbWidth] = useState(() => {
+    const saved = localStorage.getItem('pcb_lsb_width');
+    return saved ? parseInt(saved, 10) : 280;
+  });
+  const [rsbWidth, setRsbWidth] = useState(() => {
+    const saved = localStorage.getItem('pcb_rsb_width');
+    return saved ? parseInt(saved, 10) : 240;
+  });
+  const [isResizingL, setIsResizingL] = useState(false);
+  const [isResizingR, setIsResizingR] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('pcb_lsb_width', lsbWidth.toString());
+  }, [lsbWidth]);
+
+  useEffect(() => {
+    localStorage.setItem('pcb_rsb_width', rsbWidth.toString());
+  }, [rsbWidth]);
+
+  const handleMouseMove = useCallback((e) => {
+    if (isResizingL) {
+      const newWidth = Math.max(180, Math.min(600, e.clientX));
+      setLsbWidth(newWidth);
+    } else if (isResizingR) {
+      const newWidth = Math.max(180, Math.min(600, window.innerWidth - e.clientX));
+      setRsbWidth(newWidth);
+    }
+  }, [isResizingL, isResizingR]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizingL(false);
+    setIsResizingR(false);
+    document.body.style.cursor = 'default';
+    document.body.style.userSelect = 'auto';
+  }, []);
+
+  useEffect(() => {
+    if (isResizingL || isResizingR) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    } else {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingL, isResizingR, handleMouseMove, handleMouseUp]);
+
   // --- ACTIONS ---
   const saveHistory = useCallback(() => {
     const snap = JSON.stringify({
@@ -566,7 +619,7 @@ function App() {
   }, [hoveredNet, selectedNet, selectedComp]);
 
   return (
-    <div className="app-main">
+    <div className="app-main" style={{ '--lsb-width': `${lsbWidth}px`, '--rsb-width': `${rsbWidth}px` }}>
       <Topbar
         workflowStep={workflowStep}
         onStepClick={handleStepClick}
@@ -593,6 +646,7 @@ function App() {
           onAddNewComponent={() => { setEditingComp(null); setIsEditorOpen(true); }}
           onEditComponent={(id) => { setEditingComp(board.components.find(x => x.id === id)); setIsEditorOpen(true); }}
         />
+        <div className="resizer l" onMouseDown={() => setIsResizingL(true)}></div>
         <div id="ca-col">
           <main id="ca">
             <PcbCanvas
@@ -639,6 +693,7 @@ function App() {
             }}
           />
         </div>
+        <div className="resizer r" onMouseDown={() => setIsResizingR(true)}></div>
         <SidebarRight stats={stats} selectedComp={selectedComp} nets={netsMap}
           hoveredNet={hoveredNet} setHoveredNet={setHoveredNet}
           selectedNet={selectedNet} setSelectedNet={(net) => {
@@ -675,6 +730,30 @@ function App() {
         #layout { display: flex; flex: 1; overflow: hidden; min-height: 0; }
         #ca-col { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; overflow: hidden; }
         #ca { flex: 1; position: relative; background: #050706; overflow: hidden; border-radius: 4px; margin: 4px; box-shadow: inset 0 0 40px rgba(0,0,0,0.8); min-height: 0; }
+
+        .resizer {
+          width: 4px;
+          cursor: col-resize;
+          position: relative;
+          z-index: 20;
+          transition: background 0.2s;
+          display: flex;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+        .resizer::after {
+          content: '';
+          width: 1px;
+          height: 100%;
+          background: var(--border);
+          transition: background 0.2s;
+        }
+        .resizer:hover::after, .resizer.active::after {
+          background: var(--blu-bright);
+          width: 2px;
+        }
+        .resizer.l { margin-right: -2px; margin-left: -2px; }
+        .resizer.r { margin-left: -2px; margin-right: -2px; }
 
         @keyframes active-pin-blink {
           0% { r: 6.16; fill: #fff; opacity: 1; filter: drop-shadow(0 0 5px #fff); }
