@@ -24,109 +24,106 @@ export function Topbar({
   onReset,
   onExportSVG,
   onRouteOnly,
-  hasWires,
   isProcessing
 }) {
   return (
     <header id="topbar">
-      <div className="logo">Perfboard<em>Designer</em></div>
-
-      <div className="sep"></div>
-
-      <div className="workflow-track">
-        <button
-          className={`flow-btn ${workflowStep >= 1 && !(workflowStep === 1 && isProcessing) ? 'completed' : ''} ${workflowStep === 1 && isProcessing ? 'processing' : ''} ${workflowStep === 0 && !isProcessing ? 'next' : ''}`}
-          onClick={() => onStepClick(1)}
-          disabled={isProcessing}
-          style={{ '--flow-color': '#4da0ff' }}
-        >
-          <FileJson size={14} />
-          Load
-        </button>
-        <button
-          className={`flow-btn ${workflowStep >= 2 && !(workflowStep === 2 && isProcessing) ? 'completed' : ''} ${workflowStep === 2 && isProcessing ? 'processing' : ''} ${workflowStep === 1 && !isProcessing ? 'next' : ''}`}
-          onClick={() => onStepClick(2)}
-          disabled={workflowStep < 1 || isProcessing}
-          style={{ '--flow-color': 'var(--grn-bright)' }}
-        >
-          <Zap size={14} />
-          Route
-        </button>
-        <button
-          className={`flow-btn ${workflowStep >= 3 && !(workflowStep === 3 && isProcessing) ? 'completed' : ''} ${workflowStep === 3 && isProcessing ? 'processing' : ''} ${workflowStep === 2 && !isProcessing ? 'next' : ''}`}
-          onClick={() => onStepClick(3)}
-          disabled={workflowStep < 2 || isProcessing}
-          style={{ '--flow-color': 'var(--blu-bright)' }}
-        >
-          <Wrench size={14} />
-          Optimize
-        </button>
-        <button
-          className={`flow-btn ${workflowStep >= 4 && !(workflowStep === 4 && isProcessing) ? 'completed' : ''} ${workflowStep === 4 && isProcessing ? 'processing' : ''} ${workflowStep === 3 && !isProcessing ? 'next' : ''}`}
-          onClick={() => onStepClick(4)}
-          disabled={workflowStep < 3 || isProcessing}
-          style={{ '--flow-color': '#a371f7' }}
-        >
-          <Compass size={14} />
-          Explore
-        </button>
+      <div className="topbar-row-1">
+        <div className="logo">board<em>route.com</em></div>
+        <div className="sep logo-sep"></div>
+        <div className="workflow-track">
+          <button
+            className={`flow-btn ${workflowStep >= 1 && !(workflowStep === 1 && isProcessing) ? 'completed' : ''} ${workflowStep === 1 && isProcessing ? 'processing' : ''} ${workflowStep === 0 && !isProcessing ? 'next' : ''}`}
+            onClick={() => onStepClick(1)}
+            disabled={isProcessing}
+            style={{ '--flow-color': '#4da0ff' }}
+          >
+            <FileJson size={14} />
+            Load
+          </button>
+          <button
+            className={`flow-btn ${workflowStep >= 2 && !(workflowStep === 2 && isProcessing) ? 'completed' : ''} ${workflowStep === 2 && isProcessing ? 'processing' : ''} ${workflowStep === 1 && !isProcessing ? 'next' : ''}`}
+            onClick={() => onStepClick(2)}
+            disabled={workflowStep < 1 || isProcessing}
+            style={{ '--flow-color': 'var(--grn-bright)' }}
+          >
+            <Zap size={14} />
+            Route
+          </button>
+          <button
+            className={`flow-btn ${workflowStep >= 3 && !(workflowStep === 3 && isProcessing) ? 'completed' : ''} ${workflowStep === 3 && isProcessing ? 'processing' : ''} ${workflowStep === 2 && !isProcessing ? 'next' : ''}`}
+            onClick={() => onStepClick(3)}
+            disabled={workflowStep < 2 || isProcessing}
+            style={{ '--flow-color': 'var(--blu-bright)' }}
+          >
+            <Wrench size={14} />
+            Compact
+          </button>
+          <button
+            className={`flow-btn ${workflowStep >= 4 && !(workflowStep === 4 && isProcessing) ? 'completed' : ''} ${workflowStep === 4 && isProcessing ? 'processing' : ''} ${workflowStep >= 3 && !isProcessing ? 'next' : ''}`}
+            onClick={() => onStepClick(4)}
+            disabled={workflowStep < 3 || isProcessing}
+            style={{ '--flow-color': '#a371f7' }}
+          >
+            <Compass size={14} />
+            Optimize
+          </button>
+        </div>
       </div>
 
       <div className="sep"></div>
 
-      <div className="btn-group">
-        <button className="tbtn" onClick={onClearWires} title="Delete all wires" disabled={isProcessing}>
-          <Eraser size={16} />
-          Clear
+      <div className="topbar-actions">
+        <div className="btn-group">
+          <button className="tbtn" onClick={onClearWires} title="Delete all wires" disabled={isProcessing}>
+            <Eraser size={16} />
+            Clear
+          </button>
+          <button className="tbtn" onClick={onRouteOnly} title="Connect Airwires" disabled={isProcessing}>
+            <Zap size={16} />
+            Connect
+          </button>
+        </div>
+
+        <div className="sep"></div>
+
+        <div className="btn-group">
+          <button className="tbtn" onClick={onUndo} title="Undo">
+            <Undo2 size={16} />
+          </button>
+          <button className="tbtn" onClick={onRedo} title="Redo">
+            <Redo2 size={16} />
+          </button>
+        </div>
+
+        <div className="sep"></div>
+
+        <div className="btn-group">
+          <button className="tbtn" onClick={onImportState} title="Import (JSON)">
+            <Download size={16} />
+          </button>
+          <button className="tbtn" onClick={onExportState} title="Export (JSON)">
+            <Upload size={16} />
+          </button>
+        </div>
+
+        <div className="sep"></div>
+
+        <div className="spc" style={{ flex: 1 }}></div>
+
+        <button className="tbtn svg-export-btn" onClick={onExportSVG} title="Download SVG" aria-label="Export SVG">
+          <ExternalLink size={16} />
         </button>
-        <button className="tbtn" onClick={onRouteOnly} title="Connect Airwires" disabled={isProcessing}>
-          <Zap size={16} />
-          Connect
+
+        <button className="tbtn reset-btn" onClick={onReset} title="Reset Project" aria-label="Reset Project">
+          <RotateCcw size={16} />
         </button>
       </div>
-
-      <div className="sep"></div>
-
-      <div className="btn-group">
-        <button className="tbtn" onClick={onUndo} title="Undo">
-          <Undo2 size={16} />
-        </button>
-        <button className="tbtn" onClick={onRedo} title="Redo">
-          <Redo2 size={16} />
-        </button>
-      </div>
-
-      <div className="sep"></div>
-
-      <div className="btn-group">
-        <button className="tbtn" onClick={onImportState} title="Import State (JSON)">
-          <Download size={16} />
-          Import
-        </button>
-        <button className="tbtn" onClick={onExportState} title="Export State (JSON)">
-          <Upload size={16} />
-          Export
-        </button>
-      </div>
-
-      <div className="sep"></div>
-
-      <div className="spc" style={{ flex: 1 }}></div>
-
-      <button className="tbtn svg-export-btn" onClick={onExportSVG} title="Download as Vector Graphic (SVG)">
-        <ExternalLink size={16} />
-        Export SVG
-      </button>
-
-      <button className="tbtn reset-btn" onClick={onReset} title="Reset the entire project">
-        <RotateCcw size={16} />
-        Reset
-      </button>
 
       <style dangerouslySetInnerHTML={{
         __html: `
         #topbar {
-          height: var(--topbar-height);
+          min-height: var(--topbar-height);
           background: var(--glass-bg);
           backdrop-filter: blur(12px);
           border-bottom: 1px solid var(--border);
@@ -136,7 +133,30 @@ export function Topbar({
           padding: 0 16px;
           flex-shrink: 0;
           z-index: 100;
+          overflow-x: hidden;
         }
+
+        #topbar > .sep {
+          display: block;
+        }
+
+        .topbar-row-1 {
+          display: flex;
+          align-items: center;
+          flex-shrink: 0;
+        }
+
+        .topbar-actions {
+          display: flex;
+          align-items: center;
+          flex: 1;
+          min-width: 0;
+        }
+
+        @media (max-width: 950px) {
+          #topbar > .sep { display: none; }
+        }
+
         .logo {
           font-family: 'Outfit', sans-serif;
           font-size: 1.6rem;
@@ -149,6 +169,47 @@ export function Topbar({
           letter-spacing: -0.03em;
           display: flex;
           align-items: baseline;
+          flex-shrink: 0;
+        }
+
+        .logo-sep {
+          margin-left: 0 !important;
+        }
+        
+        /* Responsive Spacing */
+        @media (max-width: 1150px) {
+          .logo { width: 140px; }
+          .sep { margin: 0 6px; }
+          .btn-group, .workflow-track, .tbtn { margin: 0 4px; }
+        }
+
+        /* Two Line Wrap */
+        @media (max-width: 950px) {
+          #topbar {
+            flex-direction: column;
+            align-items: stretch;
+            padding: 0;
+          }
+          .logo { 
+            width: auto; 
+            padding: 10px 16px; 
+            font-size: 1.3rem;
+          }
+          .topbar-row-1 {
+            display: flex;
+            align-items: center;
+            height: var(--topbar-height);
+            border-bottom: 1px solid var(--border);
+            padding: 0 16px;
+          }
+          .topbar-actions {
+            padding: 8px 16px;
+            background: rgba(0,0,0,0.15);
+            flex-wrap: wrap;
+            gap: 8px 0;
+          }
+          .topbar-actions .sep { height: 16px; }
+          .topbar-actions .spc { display: none; }
         }
         .logo em {
           color: var(--blu-bright);
@@ -166,19 +227,59 @@ export function Topbar({
             transparent 2px,
             transparent 4px
           );
-          margin: 0;
+          margin: 0 12px;
+          flex-shrink: 0;
         }
         
         .btn-group, .workflow-track, .tbtn {
           margin: 0 8px;
+          flex-shrink: 0;
         }
         
         .btn-group {
           display: flex;
           align-items: center;
-          gap: 4px;
+          gap: 0;
         }
-        
+
+        .btn-group .tbtn {
+          border-radius: 0;
+          margin-left: -1px;
+        }
+        .btn-group .tbtn:first-child {
+          margin-left: 0;
+          border-radius: 8px 0 0 8px;
+        }
+        .btn-group .tbtn:last-child {
+          border-radius: 0 8px 8px 0;
+        }
+
+        .tbtn {
+          background: var(--bg4);
+          border: 1px solid var(--border);
+          color: var(--txt1);
+          padding: 6px 12px;
+          height: 34px;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: .82em;
+          font-weight: 500;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          white-space: nowrap;
+          position: relative;
+        }
+        .tbtn:hover:not(:disabled) {
+          background: var(--bg3);
+          border-color: var(--border2);
+          color: var(--txt0);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+          z-index: 10;
+        }
+
         .workflow-track {
           display: flex;
           gap: 0;
@@ -203,7 +304,6 @@ export function Topbar({
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
           position: relative;
           border-radius: 0;
-          /* Chevron shape: points right, has hole on left */
           clip-path: polygon(
             calc(100% - 10px) 0%, 
             100% 50%, 
@@ -212,39 +312,27 @@ export function Topbar({
             10px 50%, 
             0% 0%
           );
-          margin-left: -9px; /* Pull into previous arrow's hole */
+          margin-left: -9px;
         }
         
         .flow-btn:first-child {
           border-radius: 8px 0 0 8px;
           padding-left: 20px;
           margin-left: 0;
-          /* First child: NO hole on left */
-          clip-path: polygon(
-            calc(100% - 10px) 0%, 
-            100% 50%, 
-            calc(100% - 10px) 100%, 
-            0% 100%, 
-            0% 0%
-          );
+          clip-path: polygon(calc(100% - 10px) 0%, 100% 50%, calc(100% - 10px) 100%, 0% 100%, 0% 0%);
         }
         .flow-btn:last-child {
           border-radius: 0 8px 8px 0;
           padding-right: 20px;
-          /* Last child: NO point on right */
-          clip-path: polygon(
-            100% 0%, 
-            100% 100%, 
-            0% 100%, 
-            10px 50%, 
-            0% 0%
-          );
+          clip-path: polygon(100% 0%, 100% 100%, 0% 100%, 10px 50%, 0% 0%);
         }
         
         .flow-btn.completed {
-          background: rgba(255,255,255,0.06);
-          color: var(--txt1);
+          background: var(--bg3);
+          color: var(--txt0);
           z-index: 1;
+          opacity: 1 !important;
+          filter: none !important;
         }
 
         .flow-btn.next {
@@ -282,21 +370,13 @@ export function Topbar({
           100% { background-position: -200% 0; }
         }
 
-        .flow-btn.completed svg {
-          color: var(--flow-color);
-          opacity: 0.6;
-        }
-
-        .flow-btn.next svg,
-        .flow-btn.processing svg {
+        .flow-btn.completed svg { color: var(--flow-color); opacity: 0.9; }
+        .flow-btn.next svg, .flow-btn.processing svg {
           color: var(--flow-color);
           filter: drop-shadow(0 0 8px var(--flow-color));
         }
 
-        /* Marker for states - Move to TOP and make FULL width */
-        .flow-btn.completed::before,
-        .flow-btn.next::before,
-        .flow-btn.processing::before {
+        .flow-btn.completed::before, .flow-btn.next::before, .flow-btn.processing::before {
           content: '';
           position: absolute;
           top: 0;
@@ -306,32 +386,9 @@ export function Topbar({
           background: var(--flow-color);
           pointer-events: none;
         }
-
-        .flow-btn.completed::before {
-          opacity: 0.2;
-        }
-
-        .flow-btn.next::before {
-          opacity: 0.9;
-          box-shadow: 0 0 10px var(--flow-color);
-          animation: flow-pulse 2s infinite ease-in-out;
-        }
-
-        .flow-btn.processing::before {
-          opacity: 1;
-          box-shadow: 0 0 15px var(--flow-color);
-          animation: flow-pulse 0.8s infinite ease-in-out;
-        }
-
-        .flow-btn:hover:not(:disabled) {
-          background: rgba(255,255,255,0.03);
-          color: var(--txt0);
-          z-index: 10;
-        }
-        .flow-btn.next:hover:not(:disabled),
-        .flow-btn.processing:hover:not(:disabled) {
-          background-color: var(--bg4);
-        }
+        .flow-btn.completed::before { opacity: 0.5; }
+        .flow-btn.next::before { opacity: 0.9; box-shadow: 0 0 10px var(--flow-color); animation: flow-pulse 2s infinite ease-in-out; }
+        .flow-btn.processing::before { opacity: 1; box-shadow: 0 0 15px var(--flow-color); animation: flow-pulse 0.8s infinite ease-in-out; }
 
         .flow-btn:disabled:not(.processing):not(.completed) {
           opacity: 0.15;
@@ -341,7 +398,8 @@ export function Topbar({
         
         .flow-btn.completed:disabled {
           cursor: not-allowed;
-          opacity: 0.8; /* Keep it visible even when disabled */
+          opacity: 1 !important;
+          filter: none !important;
         }
 
         .svg-export-btn {
@@ -349,26 +407,22 @@ export function Topbar({
           background: rgba(255, 180, 74, 0.08);
           border: 1px solid rgba(255, 180, 74, 0.2);
           font-weight: 700;
-          box-shadow: 0 4px 15px rgba(255, 180, 74, 0.05);
         }
-        .svg-export-btn:hover {
+        .svg-export-btn:hover:not(:disabled) {
           background: rgba(255, 180, 74, 0.2);
           color: #fff;
           border-color: #ffb44a;
-          box-shadow: 0 4px 20px rgba(255, 180, 74, 0.15);
         }
 
         .reset-btn {
           color: var(--err-bright);
           background: rgba(248, 81, 73, 0.08);
           border: 1px solid rgba(248, 81, 73, 0.2);
-          margin-right: 0;
         }
-        .reset-btn:hover {
+        .reset-btn:hover:not(:disabled) {
           background: var(--err-bright);
           color: #fff;
           border-color: var(--err-bright);
-          box-shadow: 0 4px 20px rgba(248, 81, 73, 0.25);
         }
       `}} />
     </header>

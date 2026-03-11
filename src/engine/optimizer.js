@@ -1,12 +1,12 @@
 import { route } from './router.js';
-import { scoreState, formatScore, calculateFootprintArea, footprintBoxMetrics, calculateComponentBounds, doRecursivePushPacking, tryRotateOptimize, explorePlateauStates, tryGlobalNudge, tryShrinkAlongWires, tryWireAbsorption, tryAffinityPacking, tryChainedCompaction, tryClusterRotateOptimize, isScoreBetter, recenterComponents, stateKeyForPlateau, enumeratePlateauNeighbors } from './optimizer-algorithms.js';
+import { scoreState, footprintBoxMetrics, calculateComponentBounds, doRecursivePushPacking, tryRotateOptimize, explorePlateauStates, tryGlobalNudge, tryShrinkAlongWires, tryWireAbsorption, tryAffinityPacking, tryChainedCompaction, tryClusterRotateOptimize, isScoreBetter, recenterComponents, stateKeyForPlateau, enumeratePlateauNeighbors } from './optimizer-algorithms.js';
 import { saveComps, restoreComps } from './state-utils.js';
 import { moveComp, rotateComp90InPlace, anneal, anyOverlap } from './placer.js';
 
-export async function doOptimizeFootprint(components, wires, cols, rows, config, options = {}) {
+export async function compactBoard(components, wires, cols, rows, config, options = {}) {
     const { onProgress, onStatusUpdate, onStateChange, onBestSnapshot } = options;
     const setProg = onProgress;
-    const setBestLine = (msg) => onStatusUpdate?.({ best: msg });
+    const setBestLine = (score) => onStatusUpdate?.({ best: score });
 
     const startTime = performance.now();
     const MAX_EPOCHS = config.maxEpochs || 1;
@@ -56,8 +56,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
 
     if (!components.length) return;
 
-
-    setBestLine('');
+    setBestLine(null);
 
     const startSnapshot = saveComps(components);
     const startWires = await route(components, uiCols, uiRows, () => { }, checkCancel, wires);
@@ -82,8 +81,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
     let globalBestComps = saveComps(components);
     let globalBestWires = [...currentWires];
 
-    let bestUiMsg = `Best: ${formatScore(globalBestScore)}`;
-    setBestLine(bestUiMsg);
+    setBestLine(globalBestScore);
     pushHydratedBest(components, globalBestWires);
 
     // Track Progress of Current Search Branch
@@ -221,7 +219,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                 }
             }
 
-            const rotRes = await tryRotateOptimize(components, currentWires, vCols, vRows, checkCancel());
+            const rotRes = await tryRotateOptimize(components, currentWires, checkCancel);
             currentWires = rotRes.wires;
 
             const nudgeRes = await tryGlobalNudge(components, currentWires, localBestScore, vCols, vRows, checkCancel());
@@ -230,7 +228,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                 currentWires = nudgeRes.wires;
             }
 
-            const shrinkRes = await tryShrinkAlongWires(components, currentWires, localBestScore, vCols, vRows, checkCancel());
+            const shrinkRes = await tryShrinkAlongWires(components, currentWires, localBestScore, vCols, vRows, checkCancel);
             if (shrinkRes.improved) {
                 localBestScore = shrinkRes.score;
                 localBestComps = saveComps(components);
@@ -266,7 +264,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                     currentWires = plateauRes.wires;
                     stagnation = 0;
 
-                    const shrink2 = await tryShrinkAlongWires(components, currentWires, localBestScore, vCols, vRows, checkCancel());
+                    const shrink2 = await tryShrinkAlongWires(components, currentWires, localBestScore, vCols, vRows, checkCancel);
                     if (shrink2.improved) {
                         localBestScore = shrink2.score;
                         localBestComps = saveComps(components);
@@ -288,7 +286,7 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
                 localBestScore = testScore;
                 localBestComps = saveComps(components);
                 stagnation = 0;
-                setBestLine(`Best: ${formatScore(testScore)}`);
+                setBestLine(testScore);
                 if (isScoreBetter(testScore, startScore)) {
                     currentWires = globalBestWires;
 
@@ -318,17 +316,32 @@ export async function doOptimizeFootprint(components, wires, cols, rows, config,
     // Removed translateFootprintToTopLeftUI(); to stop jumping to top-left
 
     const finalScore = scoreState(components, currentWires);
-    setBestLine('');
+    const improved = isScoreBetter(finalScore, startScore);
+    if (!improved) {
+        restoreComps(components, startSnapshot);
+        currentWires = startWires;
+    }
+
+    setBestLine(null);
     flashUIState();
 
-    return { improved: true, score: finalScore, wires: currentWires, startScore: startScore };
+    return { improved, score: improved ? finalScore : startScore, wires: currentWires, startScore: startScore };
 }
 
 
-export async function doPlateauExplore(components, wires, cols, rows, options = {}) {
-    const { onProgress, onStatusUpdate, onStateChange } = options;
+export async function optimizeBoard(components, wires, cols, rows, options = {}) {
+    const { onProgress, onStatusUpdate, onStateChange, onBestSnapshot } = options;
     const setProg = (p, m) => onProgress?.(p, m);
     const setBestLine = (m) => onStatusUpdate?.({ best: m });
+
+    const pushHydratedBest = (liveComps, ws) => {
+        const hydratedComps = liveComps.map(c => ({
+            ...c,
+            pins: c.pins.map(p => ({ ...p, col: c.ox + p.dCol, row: c.oy + p.dRow }))
+        }));
+        const wsClone = ws ? JSON.parse(JSON.stringify(ws)) : [];
+        onBestSnapshot?.({ components: hydratedComps, wires: wsClone });
+    };
 
     let currentWires = wires;
     let gCancelRequested = false;
@@ -337,14 +350,15 @@ export async function doPlateauExplore(components, wires, cols, rows, options = 
     if (!components.length) return;
 
     const startSnapshot = saveComps(components);
-    let bestWires = await route(components, cols, rows, () => { }, checkCancel, currentWires);
-    let bestScore = scoreState(components, bestWires);
-    const startScore = bestScore;
-    currentWires = bestWires;
+    const startWires = await route(components, cols, rows, () => { }, checkCancel, currentWires);
+    const startScore = scoreState(components, startWires);
+    let bestWires = startWires;
+    let bestScore = startScore;
+    currentWires = startWires;
 
     onStateChange?.({ components, wires: bestWires });
-
-    setBestLine(`Best: ${formatScore(bestScore)}`);
+    setBestLine(bestScore);
+    pushHydratedBest(components, bestWires);
 
     const visited = new Set();
     visited.add(stateKeyForPlateau(components));
@@ -358,13 +372,14 @@ export async function doPlateauExplore(components, wires, cols, rows, options = 
         if (checkCancel()) break;
         setProg((step / MAX_STEPS) * 100, `Plateau explore: step ${step} / ${MAX_STEPS}`);
 
-        const shrinkRes = await tryShrinkAlongWires(components, currentWires, bestScore, cols, rows, checkCancel());
+        const shrinkRes = await tryShrinkAlongWires(components, currentWires, bestScore, cols, rows, checkCancel);
         if (shrinkRes.improved) {
             bestScore = shrinkRes.score;
             bestWires = shrinkRes.wires;
             currentWires = bestWires;
-            setBestLine(`Best: ${formatScore(bestScore)}`);
+            setBestLine(bestScore);
             onStateChange?.({ components, wires: bestWires });
+            pushHydratedBest(components, bestWires);
             await new Promise(r => setTimeout(r, 0));
             continue;
         }
@@ -425,12 +440,19 @@ export async function doPlateauExplore(components, wires, cols, rows, options = 
         lastPickedCompId = pick.compId;
         bestWires = currentWires;
         bestScore = pick.score;
-        setBestLine(`Best: ${formatScore(bestScore)}`);
+        setBestLine(bestScore);
         onStateChange?.({ components, wires: bestWires });
+        pushHydratedBest(components, bestWires);
         await new Promise(r => setTimeout(r, 0));
     }
 
     const finalScore = scoreState(components, currentWires);
-    setBestLine('');
-    return { improved: isScoreBetter(finalScore, startScore), score: finalScore, wires: currentWires, startScore: startScore };
+    const improved = isScoreBetter(finalScore, startScore);
+    if (!improved) {
+        restoreComps(components, startSnapshot);
+        currentWires = startWires;
+    }
+
+    setBestLine(null);
+    return { improved, score: improved ? finalScore : startScore, wires: currentWires, startScore: startScore };
 }

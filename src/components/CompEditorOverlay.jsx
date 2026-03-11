@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { compColor } from '../engine/render-utils.js';
 
 export function CompEditorOverlay({ component, isOpen, onClose, onSave }) {
     const [data, setData] = useState(() => component ? JSON.parse(JSON.stringify(component)) : null);

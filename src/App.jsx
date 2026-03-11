@@ -12,6 +12,7 @@ import { ConfirmOverlay } from './components/ConfirmOverlay.jsx';
 import { TEMPLATE, processTemplate } from './engine/templates.js';
 import { getAllNets } from './engine/router.js';
 import { scoreState } from './engine/optimizer-algorithms.js';
+import { generateBoardSVG } from './engine/render-utils.js';
 
 function App() {
   // --- ENGINE ---
@@ -21,7 +22,9 @@ function App() {
       try {
         const parsed = JSON.parse(saved);
         return new AutorouterEngine(parsed.cols || 30, parsed.rows || 20);
-      } catch (e) { }
+      } catch (e) {
+        console.warn("Failed to parse saved board state for engine", e);
+      }
     }
     return new AutorouterEngine(30, 20);
   }, []);
@@ -39,7 +42,9 @@ function App() {
           rows: parsed.rows || 20,
           tick: 0
         };
-      } catch (e) { }
+      } catch (e) {
+        console.warn("Failed to parse saved board state", e);
+      }
     }
     return { components: [], wires: [], cols: 30, rows: 20, tick: 0 };
   });
@@ -97,7 +102,7 @@ function App() {
         name: c.name,
         value: c.value,
         pins: c.pins.map(p => ({
-          offset: [p.col, p.row],
+          offset: [p.dCol, p.dRow],
           label: p.lbl,
           net: p.net || ''
         }))
@@ -115,11 +120,10 @@ function App() {
     }
   }, [board.components, board.tick]);
 
-  const [status, setStatus] = useState({ title: '', progress: 0, best: '', isProcessing: false, isInitial: false });
+  const [status, setStatus] = useState({ title: '', progress: 0, best: null, isProcessing: false, isInitial: false });
   const [selectedId, setSelectedId] = useState(null);
   const [selectedNet, setSelectedNet] = useState(null);
   const [hoveredNet, setHoveredNet] = useState(null);
-  const [tool, setTool] = useState('sel');
   const [bestSnapshot, setBestSnapshot] = useState(null);
 
 
@@ -135,6 +139,59 @@ function App() {
   // History for Undo/Redo
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // --- RESIZING ---
+  const [lsbWidth, setLsbWidth] = useState(() => {
+    const saved = localStorage.getItem('pcb_lsb_width');
+    return saved ? parseInt(saved, 10) : 280;
+  });
+  const [rsbWidth, setRsbWidth] = useState(() => {
+    const saved = localStorage.getItem('pcb_rsb_width');
+    return saved ? parseInt(saved, 10) : 240;
+  });
+  const [isResizingL, setIsResizingL] = useState(false);
+  const [isResizingR, setIsResizingR] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('pcb_lsb_width', lsbWidth.toString());
+  }, [lsbWidth]);
+
+  useEffect(() => {
+    localStorage.setItem('pcb_rsb_width', rsbWidth.toString());
+  }, [rsbWidth]);
+
+  const handleMouseMove = useCallback((e) => {
+    if (isResizingL) {
+      const newWidth = Math.max(180, Math.min(600, e.clientX));
+      setLsbWidth(newWidth);
+    } else if (isResizingR) {
+      const newWidth = Math.max(180, Math.min(600, window.innerWidth - e.clientX));
+      setRsbWidth(newWidth);
+    }
+  }, [isResizingL, isResizingR]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizingL(false);
+    setIsResizingR(false);
+    document.body.style.cursor = 'default';
+    document.body.style.userSelect = 'auto';
+  }, []);
+
+  useEffect(() => {
+    if (isResizingL || isResizingR) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    } else {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingL, isResizingR, handleMouseMove, handleMouseUp]);
 
   // --- ACTIONS ---
   const saveHistory = useCallback(() => {
@@ -173,11 +230,12 @@ function App() {
         setSnapCounter(c => c + 1);
         saveHistory();
       }
-    } catch (e) { }
+    } catch (e) {
+      console.error('Failed to load circuit:', e);
+    }
   }, [engine, jsonInput, saveHistory]);
 
   const handleRoute = useCallback(async () => {
-    setBestSnapshot(null);
     setWorkflowStep(2);
     setStatus(prev => ({ ...prev, isProcessing: true, isInitial: true, results: null }));
     try {
@@ -189,20 +247,19 @@ function App() {
         setSnapCounter(c => c + 1);
         setTimeout(() => {
           setStatus(prev => ({ ...prev, results: null }));
-          setBestSnapshot(null);
-        }, 4000);
+        }, 6000);
       } else {
-        setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: '' }));
+        setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: null }));
       }
-      setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: '' }));
+      setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: null }));
     } catch (e) {
-      setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: '' }));
+      console.error('Failed to route:', e);
+      setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: null }));
     }
     saveHistory();
   }, [engine, jsonInput, saveHistory]);
 
-  const handleOptimize = useCallback(async () => {
-    setBestSnapshot(null);
+  const handleCompact = useCallback(async () => {
     setWorkflowStep(3);
     setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
     const res = await engine.optimize();
@@ -213,14 +270,13 @@ function App() {
         setBestSnapshot(null);
       }, 4000);
     } else {
-      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
+      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: null }));
       setBestSnapshot(null);
     }
     saveHistory();
   }, [engine, saveHistory]);
 
-  const handleExplore = useCallback(async () => {
-    setBestSnapshot(null);
+  const handleOptimizeBoard = useCallback(async () => {
     setWorkflowStep(4);
     setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
     const res = await engine.plateau();
@@ -231,7 +287,7 @@ function App() {
         setBestSnapshot(null);
       }, 4000);
     } else {
-      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
+      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: null }));
       setBestSnapshot(null);
     }
     saveHistory();
@@ -247,11 +303,11 @@ function App() {
     } else if (step === 2) {
       handleRoute();
     } else if (step === 3) {
-      handleOptimize();
+      handleCompact();
     } else if (step === 4) {
-      handleExplore();
+      handleOptimizeBoard();
     }
-  }, [handleLoadCircuit, handleRoute, handleOptimize, handleExplore, engine]);
+  }, [handleLoadCircuit, handleRoute, handleCompact, handleOptimizeBoard, engine]);
 
   const handleUndo = useCallback(() => {
     if (historyIndex > 0) {
@@ -269,53 +325,14 @@ function App() {
     }
   }, [history, historyIndex, engine]);
 
-  const handleCopyPrompt = useCallback(() => {
-    const prompt = `Act as an expert electronics designer. Generate a JSON circuit definition for the following request: "Simple ESP32 power controller with relay".
-Use this format:
-{
-  "components": [
-    { "id": "U1", "name": "ESP32", "pins": [{"offset": [0,0], "label": "GND", "net": "GND"}] }
-  ]
-}`;
-    navigator.clipboard.writeText(prompt);
-  }, []);
 
   const handleRouteOnly = useCallback(async () => {
-    await engine.routeOnly();
-    setStatus(prev => ({ ...prev, title: '', best: '' }));
-    saveHistory();
-  }, [engine, saveHistory]);
-
-  const handleOptimizeFootprint = useCallback(async () => {
-    setBestSnapshot(null);
-    setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
-    const res = await engine.optimize();
-    if (res) {
-      setStatus(prev => ({ ...prev, isProcessing: false, results: res }));
-      setTimeout(() => {
-        setStatus(prev => ({ ...prev, results: null }));
-        setBestSnapshot(null);
-      }, 4000);
-    } else {
-      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
-      setBestSnapshot(null);
-    }
-    saveHistory();
-  }, [engine, saveHistory]);
-
-  const handlePlateauExplore = useCallback(async () => {
-    setBestSnapshot(null);
-    setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
-    const res = await engine.plateau();
-    if (res) {
-      setStatus(prev => ({ ...prev, isProcessing: false, results: res }));
-      setTimeout(() => {
-        setStatus(prev => ({ ...prev, results: null }));
-        setBestSnapshot(null);
-      }, 4000);
-    } else {
-      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
-      setBestSnapshot(null);
+    setStatus(prev => ({ ...prev, isProcessing: true }));
+    try {
+      await engine.routeOnly();
+      setStatus(prev => ({ ...prev, title: '', best: null }));
+    } finally {
+      setStatus(prev => ({ ...prev, isProcessing: false }));
     }
     saveHistory();
   }, [engine, saveHistory]);
@@ -419,7 +436,7 @@ Use this format:
     }
     setConfirmData({ isOpen: false, type: null, targetId: null });
     saveHistory();
-  }, [confirmData, engine, activePin, handleRouteOnly, saveHistory]);
+  }, [confirmData, engine, activePin, handleRouteOnly, handleLoadTemplate, saveHistory]);
 
   const handleReset = useCallback(() => {
     setConfirmData({
@@ -478,6 +495,23 @@ Use this format:
     a.href = url; a.download = 'pcb_circuit.json'; a.click();
     URL.revokeObjectURL(url);
   }, [board]);
+
+  const handleExportSVG = useCallback(() => {
+    // If we have a best snapshot (likely during optimization), prefer that.
+    // Otherwise use the current board state.
+    const source = bestSnapshot || board;
+    const svg = generateBoardSVG(source.components, source.wires, { padding: 20, showBoundingBox: true });
+    if (!svg) return;
+
+    const blob = new Blob([svg], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `board_${new Date().getTime()}.svg`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [board, bestSnapshot]);
+
   const handleImportState = useCallback(() => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -499,6 +533,8 @@ Use this format:
             saveHistory();
           }
         } catch (err) {
+          console.error('Failed to import PCB state from file:', err);
+          window.alert('Failed to import PCB file. Please make sure it is valid JSON in the expected format.');
         }
       };
       reader.readAsText(file);
@@ -535,8 +571,10 @@ Use this format:
       if (e.ctrlKey && e.key === 'z') { e.preventDefault(); handleUndo(); }
       if (e.ctrlKey && e.key === 'y') { e.preventDefault(); handleRedo(); }
       if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); handleRoute(); }
-      if (e.shiftKey && e.key === 'R') { e.preventDefault(); handleRoute(); }
-      if (e.key === 'v') { e.preventDefault(); setTool('sel'); }
+      if (e.shiftKey && e.key === 'R') { e.preventDefault(); handleRouteOnly(); }
+
+      // Removed tool switching logic
+
       if (e.key === 'Delete' || e.key === 'Backspace') {
         // Only trigger if no input is focused
         if (document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
@@ -547,7 +585,7 @@ Use this format:
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, handleRoute, requestDelete]);
+  }, [handleUndo, handleRedo, handleRoute, handleRouteOnly, requestDelete]);
 
   // --- INITIAL LOAD ---
   useEffect(() => {
@@ -599,7 +637,7 @@ Use this format:
   }, [hoveredNet, selectedNet, selectedComp]);
 
   return (
-    <div className="app-main">
+    <div className="app-main" style={{ '--lsb-width': `${lsbWidth}px`, '--rsb-width': `${rsbWidth}px` }}>
       <Topbar
         workflowStep={workflowStep}
         onStepClick={handleStepClick}
@@ -610,7 +648,7 @@ Use this format:
         onClearWires={handleClearWires}
         onReset={handleReset}
         onRouteOnly={handleRouteOnly}
-        onExportSVG={() => { /* logic */ }}
+        onExportSVG={handleExportSVG}
         hasWires={board.wires.length > 0}
         isProcessing={status.isProcessing}
       />
@@ -625,8 +663,8 @@ Use this format:
           }} onOpenLibrary={() => setIsLibraryOpen(true)}
           onAddNewComponent={() => { setEditingComp(null); setIsEditorOpen(true); }}
           onEditComponent={(id) => { setEditingComp(board.components.find(x => x.id === id)); setIsEditorOpen(true); }}
-          isProcessing={status.isProcessing}
         />
+        <div className="resizer l" onMouseDown={() => setIsResizingL(true)}></div>
         <div id="ca-col">
           <main id="ca">
             <PcbCanvas
@@ -662,7 +700,7 @@ Use this format:
             status={status}
             bestSnapshot={bestSnapshot}
             onGoodEnough={() => {
-              engine.cancel(true);
+              engine.cancel();
               if (bestSnapshot) {
                 setBoard({ components: bestSnapshot.components, wires: bestSnapshot.wires });
                 setStatus({ progress: 0, title: '', isProcessing: false }); // clear processing
@@ -673,6 +711,7 @@ Use this format:
             }}
           />
         </div>
+        <div className="resizer r" onMouseDown={() => setIsResizingR(true)}></div>
         <SidebarRight stats={stats} selectedComp={selectedComp} nets={netsMap}
           hoveredNet={hoveredNet} setHoveredNet={setHoveredNet}
           selectedNet={selectedNet} setSelectedNet={(net) => {
@@ -709,6 +748,30 @@ Use this format:
         #layout { display: flex; flex: 1; overflow: hidden; min-height: 0; }
         #ca-col { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; overflow: hidden; }
         #ca { flex: 1; position: relative; background: #050706; overflow: hidden; border-radius: 4px; margin: 4px; box-shadow: inset 0 0 40px rgba(0,0,0,0.8); min-height: 0; }
+
+        .resizer {
+          width: 4px;
+          cursor: col-resize;
+          position: relative;
+          z-index: 20;
+          transition: background 0.2s;
+          display: flex;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+        .resizer::after {
+          content: '';
+          width: 1px;
+          height: 100%;
+          background: var(--border);
+          transition: background 0.2s;
+        }
+        .resizer:hover::after, .resizer.active::after {
+          background: var(--blu-bright);
+          width: 2px;
+        }
+        .resizer.l { margin-right: -2px; margin-left: -2px; }
+        .resizer.r { margin-left: -2px; margin-right: -2px; }
 
         @keyframes active-pin-blink {
           0% { r: 6.16; fill: #fff; opacity: 1; filter: drop-shadow(0 0 5px #fff); }

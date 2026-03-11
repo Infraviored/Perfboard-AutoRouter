@@ -115,10 +115,8 @@ export function generateWiresSVG(wires, activeNets = []) {
   return out;
 }
 
-let cachedRatsnest = '';
-let lastComponents = null;
 
-export function generateRatsnestSVG(components, wires = [], isDragging = false) {
+export function generateRatsnestSVG(components, wires = []) {
   const nets = getAllNets(components);
   let out = '';
   for (const netObj of nets) {
@@ -128,7 +126,6 @@ export function generateRatsnestSVG(components, wires = [], isDragging = false) 
     const netWires = wires.filter(w => w.net === net && !w.failed);
 
     // Coordinate-based connectivity: map each coordinate occupied by the net to a group ID
-    const groups = pins.map((p, i) => i);
     const parent = Array.from({ length: pins.length }, (_, i) => i);
     const findParent = (i) => {
       while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; }
@@ -176,21 +173,20 @@ export function generateRatsnestSVG(components, wires = [], isDragging = false) 
           }
         }
 
-        // Mark all path points as belonging to the unified root
-        const newRoot = findParent(Array.from(touchingGroupRoots)[0] ?? -1);
-        if (newRoot !== -1) {
-          path.forEach(pt => {
-            const key = `${pt.col},${pt.row}`;
-            if (!coordMap.has(key)) {
-              coordMap.set(key, new Set());
-              changed = true;
-            }
-            if (!coordMap.get(key).has(newRoot)) {
-              coordMap.get(key).add(newRoot);
-              changed = true;
-            }
-          });
-        }
+        // Mark all path points as belonging to the unified root, if any groups are touching
+        if (touchingGroupRoots.size === 0) return;
+        const newRoot = findParent(Array.from(touchingGroupRoots)[0]);
+        path.forEach(pt => {
+          const key = `${pt.col},${pt.row}`;
+          if (!coordMap.has(key)) {
+            coordMap.set(key, new Set());
+            changed = true;
+          }
+          if (!coordMap.get(key).has(newRoot)) {
+            coordMap.get(key).add(newRoot);
+            changed = true;
+          }
+        });
       });
     }
 
@@ -208,14 +204,14 @@ export function generateRatsnestSVG(components, wires = [], isDragging = false) 
     // 4. MST between groups
     const connectedGroups = new Set([0]);
     while (connectedGroups.size < finalGroups.length) {
-      let bD = Infinity, bI = -1, bJ = -1, pI = -1, pJ = -1;
+      let bD = Infinity, bJ = -1, pI = -1, pJ = -1;
       connectedGroups.forEach(gi => {
         finalGroups.forEach((groupJ, gj) => {
           if (connectedGroups.has(gj)) return;
           finalGroups[gi].forEach(pi => {
             groupJ.forEach(pj => {
               const d = Math.abs(pins[pi].col - pins[pj].col) + Math.abs(pins[pi].row - pins[pj].row);
-              if (d < bD) { bD = d; bI = gi; bJ = gj; pI = pi; pJ = pj; }
+              if (d < bD) { bD = d; bJ = gj; pI = pi; pJ = pj; }
             });
           });
         });
@@ -311,6 +307,77 @@ export function generateBoundingBoxSVG(components, wires = []) {
 
   // rx=7 (4 comp radius + 3 padding) ensures parallel rounding
   return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="${strokeWidth}" stroke-dasharray="8 6" rx="7"/>`;
+}
+
+export function generateBoardSVG(components, wires = [], options = {}) {
+  if (!components.length) return '';
+
+  let minC = Infinity, maxC = -Infinity, minR = Infinity, maxR = -Infinity;
+  components.forEach(c => {
+    if (!isFinite(c.ox) || !isFinite(c.oy)) return;
+    minC = Math.min(minC, c.ox);
+    maxC = Math.max(maxC, c.ox + c.w);
+    minR = Math.min(minR, c.oy);
+    maxR = Math.max(maxR, c.oy + c.h);
+  });
+
+  wires.forEach(w => w.path?.forEach(pt => {
+    minC = Math.min(minC, pt.col);
+    maxC = Math.max(maxC, pt.col + 1);
+    minR = Math.min(minR, pt.row);
+    maxR = Math.max(maxR, pt.row + 1);
+  }));
+
+  if (!isFinite(minC)) return '';
+
+  const padPx = options.padding ?? 12;
+  const pad = padPx / SP;
+  minC -= pad; minR -= pad;
+  maxC += pad; maxR += pad;
+
+  const W = Math.round((maxC - minC) * SP);
+  const H = Math.round((maxR - minR) * SP);
+
+  let inner = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  inner += `<rect width="${W}" height="${H}" fill="#050706"/>`; // Dark background match
+
+  // Perfboard holes logic
+  inner += `<defs><pattern id="holePattern" width="${SP}" height="${SP}" patternUnits="userSpaceOnUse" x="${-minC * SP}" y="${-minR * SP}">`;
+  inner += `<rect width="${SP}" height="${SP}" fill="#1a1208"/>`;
+  inner += `<circle cx="${SP / 2}" cy="${SP / 2}" r="${SP * .22}" fill="#b87333"/>`;
+  inner += `<circle cx="${SP / 2}" cy="${SP / 2}" r="${SP * .09}" fill="#0d0a06"/>`;
+  inner += `</pattern></defs>`;
+  inner += `<rect width="100%" height="100%" fill="url(#holePattern)"/>`;
+
+  // Wires
+  wires.forEach(w => {
+    if (!w.path?.length || w.failed) return;
+    const pts = w.path.map(pt => `${Math.round((pt.col - minC) * SP + SP / 2)},${Math.round((pt.row - minR) * SP + SP / 2)}`).join(' ');
+    inner += `<polyline points="${pts}" fill="none" stroke="${netColor(w.net)}" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>`;
+  });
+
+  // Components
+  components.forEach(c => {
+    const sc = {
+      ...c,
+      ox: c.ox - minC,
+      oy: c.oy - minR,
+      pins: c.pins.map(p => ({ ...p, col: p.col - minC, row: p.row - minR }))
+    };
+    inner += renderCompSVG(sc, false);
+  });
+
+  // Optional bounding box
+  if (options.showBoundingBox) {
+    const bbx = padPx;
+    const bby = padPx;
+    const bbw = W - padPx * 2;
+    const bbh = H - padPx * 2;
+    inner += `<rect x="${bbx}" y="${bby}" width="${bbw}" height="${bbh}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="8 6" rx="7"/>`;
+  }
+
+  inner += `</svg>`;
+  return inner;
 }
 
 export function hitComp(col, row, components) {

@@ -1,7 +1,7 @@
 import { route, incrementalReroute } from './router.js';
 import { Grid } from './grid.js';
-import { doOptimizeFootprint, doPlateauExplore } from './optimizer.js';
-import { scoreState, doRecursivePushPacking, recenterComponents } from './optimizer-algorithms.js';
+import { compactBoard, optimizeBoard } from './optimizer.js';
+import { scoreState, recenterComponents } from './optimizer-algorithms.js';
 import { placeInitial } from './initial-placement.js';
 import { anneal, moveComp, rotateComp90InPlace } from './placer.js';
 import { saveComps, restoreComps, completion } from './state-utils.js';
@@ -80,7 +80,7 @@ export class AutorouterEngine {
             onBestSnapshot: (snapshot) => { this.onBestSnapshot?.(snapshot); }
         };
 
-        const res = await doOptimizeFootprint(
+        const res = await compactBoard(
             this.components,
             this.wires,
             this.cols,
@@ -89,7 +89,9 @@ export class AutorouterEngine {
             options
         );
 
-        this.wires = res.wires || this.wires;
+        if (res.improved) {
+            this.wires = res.wires;
+        }
         this.notify();
         return res;
     }
@@ -105,10 +107,11 @@ export class AutorouterEngine {
                 this.wires = state.wires;
                 this.tick++;
                 this.notify();
-            }
+            },
+            onBestSnapshot: (snapshot) => { this.onBestSnapshot?.(snapshot); }
         };
 
-        const res = await doPlateauExplore(
+        const res = await optimizeBoard(
             this.components,
             this.wires,
             this.cols,
@@ -116,7 +119,9 @@ export class AutorouterEngine {
             options
         );
 
-        this.wires = res.wires || this.wires;
+        if (res.improved) {
+            this.wires = res.wires;
+        }
         this.notify();
         return res;
     }
@@ -198,6 +203,13 @@ export class AutorouterEngine {
                 bestCompletion = c;
                 bestWires = candidateWires;
                 bestComps = saveComps(currentComponents);
+
+                // Push best so far to preview bar
+                const hydratedComps = currentComponents.map(comp => ({
+                    ...comp,
+                    pins: comp.pins.map(p => ({ ...p, col: comp.ox + p.dCol, row: comp.oy + p.dRow }))
+                }));
+                this.onBestSnapshot?.({ components: hydratedComps, wires: candidateWires });
             }
 
             if (c === 1.0) break; // Found 100% solution
@@ -243,7 +255,7 @@ export class AutorouterEngine {
     }
 
     updateIncrementalWires(movedComp) {
-        const { success, wires } = incrementalReroute(this.components, this.wires, movedComp);
+        const { wires } = incrementalReroute(this.components, this.wires, movedComp);
         this.wires = wires;
     }
 
@@ -298,11 +310,59 @@ export class AutorouterEngine {
     }
 
     deleteComponent(id) {
+        // Collect all nets associated with the component being deleted
+        const comp = this.components.find(c => c.id === id);
+        const affectedNets = new Set();
+        if (comp && Array.isArray(comp.pins)) {
+            comp.pins.forEach(p => {
+                if (p && p.net) {
+                    affectedNets.add(p.net);
+                }
+            });
+        }
+
+        // Remove the component itself
         this.components = this.components.filter(c => c.id !== id);
-        // Clean up wires that might be referencing pins that no longer exist
-        // or just let the router handle it on next pass. 
-        // For now, let's keep wires as is or clear them if they belong to this component?
-        // Actually, deleting a component should probably clear wires of nets that lose pins.
+
+        // For nets touched by this component, remove wires if the net
+        // no longer has at least two pins remaining on the board.
+        if (affectedNets.size > 0) {
+            const netPinCounts = new Map();
+
+            // Recompute pin counts for affected nets across remaining components
+            this.components.forEach(c => {
+                if (!Array.isArray(c.pins)) return;
+                c.pins.forEach(p => {
+                    if (!p || p.net == null) return;
+                    if (!affectedNets.has(p.net)) return;
+                    const current = netPinCounts.get(p.net) || 0;
+                    netPinCounts.set(p.net, current + 1);
+                });
+            });
+
+            // Drop wires whose nets have fewer than 2 remaining pins
+            this.wires = this.wires.filter(w => {
+                if (!w || w.net == null) return true;
+                if (!affectedNets.has(w.net)) return true;
+                const count = netPinCounts.get(w.net) || 0;
+                return count >= 2;
+            });
+
+            // Cleanup: For nets that still exist, remove any wires that terminate at 
+            // the exact coordinates where the deleted component's pins were.
+            if (comp && Array.isArray(comp.pins)) {
+                const removedCoords = new Set(comp.pins.map(p => `${p.col},${p.row}`));
+                this.wires = this.wires.map(w => {
+                    if (!affectedNets.has(w.net) || !w.path) return w;
+                    const startsAtRemoved = removedCoords.has(`${w.path[0].col},${w.path[0].row}`);
+                    const endsAtRemoved = removedCoords.has(`${w.path[w.path.length - 1].col},${w.path[w.path.length - 1].row}`);
+                    if (startsAtRemoved || endsAtRemoved) {
+                        return { ...w, failed: true, path: [w.path[0], w.path[w.path.length - 1]] };
+                    }
+                    return w;
+                });
+            }
+        }
         this.tick++;
         this.notify();
     }

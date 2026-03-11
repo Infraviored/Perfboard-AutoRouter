@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { boostColor, compColor } from '../engine/render-utils.js';
 import {
   Plus,
@@ -10,13 +10,8 @@ import {
 } from 'lucide-react';
 
 export function SidebarLeft({
-  cols,
-  rows,
-  onApplyBoard,
-  onCutToBoundingBox,
   jsonInput,
   setJsonInput,
-  onLoadTemplate,
   components,
   selectedId,
   onSelectComponent,
@@ -25,12 +20,6 @@ export function SidebarLeft({
   onEditComponent,
   onOpenPrompt
 }) {
-  const [localCols, setLocalCols] = useState(cols);
-  const [localRows, setLocalRows] = useState(rows);
-
-  const handleApply = () => {
-    onApplyBoard(parseInt(localCols), parseInt(localRows));
-  };
 
   return (
     <aside id="lsb">
@@ -156,6 +145,7 @@ export function SidebarLeft({
         }
         .header-actions-row {
           display: flex;
+          flex-wrap: wrap;
           gap: 6px;
           padding: 0 12px 8px 16px;
         }
@@ -163,6 +153,7 @@ export function SidebarLeft({
           padding: 0 12px 12px 16px;
           display: flex;
           flex-direction: column;
+          min-width: 0;
         }
         .prompt-help-btn {
           margin-bottom: 10px;
@@ -180,6 +171,9 @@ export function SidebarLeft({
           gap: 8px;
           cursor: pointer;
           transition: 0.2s;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .prompt-help-btn:hover {
           background: rgba(31, 111, 235, 0.18);
@@ -219,6 +213,11 @@ export function SidebarLeft({
           justify-content: center;
           gap: 6px;
           transition: 0.2s;
+          flex: 1;
+          min-width: 80px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .tplbtn:hover { 
           background: var(--bg4);
@@ -247,12 +246,14 @@ export function SidebarLeft({
            border: 1px solid var(--border);
            border-left: 3px solid var(--comp-color);
            border-radius: 8px;
-           padding: 6px 10px;
+           padding: 6px 8px;
            display: flex;
            align-items: center;
-           gap: 10px;
+           gap: 8px;
            cursor: pointer;
            transition: all 0.2s;
+           min-width: 0;
+           overflow: hidden;
         }
         .comp-card:hover {
            background: var(--bg4);
@@ -275,6 +276,7 @@ export function SidebarLeft({
           border-radius: 4px;
           text-align: center;
           border: 1px solid var(--border);
+          flex-shrink: 0;
         }
         .comp-info {
           display: flex;
@@ -289,7 +291,7 @@ export function SidebarLeft({
           color: var(--txt0);
           white-space: nowrap;
           overflow: hidden;
-          text-overflow: ellipsis;
+          mask-image: linear-gradient(to right, black 90%, transparent 100%);
         }
         .comp-value {
           font-size: 0.65em;
@@ -297,22 +299,28 @@ export function SidebarLeft({
           font-family: 'Consolas', monospace;
           white-space: nowrap;
           overflow: hidden;
-          text-overflow: ellipsis;
+          mask-image: linear-gradient(to right, black 90%, transparent 100%);
         }
         .comp-actions {
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 4px;
           margin-left: auto;
+          flex-shrink: 0;
         }
         .comp-pins-tag {
-           font-size: 0.6em;
+           font-size: 0.65em;
            font-weight: 800;
-           color: var(--txt2);
+           color: var(--txt1);
            background: var(--bg2);
-           padding: 1px 5px;
-           border-radius: 4px;
+           padding: 0 6px;
+           border-radius: 5px;
            border: 1px solid var(--border);
+           height: 22px;
+           display: flex;
+           align-items: center;
+           justify-content: center;
+           min-width: 28px;
         }
         .edit-mini-btn {
           background: var(--bg2);
