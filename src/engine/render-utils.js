@@ -309,6 +309,77 @@ export function generateBoundingBoxSVG(components, wires = []) {
   return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="${strokeWidth}" stroke-dasharray="8 6" rx="7"/>`;
 }
 
+export function generateBoardSVG(components, wires = [], options = {}) {
+  if (!components.length) return '';
+
+  let minC = Infinity, maxC = -Infinity, minR = Infinity, maxR = -Infinity;
+  components.forEach(c => {
+    if (!isFinite(c.ox) || !isFinite(c.oy)) return;
+    minC = Math.min(minC, c.ox);
+    maxC = Math.max(maxC, c.ox + c.w);
+    minR = Math.min(minR, c.oy);
+    maxR = Math.max(maxR, c.oy + c.h);
+  });
+
+  wires.forEach(w => w.path?.forEach(pt => {
+    minC = Math.min(minC, pt.col);
+    maxC = Math.max(maxC, pt.col + 1);
+    minR = Math.min(minR, pt.row);
+    maxR = Math.max(maxR, pt.row + 1);
+  }));
+
+  if (!isFinite(minC)) return '';
+
+  const padPx = options.padding ?? 12;
+  const pad = padPx / SP;
+  minC -= pad; minR -= pad;
+  maxC += pad; maxR += pad;
+
+  const W = Math.round((maxC - minC) * SP);
+  const H = Math.round((maxR - minR) * SP);
+
+  let inner = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  inner += `<rect width="${W}" height="${H}" fill="#050706"/>`; // Dark background match
+
+  // Perfboard holes logic
+  inner += `<defs><pattern id="holePattern" width="${SP}" height="${SP}" patternUnits="userSpaceOnUse" x="${-minC * SP}" y="${-minR * SP}">`;
+  inner += `<rect width="${SP}" height="${SP}" fill="#1a1208"/>`;
+  inner += `<circle cx="${SP / 2}" cy="${SP / 2}" r="${SP * .22}" fill="#b87333"/>`;
+  inner += `<circle cx="${SP / 2}" cy="${SP / 2}" r="${SP * .09}" fill="#0d0a06"/>`;
+  inner += `</pattern></defs>`;
+  inner += `<rect width="100%" height="100%" fill="url(#holePattern)"/>`;
+
+  // Wires
+  wires.forEach(w => {
+    if (!w.path?.length || w.failed) return;
+    const pts = w.path.map(pt => `${Math.round((pt.col - minC) * SP + SP / 2)},${Math.round((pt.row - minR) * SP + SP / 2)}`).join(' ');
+    inner += `<polyline points="${pts}" fill="none" stroke="${netColor(w.net)}" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>`;
+  });
+
+  // Components
+  components.forEach(c => {
+    const sc = {
+      ...c,
+      ox: c.ox - minC,
+      oy: c.oy - minR,
+      pins: c.pins.map(p => ({ ...p, col: p.col - minC, row: p.row - minR }))
+    };
+    inner += renderCompSVG(sc, false);
+  });
+
+  // Optional bounding box
+  if (options.showBoundingBox) {
+    const bbx = padPx;
+    const bby = padPx;
+    const bbw = W - padPx * 2;
+    const bbh = H - padPx * 2;
+    inner += `<rect x="${bbx}" y="${bby}" width="${bbw}" height="${bbh}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="8 6" rx="7"/>`;
+  }
+
+  inner += `</svg>`;
+  return inner;
+}
+
 export function hitComp(col, row, components) {
   return components.find(c =>
     col >= c.ox && col < c.ox + c.w &&

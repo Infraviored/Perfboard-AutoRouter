@@ -12,6 +12,7 @@ import { ConfirmOverlay } from './components/ConfirmOverlay.jsx';
 import { TEMPLATE, processTemplate } from './engine/templates.js';
 import { getAllNets } from './engine/router.js';
 import { scoreState } from './engine/optimizer-algorithms.js';
+import { generateBoardSVG } from './engine/render-utils.js';
 
 function App() {
   // --- ENGINE ---
@@ -494,6 +495,23 @@ function App() {
     a.href = url; a.download = 'pcb_circuit.json'; a.click();
     URL.revokeObjectURL(url);
   }, [board]);
+
+  const handleExportSVG = useCallback(() => {
+    // If we have a best snapshot (likely during optimization), prefer that.
+    // Otherwise use the current board state.
+    const source = bestSnapshot || board;
+    const svg = generateBoardSVG(source.components, source.wires, { padding: 20, showBoundingBox: true });
+    if (!svg) return;
+
+    const blob = new Blob([svg], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `board_${new Date().getTime()}.svg`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [board, bestSnapshot]);
+
   const handleImportState = useCallback(() => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -630,7 +648,7 @@ function App() {
         onClearWires={handleClearWires}
         onReset={handleReset}
         onRouteOnly={handleRouteOnly}
-        onExportSVG={() => { /* logic */ }}
+        onExportSVG={handleExportSVG}
         hasWires={board.wires.length > 0}
         isProcessing={status.isProcessing}
       />
