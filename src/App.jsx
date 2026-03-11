@@ -120,7 +120,6 @@ function App() {
   const [selectedNet, setSelectedNet] = useState(null);
   const [hoveredNet, setHoveredNet] = useState(null);
   const [bestSnapshot, setBestSnapshot] = useState(null);
-  const [isBottomViewOpen, setIsBottomViewOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
 
   // Modal states
@@ -449,8 +448,6 @@ function App() {
           hoveredNet={hoveredNet} setHoveredNet={setHoveredNet}
           selectedNet={selectedNet} setSelectedNet={setSelectedNet}
           activeNets={activeNets}
-          onToggleBottomView={() => setIsBottomViewOpen(!isBottomViewOpen)}
-          isBottomViewOpen={isBottomViewOpen}
           components={board.components}
           wires={board.wires}
           bestSnapshot={bestSnapshot}
