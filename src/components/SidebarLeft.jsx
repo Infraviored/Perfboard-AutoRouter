@@ -18,7 +18,9 @@ export function SidebarLeft({
   onOpenLibrary,
   onAddNewComponent,
   onEditComponent,
-  onOpenPrompt
+  onOpenPrompt,
+  viewSide,
+  setViewSide
 }) {
 
   return (
@@ -336,9 +338,43 @@ export function SidebarLeft({
           justify-content: center;
         }
         .edit-mini-btn:hover {
-          background: var(--blu);
           color: #fff;
           border-color: var(--blu);
+        }
+
+        .view-mode-row {
+          padding: 0 12px 12px 16px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .view-mode-row label {
+          font-size: 0.7em;
+          font-weight: 700;
+          color: var(--txt2);
+          text-transform: uppercase;
+        }
+        .view-toggle {
+          display: flex;
+          background: var(--bg3);
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 2px;
+        }
+        .view-toggle button {
+          border: none;
+          background: transparent;
+          color: var(--txt1);
+          font-size: 0.65em;
+          font-weight: 700;
+          padding: 3px 8px;
+          border-radius: 4px;
+          cursor: pointer;
+          transition: 0.2s;
+        }
+        .view-toggle button.active {
+          background: var(--blu);
+          color: #fff;
         }
       `}} />
     </aside>

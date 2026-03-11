@@ -1,0 +1,227 @@
+import React, { useState } from 'react';
+import { X, Download, FileJson, Image, Settings, Layers } from 'lucide-react';
+import { generateBoardSVG, generateCombinedSVG } from '../engine/render-utils.js';
+
+export function ExportOverlay({ isOpen, onClose, components, wires, bestSnapshot }) {
+    const [format, setFormat] = useState('svg'); // 'svg' | 'png'
+    const [side, setSide] = useState('top'); // 'top' | 'bottom' | 'both'
+    const [showBoundingBox, setShowBoundingBox] = useState(true);
+
+    if (!isOpen) return null;
+
+    const handleExport = async () => {
+        const source = bestSnapshot || { components, wires };
+
+        if (format === 'svg' && side === 'both') {
+            const svg = generateCombinedSVG(source.components, source.wires, { padding: 24, showBoundingBox });
+            downloadFile(svg, `pcb_combined_${Date.now()}.svg`, 'image/svg+xml');
+            return;
+        }
+
+        if (format === 'png' && side === 'both') {
+            const svg = generateCombinedSVG(source.components, source.wires, { padding: 24, showBoundingBox });
+            const pngBlob = await svgToPng(svg);
+            if (pngBlob) downloadFile(pngBlob, `pcb_combined_${Date.now()}.png`, 'image/png');
+            return;
+        }
+
+        const exportOne = async (exportSide) => {
+            const svg = generateBoardSVG(source.components, source.wires, {
+                padding: 24,
+                showBoundingBox,
+                side: exportSide
+            });
+
+            if (!svg) return;
+
+            if (format === 'svg') {
+                downloadFile(svg, `pcb_${exportSide}_${Date.now()}.svg`, 'image/svg+xml');
+            } else {
+                const pngBlob = await svgToPng(svg);
+                if (pngBlob) {
+                    downloadFile(pngBlob, `pcb_${exportSide}_${Date.now()}.png`, 'image/png');
+                }
+            }
+        };
+
+        if (side === 'both') {
+            await exportOne('top');
+            await exportOne('bottom');
+        } else {
+            await exportOne(side);
+        }
+
+        // onClose(); // Keep open to allow multiple exports if needed
+    };
+
+    const downloadFile = (content, fileName, type) => {
+        const blob = content instanceof Blob ? content : new Blob([content], { type });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const svgToPng = (svgString) => {
+        return new Promise((resolve) => {
+            // Ensure SVG has explicit dimensions and is properly encoded
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(svgString, 'image/svg+xml');
+            const svgEl = doc.querySelector('svg');
+            const width = parseFloat(svgEl.getAttribute('width'));
+            const height = parseFloat(svgEl.getAttribute('height'));
+
+            const img = new Image();
+            // Use b64 for better compatibility in some browsers with canvas
+            const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(svgBlob);
+
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = width * 2; // High DPI
+                canvas.height = height * 2;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#050706'; // Ensure background is filled
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.scale(2, 2);
+                ctx.drawImage(img, 0, 0);
+
+                canvas.toBlob((blob) => {
+                    URL.revokeObjectURL(url);
+                    resolve(blob);
+                }, 'image/png');
+            };
+
+            img.onerror = () => {
+                URL.revokeObjectURL(url);
+                resolve(null);
+            };
+
+            img.src = url;
+        });
+    };
+
+    return (
+        <div className="overlay-bg" onClick={onClose}>
+            <div className="modal export-modal" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                    <div className="header-title-group">
+                        <Download size={20} className="header-icon" />
+                        <h3>Export Board</h3>
+                    </div>
+                    <button className="close-btn" onClick={onClose}><X size={20} /></button>
+                </div>
+
+                <div className="export-options">
+                    <div className="option-group">
+                        <label><Settings size={14} /> Format</label>
+                        <div className="toggle-group">
+                            <button className={format === 'svg' ? 'active' : ''} onClick={() => setFormat('svg')}>SVG</button>
+                            <button className={format === 'png' ? 'active' : ''} onClick={() => setFormat('png')}>PNG</button>
+                        </div>
+                    </div>
+
+                    <div className="option-group">
+                        <label><Layers size={14} /> Side</label>
+                        <div className="toggle-group">
+                            <button className={side === 'top' ? 'active' : ''} onClick={() => setSide('top')}>Top</button>
+                            <button className={side === 'bottom' ? 'active' : ''} onClick={() => setSide('bottom')}>Bottom</button>
+                            <button className={side === 'both' ? 'active' : ''} onClick={() => setSide('both')}>Both</button>
+                        </div>
+                    </div>
+
+                    <div className="option-group checkbox">
+                        <label className="checkbox-label">
+                            <input type="checkbox" checked={showBoundingBox} onChange={e => setShowBoundingBox(e.target.checked)} />
+                            Include Bounding Box
+                        </label>
+                    </div>
+                </div>
+
+                <button className="btn blu export-action-btn" onClick={handleExport}>
+                    <Download size={16} /> Download
+                </button>
+
+                <style dangerouslySetInnerHTML={{
+                    __html: `
+          .export-modal {
+            max-width: 380px;
+            background: rgba(13, 17, 23, 0.9);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border2);
+            padding: 24px;
+          }
+          .header-title-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+          }
+          .header-icon {
+            color: var(--blu-bright);
+          }
+          .export-options {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin: 10px 0;
+          }
+          .option-group label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 8px;
+            color: var(--txt1);
+            font-weight: 600;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+          }
+          .toggle-group {
+            display: flex;
+            background: var(--bg3);
+            padding: 3px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+          }
+          .toggle-group button {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            background: transparent;
+            color: var(--txt1);
+            font-size: 0.75rem;
+            font-weight: 700;
+            border-radius: 7px;
+            cursor: pointer;
+            transition: all 0.2s;
+          }
+          .toggle-group button.active {
+            background: var(--blu);
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(31, 111, 235, 0.3);
+          }
+          .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            color: var(--txt0);
+          }
+          .checkbox-label input {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+          }
+          .export-action-btn {
+            margin-top: 10px;
+            height: 44px;
+            border-radius: 12px;
+          }
+        `}} />
+            </div>
+        </div>
+    );
+}

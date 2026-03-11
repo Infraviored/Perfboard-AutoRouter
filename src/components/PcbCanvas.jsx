@@ -40,7 +40,8 @@ export function PcbCanvas({
     onManualRoute,
     onPreviewRoute,
     previewPath,
-    onSelectNet
+    onSelectNet,
+    customComponentsSvg // Optional prop if we want to override
 }) {
     const svgRef = useRef(null);
     const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
@@ -106,8 +107,8 @@ export function PcbCanvas({
 
     const handlePointerDown = (e) => {
         const pos = getMousePos(e);
-        const worldX = (pos.x - camera.x) / camera.z;
         const worldY = (pos.y - camera.y) / camera.z;
+        let worldX = (pos.x - camera.x) / camera.z;
         const col = Math.floor(worldX / SP);
         const row = Math.floor(worldY / SP);
 
@@ -165,8 +166,8 @@ export function PcbCanvas({
 
     const handlePointerMove = (e) => {
         const pos = getMousePos(e);
-        const worldX = (pos.x - camera.x) / camera.z;
         const worldY = (pos.y - camera.y) / camera.z;
+        let worldX = (pos.x - camera.x) / camera.z;
         const col = Math.floor(worldX / SP);
         const row = Math.floor(worldY / SP);
 
@@ -481,7 +482,9 @@ export function PcbCanvas({
     const background = useMemo(() => generateBackgroundSVG(cols, rows, bounds), [cols, rows, bounds]);
     const wiresSvg = useMemo(() => generateWiresSVG(wires, activeNets), [wires, activeNets, tick]);
     const ratsnestSvg = useMemo(() => generateRatsnestSVG(components, wires), [components, wires, tick]);
-    const componentsSvg = useMemo(() => components.map(c => renderCompSVG(c, c.id === selectedId, routingMode?.startPin)).join(''), [components, selectedId, routingMode, tick]);
+    const renderedComponentsSvg = useMemo(() => customComponentsSvg || components.map(c => renderCompSVG(c, c.id === selectedId, {
+        activePin: routingMode?.startPin
+    })).join(''), [components, selectedId, routingMode, tick, customComponentsSvg]);
     const boundingBoxSvg = useMemo(() => generateBoundingBoxSVG(components, wires), [components, wires, tick]);
 
     // Removal of failing simZoom useEffect
@@ -490,56 +493,62 @@ export function PcbCanvas({
         <div className={`canvas-container ${isProcessing ? 'pb-active' : ''}`} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} onMouseDown={handleMouseDown} onWheel={handleWheel} onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', cursor: routingMode ? 'crosshair' : (isPanning || draggingId ? 'grabbing' : 'crosshair'), background: '#050706', '--pb-height': '240px' }}>
             <svg ref={svgRef} width="100%" height="100%" style={{ display: 'block' }}>
                 <g transform={`translate(${camera.x}, ${camera.y}) scale(${camera.z})`}>
-                    <g dangerouslySetInnerHTML={{ __html: background }} />
-                    <g dangerouslySetInnerHTML={{ __html: wiresSvg }} />
-                    <g dangerouslySetInnerHTML={{ __html: ratsnestSvg }} />
-                    <g dangerouslySetInnerHTML={{ __html: componentsSvg }} />
-                    <g dangerouslySetInnerHTML={{ __html: boundingBoxSvg }} />
+                    <g id="main-content">
+                        <g dangerouslySetInnerHTML={{ __html: background }} />
+                        <g dangerouslySetInnerHTML={{ __html: wiresSvg }} />
+                        <g dangerouslySetInnerHTML={{ __html: ratsnestSvg }} />
+                        <g dangerouslySetInnerHTML={{ __html: renderedComponentsSvg }} />
+                        <g dangerouslySetInnerHTML={{ __html: boundingBoxSvg }} />
 
-                    {routingMode && previewPath && (() => {
-                        const segments = [];
-                        let current = [];
-                        let currentCrossing = false;
+                        {routingMode && (
+                            <g className="routing-preview-layer">
+                                {(() => {
+                                    const segments = [];
+                                    let current = [];
+                                    let currentCrossing = false;
 
-                        // Start point
-                        if (previewPath.length > 0) {
-                            current.push(previewPath[0]);
-                            currentCrossing = false; // Initial segment is from pin, usually clean
-                        }
+                                    // Start point
+                                    if (previewPath.length > 0) {
+                                        current.push(previewPath[0]);
+                                        currentCrossing = false; // Initial segment is from pin, usually clean
+                                    }
 
-                        for (let i = 1; i < previewPath.length; i++) {
-                            const pt = previewPath[i];
-                            const prev = previewPath[i - 1];
-                            const isCross = pt.isCrossing;
+                                    for (let i = 1; i < previewPath.length; i++) {
+                                        const pt = previewPath[i];
+                                        const prev = previewPath[i - 1];
+                                        const isCross = pt.isCrossing;
 
-                            if (isCross !== currentCrossing) {
-                                // Close current, start new
-                                segments.push({ path: current, isCrossing: currentCrossing });
-                                current = [prev, pt];
-                                currentCrossing = isCross;
-                            } else {
-                                current.push(pt);
-                            }
-                        }
-                        segments.push({ path: current, isCrossing: currentCrossing });
+                                        if (isCross !== currentCrossing) {
+                                            // Close current, start new
+                                            segments.push({ path: current, isCrossing: currentCrossing });
+                                            current = [prev, pt];
+                                            currentCrossing = isCross;
+                                        } else {
+                                            current.push(pt);
+                                        }
+                                    }
+                                    segments.push({ path: current, isCrossing: currentCrossing });
 
-                        return segments.map((seg, i) => (
-                            <polyline
-                                key={i}
-                                points={seg.path.map(pt => `${pt.col * SP + SP / 2},${pt.row * SP + SP / 2}`).join(' ')}
-                                fill="none"
-                                stroke={seg.isCrossing ? '#ff2222' : netColor(routingMode.startPin.pin.net)}
-                                strokeWidth="5"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeDasharray={seg.isCrossing ? "5 5" : ""}
-                                style={{
-                                    pointerEvents: 'none',
-                                    filter: `drop-shadow(0 0 8px ${seg.isCrossing ? '#ff2222' : netColor(routingMode.startPin.pin.net)})`
-                                }}
-                            />
-                        ));
-                    })()}
+                                    return segments.map((seg, i) => (
+                                        <polyline
+                                            key={i}
+                                            points={seg.path.map(pt => `${pt.col * SP + SP / 2},${pt.row * SP + SP / 2}`).join(' ')}
+                                            fill="none"
+                                            stroke={seg.isCrossing ? '#ff2222' : netColor(routingMode.startPin.pin.net)}
+                                            strokeWidth="5"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeDasharray={seg.isCrossing ? "5 5" : ""}
+                                            style={{
+                                                pointerEvents: 'none',
+                                                filter: `drop-shadow(0 0 8px ${seg.isCrossing ? '#ff2222' : netColor(routingMode.startPin.pin.net)})`
+                                            }}
+                                        />
+                                    ));
+                                })()}
+                            </g>
+                        )}
+                    </g>
                 </g>
             </svg>
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { netColor } from '../engine/render-utils.js';
+import { netColor, generatePrunedSVG } from '../engine/render-utils.js';
 import {
   BarChart3,
   Settings2,
@@ -8,7 +8,8 @@ import {
   Tag,
   Hash,
   MapPin,
-  Maximize
+  Maximize,
+  Layers
 } from 'lucide-react';
 
 export function SidebarRight({
@@ -19,10 +20,49 @@ export function SidebarRight({
   setHoveredNet,
   selectedNet,
   setSelectedNet,
-  activeNets = []
+  activeNets = [],
+  onToggleBottomView,
+  isBottomViewOpen,
+  components = [],
+  wires = [],
+  bestSnapshot = null
 }) {
+  const preview = React.useMemo(() => {
+    if (!isBottomViewOpen) return null;
+    const comps = bestSnapshot?.components || components;
+    const wrs = bestSnapshot?.wires || wires;
+    return generatePrunedSVG({
+      components: comps,
+      wires: wrs,
+      side: 'bottom',
+      padding: 5
+    });
+  }, [isBottomViewOpen, components, wires, bestSnapshot]);
+
   return (
     <aside id="rsb">
+      <div className="ph"><Maximize size={14} style={{ marginRight: '8px' }} />View Options</div>
+      <div className="view-options-row">
+        <button
+          className={`view-btn ${isBottomViewOpen ? 'active' : ''}`}
+          onClick={onToggleBottomView}
+        >
+          <Layers size={14} />
+          <span>{isBottomViewOpen ? 'Hide Bottom View' : 'Show Bottom View'}</span>
+        </button>
+      </div>
+
+      {isBottomViewOpen && preview && (
+        <div className="bottom-preview-container">
+          <div className="bottom-preview-label">Bottom Side (Mirrored)</div>
+          <div className="bottom-preview-svg">
+            <svg viewBox={`0 0 ${preview.W} ${preview.H}`} style={{ width: '100%', height: 'auto', display: 'block', borderRadius: '8px' }}>
+              <g dangerouslySetInnerHTML={{ __html: preview.inner }} />
+            </svg>
+          </div>
+        </div>
+      )}
+
       <div className="ph"><BarChart3 size={14} style={{ marginRight: '8px' }} />Stats</div>
       <div className="sgrid">
         <div className="scard">
@@ -138,6 +178,63 @@ export function SidebarRight({
           grid-template-columns: 1fr 1fr;
           gap: 10px;
           padding: 12px;
+        }
+        .view-options-row {
+          padding: 8px 12px 16px 12px;
+        }
+        .view-btn {
+          width: 100%;
+          padding: 12px;
+          border-radius: 10px;
+          background: var(--bg3);
+          border: 1px solid var(--border);
+          color: var(--txt1);
+          font-size: 0.8rem;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .view-btn:hover {
+          background: var(--bg4);
+          border-color: var(--blu-bright);
+          color: var(--txt0);
+          transform: translateY(-1px);
+          box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+        }
+        .view-btn.active {
+          background: rgba(31, 111, 235, 0.1);
+          border-color: var(--blu-bright);
+          color: var(--blu-bright);
+          box-shadow: inset 0 0 0 1px var(--blu-bright), 0 0 15px rgba(31, 111, 235, 0.2);
+        }
+        .view-btn span {
+          letter-spacing: 0.02em;
+        }
+        .bottom-preview-container {
+          padding: 0 12px 16px 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .bottom-preview-label {
+          font-size: 0.65rem;
+          text-transform: uppercase;
+          color: var(--txt1);
+          letter-spacing: 0.1em;
+          font-weight: 800;
+          opacity: 0.7;
+        }
+        .bottom-preview-svg {
+          background: rgba(0,0,0,0.2);
+          border-radius: 12px;
+          padding: 8px;
+          border: 1px solid var(--border);
+          box-shadow: inset 0 2px 8px rgba(0,0,0,0.2);
         }
         .scard {
           background: var(--bg3);
