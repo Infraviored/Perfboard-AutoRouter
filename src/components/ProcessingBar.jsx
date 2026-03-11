@@ -131,7 +131,7 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
               <div className="pb-track">
                 <div className="pb-fill" style={{ width: `${status.progress}%` }} />
               </div>
-              <button className="pb-btn-glass" onClick={onGoodEnough}>
+              <button className="pb-btn-glass" onClick={onGoodEnough} disabled={status.isProcessing && !bestSnapshot}>
                 Apply Current Best
               </button>
             </>

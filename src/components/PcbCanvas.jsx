@@ -19,7 +19,7 @@ import {
     Crosshair
 } from 'lucide-react';
 const TRACKING_MODES = { NONE: 'none', SNAP: 'snap', LIVE: 'live' };
-const { NONE, SNAP, LIVE } = TRACKING_MODES;
+const { SNAP } = TRACKING_MODES;
 
 export function PcbCanvas({
     components,
@@ -480,7 +480,7 @@ export function PcbCanvas({
 
     const background = useMemo(() => generateBackgroundSVG(cols, rows, bounds), [cols, rows, bounds]);
     const wiresSvg = useMemo(() => generateWiresSVG(wires, activeNets), [wires, activeNets, tick]);
-    const ratsnestSvg = useMemo(() => generateRatsnestSVG(components, wires, selectedId), [components, wires, selectedId, tick]);
+    const ratsnestSvg = useMemo(() => generateRatsnestSVG(components, wires), [components, wires, tick]);
     const componentsSvg = useMemo(() => components.map(c => renderCompSVG(c, c.id === selectedId, routingMode?.startPin)).join(''), [components, selectedId, routingMode, tick]);
     const boundingBoxSvg = useMemo(() => generateBoundingBoxSVG(components, wires), [components, wires, tick]);
 

@@ -111,11 +111,11 @@ export function Topbar({
 
         <div className="spc" style={{ flex: 1 }}></div>
 
-        <button className="tbtn svg-export-btn" onClick={onExportSVG} title="Download SVG">
+        <button className="tbtn svg-export-btn" onClick={onExportSVG} title="Download SVG" aria-label="Export SVG">
           <ExternalLink size={16} />
         </button>
 
-        <button className="tbtn reset-btn" onClick={onReset} title="Reset Project">
+        <button className="tbtn reset-btn" onClick={onReset} title="Reset Project" aria-label="Reset Project">
           <RotateCcw size={16} />
         </button>
       </div>

@@ -347,6 +347,21 @@ export class AutorouterEngine {
                 const count = netPinCounts.get(w.net) || 0;
                 return count >= 2;
             });
+
+            // Cleanup: For nets that still exist, remove any wires that terminate at 
+            // the exact coordinates where the deleted component's pins were.
+            if (comp && Array.isArray(comp.pins)) {
+                const removedCoords = new Set(comp.pins.map(p => `${p.col},${p.row}`));
+                this.wires = this.wires.map(w => {
+                    if (!affectedNets.has(w.net) || !w.path) return w;
+                    const startsAtRemoved = removedCoords.has(`${w.path[0].col},${w.path[0].row}`);
+                    const endsAtRemoved = removedCoords.has(`${w.path[w.path.length - 1].col},${w.path[w.path.length - 1].row}`);
+                    if (startsAtRemoved || endsAtRemoved) {
+                        return { ...w, failed: true, path: [w.path[0], w.path[w.path.length - 1]] };
+                    }
+                    return w;
+                });
+            }
         }
         this.tick++;
         this.notify();

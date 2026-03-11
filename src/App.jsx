@@ -119,7 +119,7 @@ function App() {
     }
   }, [board.components, board.tick]);
 
-  const [status, setStatus] = useState({ title: '', progress: 0, best: '', isProcessing: false, isInitial: false });
+  const [status, setStatus] = useState({ title: '', progress: 0, best: null, isProcessing: false, isInitial: false });
   const [selectedId, setSelectedId] = useState(null);
   const [selectedNet, setSelectedNet] = useState(null);
   const [hoveredNet, setHoveredNet] = useState(null);
@@ -253,7 +253,7 @@ function App() {
       setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: null }));
     } catch (e) {
       console.error('Failed to route:', e);
-      setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: '' }));
+      setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: null }));
     }
     saveHistory();
   }, [engine, jsonInput, saveHistory]);
@@ -269,7 +269,7 @@ function App() {
         setBestSnapshot(null);
       }, 4000);
     } else {
-      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
+      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: null }));
       setBestSnapshot(null);
     }
     saveHistory();
@@ -286,7 +286,7 @@ function App() {
         setBestSnapshot(null);
       }, 4000);
     } else {
-      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: '' }));
+      setStatus(prev => ({ ...prev, isProcessing: false, title: '', best: null }));
       setBestSnapshot(null);
     }
     saveHistory();
@@ -329,7 +329,7 @@ function App() {
     setStatus(prev => ({ ...prev, isProcessing: true }));
     try {
       await engine.routeOnly();
-      setStatus(prev => ({ ...prev, title: '', best: '' }));
+      setStatus(prev => ({ ...prev, title: '', best: null }));
     } finally {
       setStatus(prev => ({ ...prev, isProcessing: false }));
     }
@@ -682,7 +682,7 @@ function App() {
             status={status}
             bestSnapshot={bestSnapshot}
             onGoodEnough={() => {
-              engine.cancel(true);
+              engine.cancel();
               if (bestSnapshot) {
                 setBoard({ components: bestSnapshot.components, wires: bestSnapshot.wires });
                 setStatus({ progress: 0, title: '', isProcessing: false }); // clear processing
