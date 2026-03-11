@@ -107,7 +107,8 @@ export class AutorouterEngine {
                 this.wires = state.wires;
                 this.tick++;
                 this.notify();
-            }
+            },
+            onBestSnapshot: (snapshot) => { this.onBestSnapshot?.(snapshot); }
         };
 
         const res = await optimizeBoard(
@@ -202,6 +203,13 @@ export class AutorouterEngine {
                 bestCompletion = c;
                 bestWires = candidateWires;
                 bestComps = saveComps(currentComponents);
+
+                // Push best so far to preview bar
+                const hydratedComps = currentComponents.map(comp => ({
+                    ...comp,
+                    pins: comp.pins.map(p => ({ ...p, col: comp.ox + p.dCol, row: comp.oy + p.dRow }))
+                }));
+                this.onBestSnapshot?.({ components: hydratedComps, wires: candidateWires });
             }
 
             if (c === 1.0) break; // Found 100% solution

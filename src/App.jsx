@@ -182,7 +182,6 @@ function App() {
   }, [engine, jsonInput, saveHistory]);
 
   const handleRoute = useCallback(async () => {
-    setBestSnapshot(null);
     setWorkflowStep(2);
     setStatus(prev => ({ ...prev, isProcessing: true, isInitial: true, results: null }));
     try {
@@ -194,12 +193,11 @@ function App() {
         setSnapCounter(c => c + 1);
         setTimeout(() => {
           setStatus(prev => ({ ...prev, results: null }));
-          setBestSnapshot(null);
-        }, 4000);
+        }, 6000);
       } else {
-        setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: '' }));
+        setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: null }));
       }
-      setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: '' }));
+      setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: null }));
     } catch (e) {
       console.error('Failed to route:', e);
       setStatus(prev => ({ ...prev, isProcessing: false, isInitial: false, title: '', best: '' }));
@@ -208,7 +206,6 @@ function App() {
   }, [engine, jsonInput, saveHistory]);
 
   const handleCompact = useCallback(async () => {
-    setBestSnapshot(null);
     setWorkflowStep(3);
     setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
     const res = await engine.optimize();
@@ -226,7 +223,6 @@ function App() {
   }, [engine, saveHistory]);
 
   const handleOptimizeBoard = useCallback(async () => {
-    setBestSnapshot(null);
     setWorkflowStep(4);
     setStatus(prev => ({ ...prev, isProcessing: true, results: null }));
     const res = await engine.plateau();

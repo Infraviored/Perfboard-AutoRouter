@@ -6,7 +6,7 @@ import { moveComp, rotateComp90InPlace, anneal, anyOverlap } from './placer.js';
 export async function compactBoard(components, wires, cols, rows, config, options = {}) {
     const { onProgress, onStatusUpdate, onStateChange, onBestSnapshot } = options;
     const setProg = onProgress;
-    const setBestLine = (msg) => onStatusUpdate?.({ best: msg });
+    const setBestLine = (score) => onStatusUpdate?.({ best: score });
 
     const startTime = performance.now();
     const MAX_EPOCHS = config.maxEpochs || 1;
@@ -56,8 +56,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
 
     if (!components.length) return;
 
-
-    setBestLine('');
+    setBestLine(null);
 
     const startSnapshot = saveComps(components);
     const startWires = await route(components, uiCols, uiRows, () => { }, checkCancel, wires);
@@ -82,8 +81,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
     let globalBestComps = saveComps(components);
     let globalBestWires = [...currentWires];
 
-    let bestUiMsg = `Best: ${formatScore(globalBestScore)}`;
-    setBestLine(bestUiMsg);
+    setBestLine(globalBestScore);
     pushHydratedBest(components, globalBestWires);
 
     // Track Progress of Current Search Branch
@@ -288,7 +286,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
                 localBestScore = testScore;
                 localBestComps = saveComps(components);
                 stagnation = 0;
-                setBestLine(`Best: ${formatScore(testScore)}`);
+                setBestLine(testScore);
                 if (isScoreBetter(testScore, startScore)) {
                     currentWires = globalBestWires;
 
@@ -324,7 +322,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
         currentWires = startWires;
     }
 
-    setBestLine('');
+    setBestLine(null);
     flashUIState();
 
     return { improved, score: improved ? finalScore : startScore, wires: currentWires, startScore: startScore };
@@ -332,9 +330,18 @@ export async function compactBoard(components, wires, cols, rows, config, option
 
 
 export async function optimizeBoard(components, wires, cols, rows, options = {}) {
-    const { onProgress, onStatusUpdate, onStateChange } = options;
+    const { onProgress, onStatusUpdate, onStateChange, onBestSnapshot } = options;
     const setProg = (p, m) => onProgress?.(p, m);
     const setBestLine = (m) => onStatusUpdate?.({ best: m });
+
+    const pushHydratedBest = (liveComps, ws) => {
+        const hydratedComps = liveComps.map(c => ({
+            ...c,
+            pins: c.pins.map(p => ({ ...p, col: c.ox + p.dCol, row: c.oy + p.dRow }))
+        }));
+        const wsClone = ws ? JSON.parse(JSON.stringify(ws)) : [];
+        onBestSnapshot?.({ components: hydratedComps, wires: wsClone });
+    };
 
     let currentWires = wires;
     let gCancelRequested = false;
@@ -350,8 +357,8 @@ export async function optimizeBoard(components, wires, cols, rows, options = {})
     currentWires = startWires;
 
     onStateChange?.({ components, wires: bestWires });
-
-    setBestLine(`Best: ${formatScore(bestScore)}`);
+    setBestLine(bestScore);
+    pushHydratedBest(components, bestWires);
 
     const visited = new Set();
     visited.add(stateKeyForPlateau(components));
@@ -370,8 +377,9 @@ export async function optimizeBoard(components, wires, cols, rows, options = {})
             bestScore = shrinkRes.score;
             bestWires = shrinkRes.wires;
             currentWires = bestWires;
-            setBestLine(`Best: ${formatScore(bestScore)}`);
+            setBestLine(bestScore);
             onStateChange?.({ components, wires: bestWires });
+            pushHydratedBest(components, bestWires);
             await new Promise(r => setTimeout(r, 0));
             continue;
         }
@@ -432,8 +440,9 @@ export async function optimizeBoard(components, wires, cols, rows, options = {})
         lastPickedCompId = pick.compId;
         bestWires = currentWires;
         bestScore = pick.score;
-        setBestLine(`Best: ${formatScore(bestScore)}`);
+        setBestLine(bestScore);
         onStateChange?.({ components, wires: bestWires });
+        pushHydratedBest(components, bestWires);
         await new Promise(r => setTimeout(r, 0));
     }
 
@@ -444,6 +453,6 @@ export async function optimizeBoard(components, wires, cols, rows, options = {})
         currentWires = startWires;
     }
 
-    setBestLine('');
+    setBestLine(null);
     return { improved, score: improved ? finalScore : startScore, wires: currentWires, startScore: startScore };
 }
