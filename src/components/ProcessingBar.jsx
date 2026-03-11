@@ -78,22 +78,14 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
   const renderMetrics = (s) => {
     if (!s || typeof s !== 'object') return null;
     return (
-      <div className="res-grid active-metrics">
+      <div className="active-metrics">
         <div className="res-item">
-          <div className="res-label">Route</div>
-          <div className="res-val small">{Math.round((s.comp || 0) * 100)}%</div>
+          <div className="res-label">Board Area</div>
+          <div className="res-val small">{s.width}×{s.height} ({s.area})</div>
         </div>
-        <div className="res-item">
-          <div className="res-label">Board</div>
-          <div className="res-val small">{s.width}×{s.height}</div>
-        </div>
-        <div className="res-item">
-          <div className="res-label">Area</div>
-          <div className="res-val small">{s.area}</div>
-        </div>
-        <div className="res-item">
-          <div className="res-label">WL</div>
-          <div className="res-val small">{s.wl}</div>
+        <div className="res-item wide">
+          <div className="res-label">Wire Length</div>
+          <div className="res-val small">{s.wl} holes</div>
         </div>
       </div>
     );
@@ -134,15 +126,13 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
             </>
           ) : (
             <>
-              <div className="pb-title" style={{ marginBottom: '-8px' }}>{status.title || 'Processing...'}</div>
-              <div className="active-metrics-wrapper">
-                {renderMetrics(status.best)}
-                <div className="pb-track-bg">
-                  <div className="pb-fill" style={{ width: `${status.progress}%` }} />
-                </div>
+              <div className="pb-title">{status.title || 'Processing...'}</div>
+              {renderMetrics(status.best)}
+              <div className="pb-track">
+                <div className="pb-fill" style={{ width: `${status.progress}%` }} />
               </div>
-              <button className="btn grn pb-btn" onClick={onGoodEnough} style={{ marginTop: '8px' }}>
-                ✓ Good Enough <span className="pb-esc">Esc</span>
+              <button className="pb-btn-glass" onClick={onGoodEnough}>
+                Apply Current Best
               </button>
             </>
           )}
@@ -202,39 +192,25 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
           flex: 1;
           min-width: 0;
         }
-        .active-metrics-wrapper {
-          position: relative;
-          background: rgba(0,0,0,0.35);
-          border-radius: 12px;
-          border: 1px solid var(--border);
-          overflow: hidden;
-          margin: 4px 0;
-        }
-        .pb-track-bg {
-          position: absolute;
-          inset: 0;
-          z-index: 0;
-          pointer-events: none;
-        }
         .active-metrics {
-          position: relative;
-          z-index: 1;
-          background: transparent;
-          padding: 12px 24px;
-          min-height: 84px;
           display: flex;
-          align-items: center;
-          margin: 0;
-          border: none;
+          gap: 32px;
+          padding: 8px 0;
+        }
+        .pb-track {
+          height: 12px;
+          background: rgba(0,0,0,0.3);
+          border-radius: 100px;
+          overflow: hidden;
+          border: 1px solid var(--border);
+          position: relative;
+          margin-top: 4px;
         }
         .pb-fill {
           height: 100%;
-          background: linear-gradient(90deg, 
-            color-mix(in srgb, var(--grn), transparent 40%), 
-            color-mix(in srgb, var(--grn-bright), transparent 40%)
-          );
+          background: linear-gradient(90deg, var(--grn), var(--grn-bright));
           transition: width 0.15s cubic-bezier(0.1, 0, 0, 1);
-          box-shadow: inset 0 0 40px rgba(0,0,0,0.4);
+          box-shadow: 0 0 15px var(--grn);
         }
         .pb-title {
           font-family: 'Outfit', sans-serif;
@@ -243,7 +219,6 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
           font-weight: 800;
           white-space: nowrap;
           letter-spacing: -0.02em;
-          width: 280px;
           flex-shrink: 0;
         }
         .res-grid { 
@@ -254,14 +229,16 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
         .res-item { 
           display: flex; 
           flex-direction: column; 
-          gap: 4px;
-          width: 110px;
+          gap: 2px;
           flex-shrink: 0;
+        }
+        .res-item.wide {
+          width: 180px;
         }
         .res-label { 
           font-size: 0.65rem; 
           text-transform: uppercase; 
-          color: var(--txt2); 
+          color: var(--txt1); 
           letter-spacing: 0.12em; 
           font-weight: 800; 
           white-space: nowrap;
@@ -275,8 +252,9 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
           font-variant-numeric: tabular-nums;
         }
         .res-val.small { 
-          font-size: 1.5rem; 
-          font-family: 'Consolas', monospace;
+          font-size: 1.4rem; 
+          color: #fff;
+          font-family: 'Outfit', sans-serif; 
         }
         .res-sub { 
           font-size: 0.7rem; 
@@ -285,17 +263,35 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
           opacity: 0.7; 
           white-space: nowrap;
         }
-        .pb-btn {
+        .pb-btn-glass {
+          width: fit-content;
+          min-width: 140px;
           height: 38px;
-          width: 160px; /* Fixed width to prevent jumping */
-          font-size: 0.85rem;
+          padding: 0 24px;
+          background: rgba(35, 134, 54, 0.15);
+          border: 1px solid var(--grn-bright);
+          color: var(--grn-bright);
           border-radius: 10px;
+          font-family: 'Outfit', sans-serif;
           font-weight: 700;
-          flex-shrink: 0;
+          font-size: 0.9rem;
+          cursor: pointer;
+          backdrop-filter: blur(8px);
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          margin-top: 8px;
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+          box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .pb-btn-glass:hover {
+          background: rgba(35, 134, 54, 0.3);
+          color: #fff;
+          transform: translateY(-1px);
+          box-shadow: 0 6px 20px rgba(63, 185, 80, 0.2);
+        }
+        .pb-btn-glass:active {
+          transform: translateY(0);
         }
         .pb-esc {
           font-size: 0.7rem;
