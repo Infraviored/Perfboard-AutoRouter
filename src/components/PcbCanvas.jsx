@@ -508,12 +508,12 @@ export function PcbCanvas({
                                     let currentCrossing = false;
 
                                     // Start point
-                                    if (previewPath.length > 0) {
+                                    if (previewPath && previewPath.length > 0) {
                                         current.push(previewPath[0]);
                                         currentCrossing = false; // Initial segment is from pin, usually clean
                                     }
 
-                                    for (let i = 1; i < previewPath.length; i++) {
+                                    for (let i = 1; previewPath && i < previewPath.length; i++) {
                                         const pt = previewPath[i];
                                         const prev = previewPath[i - 1];
                                         const isCross = pt.isCrossing;

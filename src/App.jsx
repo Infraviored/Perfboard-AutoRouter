@@ -13,7 +13,6 @@ import { ExportOverlay } from './components/ExportOverlay.jsx';
 import { TEMPLATE, processTemplate } from './engine/templates.js';
 import { getAllNets } from './engine/router.js';
 import { scoreState } from './engine/optimizer-algorithms.js';
-import { generateBoardSVG } from './engine/render-utils.js';
 
 function App() {
   // --- ENGINE ---

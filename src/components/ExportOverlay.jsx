@@ -14,14 +14,14 @@ export function ExportOverlay({ isOpen, onClose, components, wires, bestSnapshot
 
         if (format === 'svg' && side === 'both') {
             const svg = generateCombinedSVG(source.components, source.wires, { padding: 24, showBoundingBox });
-            downloadFile(svg, `pcb_combined_${Date.now()}.svg`, 'image/svg+xml');
+            downloadFile(svg, `pcb_combined.svg`, 'image/svg+xml');
             return;
         }
 
         if (format === 'png' && side === 'both') {
             const svg = generateCombinedSVG(source.components, source.wires, { padding: 24, showBoundingBox });
             const pngBlob = await svgToPng(svg);
-            if (pngBlob) downloadFile(pngBlob, `pcb_combined_${Date.now()}.png`, 'image/png');
+            if (pngBlob) downloadFile(pngBlob, `pcb_combined.png`, 'image/png');
             return;
         }
 
@@ -35,11 +35,11 @@ export function ExportOverlay({ isOpen, onClose, components, wires, bestSnapshot
             if (!svg) return;
 
             if (format === 'svg') {
-                downloadFile(svg, `pcb_${exportSide}_${Date.now()}.svg`, 'image/svg+xml');
+                downloadFile(svg, `pcb_${exportSide}.svg`, 'image/svg+xml');
             } else {
                 const pngBlob = await svgToPng(svg);
                 if (pngBlob) {
-                    downloadFile(pngBlob, `pcb_${exportSide}_${Date.now()}.png`, 'image/png');
+                    downloadFile(pngBlob, `pcb_${exportSide}.png`, 'image/png');
                 }
             }
         };
@@ -55,11 +55,17 @@ export function ExportOverlay({ isOpen, onClose, components, wires, bestSnapshot
     };
 
     const downloadFile = (content, fileName, type) => {
+        const timestamp = Date.now();
+        const parts = fileName.split('.');
+        const ext = parts.pop();
+        const base = parts.join('.');
+        const stampedName = `${base}_${timestamp}.${ext}`;
+
         const blob = content instanceof Blob ? content : new Blob([content], { type });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = fileName;
+        a.download = stampedName;
         a.click();
         URL.revokeObjectURL(url);
     };

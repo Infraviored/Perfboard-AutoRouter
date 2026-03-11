@@ -18,9 +18,7 @@ export function SidebarLeft({
   onOpenLibrary,
   onAddNewComponent,
   onEditComponent,
-  onOpenPrompt,
-  viewSide,
-  setViewSide
+  onOpenPrompt
 }) {
 
   return (
