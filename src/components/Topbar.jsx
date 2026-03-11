@@ -325,8 +325,8 @@ export function Topbar({
         }
         
         .flow-btn.completed {
-          background: rgba(255,255,255,0.06);
-          color: var(--txt0); /* Was txt1, now much brighter */
+          background: var(--bg3);
+          color: var(--txt0);
           z-index: 1;
         }
 
@@ -352,6 +352,19 @@ export function Topbar({
           opacity: 1 !important; /* Force visibility even if disabled */
         }
 
+        /* Pulsing indicator for the target step */
+        @keyframes flow-pulse {
+          0% { opacity: 0.6; transform: scaleX(1); }
+          50% { opacity: 1; transform: scaleX(1.05); }
+          100% { opacity: 0.6; transform: scaleX(1); }
+        }
+
+        /* Scanning effect for processing background */
+        @keyframes flow-scan-bg {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+
         .flow-btn.completed svg { color: var(--flow-color); opacity: 0.8; }
         .flow-btn.next svg, .flow-btn.processing svg {
           color: var(--flow-color);
@@ -369,8 +382,8 @@ export function Topbar({
           pointer-events: none;
         }
         .flow-btn.completed::before { opacity: 0.3; }
-        .flow-btn.next::before { opacity: 0.9; box-shadow: 0 0 10px var(--flow-color); }
-        .flow-btn.processing::before { opacity: 1; box-shadow: 0 0 15px var(--flow-color); }
+        .flow-btn.next::before { opacity: 0.9; box-shadow: 0 0 10px var(--flow-color); animation: flow-pulse 2s infinite ease-in-out; }
+        .flow-btn.processing::before { opacity: 1; box-shadow: 0 0 15px var(--flow-color); animation: flow-pulse 0.8s infinite ease-in-out; }
 
         .flow-btn:disabled:not(.processing):not(.completed) {
           opacity: 0.15;
@@ -380,7 +393,7 @@ export function Topbar({
         
         .flow-btn.completed:disabled {
           cursor: not-allowed;
-          opacity: 0.8; /* Keep it visible even when disabled */
+          opacity: 1; /* Keep it fully visible even when disabled */
         }
 
         .svg-export-btn {
