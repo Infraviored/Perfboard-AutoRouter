@@ -4,6 +4,7 @@ import { saveComps, restoreComps } from './state-utils.js';
 import { moveComp, rotateComp90InPlace, anneal, anyOverlap } from './placer.js';
 
 const pointKey = (pt) => `${pt.col},${pt.row}`;
+const nowMs = () => globalThis.performance?.now?.() || Date.now();
 
 function buildPinMapByNet(components) {
     const map = new Map();
@@ -17,12 +18,12 @@ function buildPinMapByNet(components) {
     return map;
 }
 
-function getRenderableWires(components, wires) {
+function getRenderableWires(components, wires, pinsByNet = null) {
     if (!wires?.length) return [];
-    const pinsByNet = buildPinMapByNet(components);
+    const pinMap = pinsByNet || buildPinMapByNet(components);
     return wires.filter((wire) => {
         if (!wire?.path?.length || wire.failed) return false;
-        const netPins = pinsByNet.get(wire.net);
+        const netPins = pinMap.get(wire.net);
         if (!netPins?.size) return false;
         const start = wire.path[0];
         const end = wire.path[wire.path.length - 1];
@@ -39,10 +40,7 @@ function cloneWires(wires) {
 }
 
 function routeCacheKey(components, cols, rows, existingWires) {
-    const compSig = components.map((c) => {
-        const pinSig = (c.pins || []).map((p) => `${p.dCol},${p.dRow},${p.net || ''}`).join(';');
-        return `${c.id}|${c.ox},${c.oy},${c.w},${c.h}|${pinSig}`;
-    }).join('||');
+    const compSig = componentsSignature(components);
 
     const manualSig = (existingWires || [])
         .filter((w) => w?.manual && w?.path?.length)
@@ -53,6 +51,13 @@ function routeCacheKey(components, cols, rows, existingWires) {
     return `${cols}x${rows}::${compSig}::${manualSig}`;
 }
 
+function componentsSignature(components) {
+    return components.map((c) => {
+        const pinSig = (c.pins || []).map((p) => `${p.dCol},${p.dRow},${p.net || ''}`).join(';');
+        return `${c.id}|${c.ox},${c.oy},${c.w},${c.h}|${pinSig}`;
+    }).join('||');
+}
+
 function createRouteCache(maxEntries = 400) {
     const cache = new Map();
 
@@ -60,31 +65,44 @@ function createRouteCache(maxEntries = 400) {
         const key = routeCacheKey(components, cols, rows, existingWires);
         const cached = cache.get(key);
         if (cached) {
+            cache.delete(key);
+            cache.set(key, cached);
             return cloneWires(cached);
         }
 
         const routed = await route(components, cols, rows, onProg, checkCancel, existingWires);
-        cache.set(key, cloneWires(routed));
+        const routedClone = cloneWires(routed);
+        cache.set(key, routedClone);
 
         if (cache.size > maxEntries) {
             const oldest = cache.keys().next().value;
             cache.delete(oldest);
         }
 
-        return routed;
+        return cloneWires(routedClone);
     };
 }
 
 function createLiveRenderer(onStateChange, intervalMs = 120) {
     let lastRenderAt = 0;
+    let lastCompSig = '';
+    let cachedPinsByNet = new Map();
+
     return ({ components, wires, cols, rows, force = false }) => {
         if (!onStateChange) return;
-        const now = performance.now();
+        const now = nowMs();
         if (!force && now - lastRenderAt < intervalMs) return;
         lastRenderAt = now;
+
+        const compSig = componentsSignature(components);
+        if (compSig !== lastCompSig) {
+            cachedPinsByNet = buildPinMapByNet(components);
+            lastCompSig = compSig;
+        }
+
         onStateChange({
             components: components.map(c => ({ ...c, pins: c.pins })),
-            wires: getRenderableWires(components, wires),
+            wires: getRenderableWires(components, wires, cachedPinsByNet),
             cols,
             rows
         });
@@ -96,7 +114,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
     const setProg = onProgress;
     const setBestLine = (score) => onStatusUpdate?.({ best: score });
 
-    const startTime = performance.now();
+    const startTime = nowMs();
     const MAX_EPOCHS = config.maxEpochs || 1;
     let MAX_ITERS = config.maxIters || 100;
 
@@ -112,7 +130,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
     let gCancelRequested = false;
     const checkCancel = () => {
         if (options.checkCancel && options.checkCancel()) return true;
-        if ((performance.now() - startTime) > maxTimeMs) return true;
+        if ((nowMs() - startTime) > maxTimeMs) return true;
         return gCancelRequested;
     };
 
@@ -173,7 +191,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
     let macroCount = 0;
 
     for (let currentEpoch = 1; currentEpoch <= MAX_EPOCHS; currentEpoch++) {
-        if (checkCancel() || (performance.now() - startTime) > maxTimeMs) break;
+        if (checkCancel() || (nowMs() - startTime) > maxTimeMs) break;
 
         if (currentEpoch > 1) {
             console.log(`[Epoch ${currentEpoch}] Triggering full random scramble...`);
@@ -204,7 +222,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
 
         // --- 2. SEARCH LOOP ---
         for (let iter = 1; iter <= MAX_ITERS; iter++) {
-            if (checkCancel() || (performance.now() - startTime) > maxTimeMs) break;
+            if (checkCancel() || (nowMs() - startTime) > maxTimeMs) break;
             setIterStatus(currentEpoch, iter);
 
             if (iter % 10 === 0 || stagnation >= platThresh) {
