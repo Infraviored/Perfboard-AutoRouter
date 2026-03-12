@@ -18,18 +18,36 @@ function buildPinMapByNet(components) {
     return map;
 }
 
+function buildManualPointMapByNet(wires) {
+    const map = new Map();
+    for (const wire of wires || []) {
+        if (!wire?.manual || !wire?.net || !wire?.path?.length) continue;
+        if (!map.has(wire.net)) map.set(wire.net, new Set());
+        const points = map.get(wire.net);
+        for (const pt of wire.path) points.add(pointKey(pt));
+    }
+    return map;
+}
+
 function getRenderableWires(components, wires, pinsByNet = null) {
     if (!wires?.length) return [];
     const pinMap = pinsByNet || buildPinMapByNet(components);
+    const manualPointMap = buildManualPointMapByNet(wires);
+
     return wires.filter((wire) => {
         if (!wire?.path?.length || wire.failed) return false;
         const netPins = pinMap.get(wire.net);
-        if (!netPins?.size) return false;
-        const start = wire.path[0];
-        const end = wire.path[wire.path.length - 1];
-        return netPins.has(pointKey(start)) && netPins.has(pointKey(end));
+        const manualPoints = manualPointMap.get(wire.net);
+        if (!netPins?.size && !manualPoints?.size) return false;
+
+        const startKey = pointKey(wire.path[0]);
+        const endKey = pointKey(wire.path[wire.path.length - 1]);
+        const hasStartAnchor = netPins?.has(startKey) || manualPoints?.has(startKey);
+        const hasEndAnchor = netPins?.has(endKey) || manualPoints?.has(endKey);
+        return hasStartAnchor && hasEndAnchor;
     });
 }
+
 
 
 function cloneWires(wires) {
@@ -44,19 +62,39 @@ function routeCacheKey(components, cols, rows, existingWires) {
 
     const manualSig = (existingWires || [])
         .filter((w) => w?.manual && w?.path?.length)
-        .map((w) => `${w.net || ''}:${w.path.map((pt) => pointKey(pt)).join('>')}`)
-        .sort()
-        .join('||');
+        .map((w) => ({
+            net: w.net || '',
+            path: w.path.map((pt) => [pt.col, pt.row])
+        }))
+        .sort((a, b) => {
+            const aKey = `${a.net}:${JSON.stringify(a.path)}`;
+            const bKey = `${b.net}:${JSON.stringify(b.path)}`;
+            return aKey.localeCompare(bKey);
+        });
 
-    return `${cols}x${rows}::${compSig}::${manualSig}`;
+    if (components?.length > 0) {
+        return JSON.stringify({ compSig, manualSig });
+    }
+
+    return JSON.stringify({ cols, rows, compSig, manualSig });
 }
 
 function componentsSignature(components) {
-    return components.map((c) => {
-        const pinSig = (c.pins || []).map((p) => `${p.dCol},${p.dRow},${p.net || ''}`).join(';');
-        return `${c.id}|${c.ox},${c.oy},${c.w},${c.h}|${pinSig}`;
-    }).join('||');
+    return components.map((c) => ({
+        id: c.id,
+        ox: c.ox,
+        oy: c.oy,
+        w: c.w,
+        h: c.h,
+        routeUnder: !!c.routeUnder,
+        pins: (c.pins || []).map((p) => ({
+            dCol: p.dCol,
+            dRow: p.dRow,
+            net: p.net || ''
+        }))
+    }));
 }
+
 
 function createRouteCache(maxEntries = 400) {
     const cache = new Map();
@@ -71,15 +109,14 @@ function createRouteCache(maxEntries = 400) {
         }
 
         const routed = await route(components, cols, rows, onProg, checkCancel, existingWires);
-        const routedClone = cloneWires(routed);
-        cache.set(key, routedClone);
+        cache.set(key, routed);
 
         if (cache.size > maxEntries) {
             const oldest = cache.keys().next().value;
             cache.delete(oldest);
         }
 
-        return cloneWires(routedClone);
+        return cloneWires(routed);
     };
 }
 
