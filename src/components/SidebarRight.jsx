@@ -1,17 +1,12 @@
 import React from 'react';
 import { netColor, generatePrunedSVG } from '../engine/render-utils.js';
 import {
-  BarChart3,
   Settings2,
-  Network,
-  Fingerprint,
   Tag,
   Hash,
   MapPin,
   FlipHorizontal,
   ChevronDown,
-  Info,
-  Layers,
   Activity,
   MousePointer2,
   Share2
@@ -31,8 +26,14 @@ export function SidebarRight({
   bestSnapshot = null
 }) {
   const [expanded, setExpanded] = React.useState(() => {
+    const defaultExpanded = { bottom: true, stats: true, selected: true, nets: true };
     const saved = localStorage.getItem('sidebar_rsb_expanded');
-    return saved ? JSON.parse(saved) : { bottom: true, stats: true, selected: true, nets: true };
+    if (!saved) return defaultExpanded;
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return defaultExpanded;
+    }
   });
 
   React.useEffect(() => {

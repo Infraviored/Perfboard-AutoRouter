@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Download, FileJson, Image, Settings, Layers } from 'lucide-react';
+import { X, Download, Settings, Layers } from 'lucide-react';
 import { generateBoardSVG, generateCombinedSVG } from '../engine/render-utils.js';
 
 export function ExportOverlay({ isOpen, onClose, components, wires, bestSnapshot }) {
@@ -72,12 +72,24 @@ export function ExportOverlay({ isOpen, onClose, components, wires, bestSnapshot
 
     const svgToPng = (svgString) => {
         return new Promise((resolve) => {
+            if (!svgString || !svgString.trim()) {
+                resolve(null);
+                return;
+            }
             // Ensure SVG has explicit dimensions and is properly encoded
             const parser = new DOMParser();
             const doc = parser.parseFromString(svgString, 'image/svg+xml');
             const svgEl = doc.querySelector('svg');
+            if (!svgEl) {
+                resolve(null);
+                return;
+            }
             const width = parseFloat(svgEl.getAttribute('width'));
             const height = parseFloat(svgEl.getAttribute('height'));
+            if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+                resolve(null);
+                return;
+            }
 
             const img = new Image();
             // Use b64 for better compatibility in some browsers with canvas

@@ -108,7 +108,7 @@ export function PcbCanvas({
     const handlePointerDown = (e) => {
         const pos = getMousePos(e);
         const worldY = (pos.y - camera.y) / camera.z;
-        let worldX = (pos.x - camera.x) / camera.z;
+        const worldX = (pos.x - camera.x) / camera.z;
         const col = Math.floor(worldX / SP);
         const row = Math.floor(worldY / SP);
 
@@ -167,7 +167,7 @@ export function PcbCanvas({
     const handlePointerMove = (e) => {
         const pos = getMousePos(e);
         const worldY = (pos.y - camera.y) / camera.z;
-        let worldX = (pos.x - camera.x) / camera.z;
+        const worldX = (pos.x - camera.x) / camera.z;
         const col = Math.floor(worldX / SP);
         const row = Math.floor(worldY / SP);
 
@@ -482,9 +482,7 @@ export function PcbCanvas({
     const background = useMemo(() => generateBackgroundSVG(cols, rows, bounds), [cols, rows, bounds]);
     const wiresSvg = useMemo(() => generateWiresSVG(wires, activeNets), [wires, activeNets, tick]);
     const ratsnestSvg = useMemo(() => generateRatsnestSVG(components, wires), [components, wires, tick]);
-    const renderedComponentsSvg = useMemo(() => customComponentsSvg || components.map(c => renderCompSVG(c, c.id === selectedId, {
-        activePin: routingMode?.startPin
-    })).join(''), [components, selectedId, routingMode, tick, customComponentsSvg]);
+    const renderedComponentsSvg = useMemo(() => customComponentsSvg || components.map(c => renderCompSVG(c, c.id === selectedId, routingMode?.startPin)).join(''), [components, selectedId, routingMode, tick, customComponentsSvg]);
     const boundingBoxSvg = useMemo(() => generateBoundingBoxSVG(components, wires), [components, wires, tick]);
 
     // Removal of failing simZoom useEffect

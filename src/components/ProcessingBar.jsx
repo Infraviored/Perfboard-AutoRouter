@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect } from 'react';
-import { SP, generatePrunedSVG } from '../engine/render-utils.js';
+import { generatePrunedSVG } from '../engine/render-utils.js';
 
 export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
   const active = !!status.isProcessing || !!status.results;

@@ -348,13 +348,18 @@ function App() {
       reader.onload = (e) => {
         try {
           const parsed = JSON.parse(e.target.result);
-          if (parsed.components) { engine.setState({ components: parsed.components, wires: parsed.wires || [], cols: parsed.cols || 30, rows: parsed.rows || 20 }); saveHistory(); }
+          if (parsed.components) {
+            const cols = parsed.cols || board.cols;
+            const rows = parsed.rows || board.rows;
+            engine.setState({ components: parsed.components, wires: parsed.wires || [], cols, rows });
+            saveHistory();
+          }
         } catch (err) { console.error(err); }
       };
       reader.readAsText(file);
     };
     input.click();
-  }, [engine, saveHistory]);
+  }, [engine, saveHistory, board.cols, board.rows]);
 
   useEffect(() => {
     engine.setCallbacks({
