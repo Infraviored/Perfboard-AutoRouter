@@ -235,7 +235,10 @@ export function renderCompSVG(c, isSelected = false, activePin = null) {
   const animDelay = -(hash * 5).toFixed(2) + 's';
   const animDur = (2.5 + hash * 2).toFixed(2) + 's';
 
-  let out = `<g class="pcb-comp ${isSelected ? 'component-selected' : ''}" data-id="${c.id}" style="--comp-color: ${mainColor}; --anim-delay: ${animDelay}; --anim-dur: ${animDur}">`;
+  const isGhost = activePin?.ghost || isSelected === 'ghost';
+  const ghostOp = 0.4;
+
+  let out = `<g class="pcb-comp ${isSelected === true ? 'component-selected' : ''}" data-id="${c.id}" style="--comp-color: ${mainColor}; --anim-delay: ${animDelay}; --anim-dur: ${animDur}; opacity: ${isGhost ? ghostOp : 1}">`;
 
   // 1. Draw Component Base (balanced shine-through, solid rim)
   const sw = isSelected ? 3.1 : 1.9; // Balanced selecion thickness
@@ -250,13 +253,16 @@ export function renderCompSVG(c, isSelected = false, activePin = null) {
   // subtle tint overlay (entire area)
   out += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="${mainColor}" opacity="${tintOp}" style="pointer-events:none"/>`;
 
+  let labelsOut = '';
   // 2. Draw Pins
   c.pins.forEach((p, idx) => {
     const px = p.col * SP + SP / 2, py = p.row * SP + SP / 2;
     const isActive = activePin && activePin.compId === c.id && activePin.pinIdx === idx;
     // Centered pin design: Label inside the colored pad
     out += `<circle cx="${px}" cy="${py}" r="${SP * .22}" fill="${netColor(p.net)}" class="${isActive ? 'active-pin' : ''}" style="${isActive ? `--active-color: ${netColor(p.net)}` : ''}"/>`;
-    out += `<text x="${px}" y="${py}" dy=".35em" fill="#fff" font-family="'Outfit', sans-serif" font-weight="900" font-size="${Math.min(SP * .22, 6)}" text-anchor="middle" paint-order="stroke" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${p.lbl}</text>`;
+
+    const textAttrs = `x="${px}" y="${py}" dy=".35em" fill="#fff" font-family="'Outfit', sans-serif" font-weight="900" font-size="${Math.min(SP * .22, 6)}" text-anchor="middle" paint-order="stroke" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none"`;
+    labelsOut += `<text ${textAttrs}>${p.lbl}</text>`;
   });
 
   // 3. Draw Component Labels (Centered, two-line layout)
@@ -267,12 +273,121 @@ export function renderCompSVG(c, isSelected = false, activePin = null) {
   const fontSize = Math.min(SP * .3, 10);
 
   // Name line
-  out += `<text x="${midX}" y="${midY}" fill="#fff" font-family="'Outfit', sans-serif" font-size="${fontSize}" font-weight="800" text-anchor="middle" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${c.id}</text>`;
+  const nameAttrs = `x="${midX}" y="${midY}" fill="#fff" font-family="'Outfit', sans-serif" font-size="${fontSize}" font-weight="800" text-anchor="middle" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none"`;
+  labelsOut += `<text ${nameAttrs}>${c.id}</text>`;
+
   // Value line (slightly smaller and dimmer)
-  out += `<text x="${midX}" y="${midY + fontSize * 0.8}" fill="rgba(255,255,255,0.6)" font-family="'Outfit', sans-serif" font-size="${fontSize * 0.8}" font-weight="700" text-anchor="middle" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none">${c.value}</text>`;
+  const valY = midY + fontSize * 0.8;
+  const valAttrs = `x="${midX}" y="${valY}" fill="rgba(255,255,255,0.6)" font-family="'Outfit', sans-serif" font-size="${fontSize * 0.8}" font-weight="700" text-anchor="middle" paint-order="stroke" stroke="#0b0c0e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none"`;
+  labelsOut += `<text ${valAttrs}>${c.value}</text>`;
 
   out += `</g>`;
-  return out;
+
+  // Return either as a combined string (default old behavior) or an object if requested
+  if (isSelected === 'split') {
+    return { base: `<g>${out}</g>`, labels: `<g>${labelsOut}</g>` };
+  }
+
+  return `<g>${out}${labelsOut}</g>`;
+}
+
+export function generatePrunedSVG({ components, wires, side = 'top', padding = 3 }) {
+  if (!components?.length) return null;
+
+  let minC = Infinity, maxC = -Infinity, minR = Infinity, maxR = -Infinity;
+  components.forEach(c => {
+    if (!isFinite(c.ox) || !isFinite(c.oy)) return;
+    minC = Math.min(minC, c.ox);
+    maxC = Math.max(maxC, c.ox + c.w);
+    minR = Math.min(minR, c.oy);
+    maxR = Math.max(maxR, c.oy + c.h);
+  });
+  if (!isFinite(minC)) return null;
+
+  wires.forEach(w => {
+    if (w.failed) return;
+    w.path?.forEach(pt => {
+      minC = Math.min(minC, pt.col);
+      maxC = Math.max(maxC, pt.col + 1);
+      minR = Math.min(minR, pt.row);
+      maxR = Math.max(maxR, pt.row + 1);
+    });
+  });
+
+  const mCenter = minC + maxC; // The symmetric center bounds for mirroring
+
+  // Physically mirror the data structures for the layout flip
+  const isBottom = side === 'bottom';
+  const displayComps = isBottom ? components.map(c => ({
+    ...c,
+    ox: mCenter - c.ox - c.w,
+    pins: c.pins.map(p => ({ ...p, col: mCenter - p.col - 1 }))
+  })) : components;
+
+  const displayWires = isBottom ? wires.map(w => ({
+    ...w,
+    path: w.path?.map(pt => ({ ...pt, col: mCenter - pt.col - 1 }))
+  })) : wires;
+
+  const pad = padding / SP;
+  minC -= pad; minR -= pad;
+  maxC += pad; maxR += pad;
+
+  const W = Math.round((maxC - minC) * SP);
+  const H = Math.round((maxR - minR) * SP);
+  if (W <= 0 || H <= 0) return null;
+
+  let inner = '';
+  // Background
+  inner += `<rect width="${W}" height="${H}" fill="#1a1208" rx="7"/>`;
+
+  // Grid / Pads
+  for (let c = Math.ceil(minC); c < Math.floor(maxC); c++) {
+    for (let r = Math.ceil(minR); r < Math.floor(maxR); r++) {
+      const cx = Math.round((c - minC) * SP + SP / 2);
+      const cy = Math.round((r - minR) * SP + SP / 2);
+      inner += `<circle cx="${cx}" cy="${cy}" r="${Math.round(SP * .22)}" fill="#b87333"/><circle cx="${cx}" cy="${cy}" r="${Math.round(SP * .09)}" fill="#0d0a06"/>`;
+    }
+  }
+
+  // Wires (Bottom: components first, then wires? User said "wires on highest layer overshadow everything")
+  const wiresContent = displayWires.map(w => {
+    if (!w.path?.length || w.failed) return '';
+    const pts = w.path.map(pt => `${Math.round((pt.col - minC) * SP + SP / 2)},${Math.round((pt.row - minR) * SP + SP / 2)}`).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${netColor(w.net)}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }).join('');
+
+  const compsBases = [];
+  const compsLabels = [];
+
+  displayComps.forEach(c => {
+    const sc = {
+      ...c,
+      ox: c.ox - minC,
+      oy: c.oy - minR,
+      pins: c.pins.map(p => ({ ...p, col: p.col - minC, row: p.row - minR }))
+    };
+    const rendered = renderCompSVG(sc, 'split');
+    compsBases.push(rendered.base);
+    compsLabels.push(rendered.labels);
+  });
+
+  let content = '';
+  if (isBottom) {
+    // Components Base -> Wires -> Component Labels (always on top)
+    content = compsBases.join('') + wiresContent + compsLabels.join('');
+  } else {
+    // Wires -> Components (Base + Labels)
+    content = wiresContent + compsBases.join('') + compsLabels.join('');
+  }
+
+  inner += `<g>${content}</g>`;
+
+  // Border
+  const strokeWidth = 2;
+  inner += `<rect x="${strokeWidth / 2}" y="${strokeWidth / 2}" width="${W - strokeWidth}" height="${H - strokeWidth}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="${strokeWidth}" stroke-dasharray="8 6" rx="7"/>`;
+
+  return { W, H, inner };
 }
 
 export function generateBoundingBoxSVG(components, wires = []) {
@@ -330,6 +445,20 @@ export function generateBoardSVG(components, wires = [], options = {}) {
 
   if (!isFinite(minC)) return '';
 
+  const mCenter = minC + maxC; // True bounds before padding
+  const isBottom = options.side === 'bottom';
+
+  const displayComps = isBottom ? components.map(c => ({
+    ...c,
+    ox: mCenter - c.ox - c.w,
+    pins: c.pins.map(p => ({ ...p, col: mCenter - p.col - 1 }))
+  })) : components;
+
+  const displayWires = isBottom ? wires.map(w => ({
+    ...w,
+    path: w.path?.map(pt => ({ ...pt, col: mCenter - pt.col - 1 }))
+  })) : wires;
+
   const padPx = options.padding ?? 12;
   const pad = padPx / SP;
   minC -= pad; minR -= pad;
@@ -349,23 +478,45 @@ export function generateBoardSVG(components, wires = [], options = {}) {
   inner += `</pattern></defs>`;
   inner += `<rect width="100%" height="100%" fill="url(#holePattern)"/>`;
 
-  // Wires
-  wires.forEach(w => {
-    if (!w.path?.length || w.failed) return;
-    const pts = w.path.map(pt => `${Math.round((pt.col - minC) * SP + SP / 2)},${Math.round((pt.row - minR) * SP + SP / 2)}`).join(' ');
-    inner += `<polyline points="${pts}" fill="none" stroke="${netColor(w.net)}" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>`;
-  });
+  // Layer order for Bottom View: Components first, then Wires, then Labels Top-most
+  if (isBottom) {
+    let compsBases = '';
+    let compsLabels = '';
 
-  // Components
-  components.forEach(c => {
-    const sc = {
-      ...c,
-      ox: c.ox - minC,
-      oy: c.oy - minR,
-      pins: c.pins.map(p => ({ ...p, col: p.col - minC, row: p.row - minR }))
-    };
-    inner += renderCompSVG(sc, false);
-  });
+    // Components first (split into base and labels)
+    displayComps.forEach(c => {
+      const sc = { ...c, ox: c.ox - minC, oy: c.oy - minR, pins: c.pins.map(p => ({ ...p, col: p.col - minC, row: p.row - minR })) };
+      const rendered = renderCompSVG(sc, 'split');
+      compsBases += rendered.base;
+      compsLabels += rendered.labels;
+    });
+
+    inner += compsBases;
+
+    // Wires on top of component bases
+    displayWires.forEach(w => {
+      if (!w.path?.length || w.failed) return;
+      const pts = w.path.map(pt => `${Math.round((pt.col - minC) * SP + SP / 2)},${Math.round((pt.row - minR) * SP + SP / 2)}`).join(' ');
+      inner += `<polyline points="${pts}" fill="none" stroke="${netColor(w.net)}" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>`;
+    });
+
+    // Labels on top of EVERYTHING
+    inner += compsLabels;
+
+  } else {
+    // Wires
+    displayWires.forEach(w => {
+      if (!w.path?.length || w.failed) return;
+      const pts = w.path.map(pt => `${Math.round((pt.col - minC) * SP + SP / 2)},${Math.round((pt.row - minR) * SP + SP / 2)}`).join(' ');
+      inner += `<polyline points="${pts}" fill="none" stroke="${netColor(w.net)}" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>`;
+    });
+
+    // Components (Normal)
+    displayComps.forEach(c => {
+      const sc = { ...c, ox: c.ox - minC, oy: c.oy - minR, pins: c.pins.map(p => ({ ...p, col: p.col - minC, row: p.row - minR })) };
+      inner += renderCompSVG(sc, false);
+    });
+  }
 
   // Optional bounding box
   if (options.showBoundingBox) {
@@ -378,6 +529,45 @@ export function generateBoardSVG(components, wires = [], options = {}) {
 
   inner += `</svg>`;
   return inner;
+}
+
+export function generateCombinedSVG(components, wires = [], options = {}) {
+  const topSvg = generateBoardSVG(components, wires, { ...options, side: 'top' });
+  const bottomSvg = generateBoardSVG(components, wires, { ...options, side: 'bottom' });
+
+  // Extract inner content from both SVGs
+  const getInner = (s) => s.replace(/<svg[^>]*>/, '').replace(/<\/svg>/, '');
+
+  // Get dimensions from one of them
+  const match = topSvg.match(/width="(\d+)" height="(\d+)"/);
+  if (!match) return '';
+  const [_, W_str, H_str] = match;
+  const W = parseInt(W_str);
+  const H = parseInt(H_str);
+
+  const gap = 40;
+  const totalW = W * 2 + gap;
+  const totalH = H + 60; // Extra room for labels
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${totalH}" viewBox="0 0 ${totalW} ${totalH}">
+    <defs>
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;800&amp;display=swap');
+        text { font-family: 'Outfit', sans-serif; }
+      </style>
+    </defs>
+    <rect width="100%" height="100%" fill="#050706"/>
+    
+    <g transform="translate(0, 40)">
+      <text x="${W / 2}" y="-15" fill="#fff" font-family="Outfit, sans-serif" font-weight="800" font-size="20" text-anchor="middle">TOP VIEW</text>
+      ${getInner(topSvg)}
+    </g>
+
+    <g transform="translate(${W + gap}, 40)">
+      <text x="${W / 2}" y="-15" fill="#fff" font-family="Outfit, sans-serif" font-weight="800" font-size="20" text-anchor="middle">BOTTOM VIEW</text>
+      ${getInner(bottomSvg)}
+    </g>
+  </svg>`;
 }
 
 export function hitComp(col, row, components) {

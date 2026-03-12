@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect } from 'react';
-import { SP, netColor, renderCompSVG } from '../engine/render-utils.js';
+import { generatePrunedSVG } from '../engine/render-utils.js';
 
 export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
   const active = !!status.isProcessing || !!status.results;
@@ -13,66 +13,13 @@ export function ProcessingBar({ status, bestSnapshot, onGoodEnough }) {
   }, [onGoodEnough, active, results]);
 
   const preview = useMemo(() => {
-    const comps = bestSnapshot?.components;
-    const wires = bestSnapshot?.wires ?? [];
-    if (!comps?.length) return null;
-
-    let minC = Infinity, maxC = -Infinity, minR = Infinity, maxR = -Infinity;
-    comps.forEach(c => {
-      if (!isFinite(c.ox) || !isFinite(c.oy)) return;
-      minC = Math.min(minC, c.ox);
-      maxC = Math.max(maxC, c.ox + c.w);
-      minR = Math.min(minR, c.oy);
-      maxR = Math.max(maxR, c.oy + c.h);
+    if (!bestSnapshot?.components?.length) return null;
+    return generatePrunedSVG({
+      components: bestSnapshot.components,
+      wires: bestSnapshot.wires,
+      side: 'top',
+      padding: 3
     });
-    if (!isFinite(minC)) return null;
-
-    wires.forEach(w => w.path?.forEach(pt => {
-      minC = Math.min(minC, pt.col);
-      maxC = Math.max(maxC, pt.col + 1);
-      minR = Math.min(minR, pt.row);
-      maxR = Math.max(maxR, pt.row + 1);
-    }));
-
-    const strokeWidth = 2;
-    const padPx = 3;
-    const pad = padPx / SP;
-    minC -= pad; minR -= pad;
-    maxC += pad; maxR += pad;
-
-    if (![minC, maxC, minR, maxR].every(isFinite)) return null;
-
-    const W = Math.round((maxC - minC) * SP);
-    const H = Math.round((maxR - minR) * SP);
-    if (W <= 0 || H <= 0) return null;
-
-    let inner = '';
-    inner += `<rect width="${W}" height="${H}" fill="#1a1208" rx="7"/>`;
-
-    for (let c = Math.ceil(minC); c < Math.floor(maxC); c++) {
-      for (let r = Math.ceil(minR); r < Math.floor(maxR); r++) {
-        const cx = Math.round((c - minC) * SP + SP / 2);
-        const cy = Math.round((r - minR) * SP + SP / 2);
-        inner += `<circle cx="${cx}" cy="${cy}" r="${Math.round(SP * .22)}" fill="#b87333"/><circle cx="${cx}" cy="${cy}" r="${Math.round(SP * .09)}" fill="#0d0a06"/>`;
-      }
-    }
-    wires.forEach(w => {
-      if (!w.path?.length || w.failed) return;
-      const pts = w.path.map(pt => `${Math.round((pt.col - minC) * SP + SP / 2)},${Math.round((pt.row - minR) * SP + SP / 2)}`).join(' ');
-      inner += `<polyline points="${pts}" fill="none" stroke="${netColor(w.net)}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
-    });
-    comps.forEach(c => {
-      const sc = {
-        ...c,
-        ox: c.ox - minC,
-        oy: c.oy - minR,
-        pins: c.pins.map(p => ({ ...p, col: p.col - minC, row: p.row - minR }))
-      };
-      inner += renderCompSVG(sc, false);
-    });
-    inner += `<rect x="${strokeWidth / 2}" y="${strokeWidth / 2}" width="${W - strokeWidth}" height="${H - strokeWidth}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="${strokeWidth}" stroke-dasharray="8 6" rx="7"/>`;
-
-    return { W, H, inner };
   }, [bestSnapshot]);
 
   const renderMetrics = (s) => {
