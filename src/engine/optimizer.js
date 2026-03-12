@@ -3,6 +3,94 @@ import { scoreState, footprintBoxMetrics, calculateComponentBounds, doRecursiveP
 import { saveComps, restoreComps } from './state-utils.js';
 import { moveComp, rotateComp90InPlace, anneal, anyOverlap } from './placer.js';
 
+const pointKey = (pt) => `${pt.col},${pt.row}`;
+
+function buildPinMapByNet(components) {
+    const map = new Map();
+    for (const comp of components) {
+        for (const pin of comp.pins || []) {
+            if (!pin.net) continue;
+            if (!map.has(pin.net)) map.set(pin.net, new Set());
+            map.get(pin.net).add(`${comp.ox + pin.dCol},${comp.oy + pin.dRow}`);
+        }
+    }
+    return map;
+}
+
+function getRenderableWires(components, wires) {
+    if (!wires?.length) return [];
+    const pinsByNet = buildPinMapByNet(components);
+    return wires.filter((wire) => {
+        if (!wire?.path?.length || wire.failed) return false;
+        const netPins = pinsByNet.get(wire.net);
+        if (!netPins?.size) return false;
+        const start = wire.path[0];
+        const end = wire.path[wire.path.length - 1];
+        return netPins.has(pointKey(start)) && netPins.has(pointKey(end));
+    });
+}
+
+
+function cloneWires(wires) {
+    return (wires || []).map((wire) => ({
+        ...wire,
+        path: wire.path ? wire.path.map((pt) => ({ ...pt })) : wire.path
+    }));
+}
+
+function routeCacheKey(components, cols, rows, existingWires) {
+    const compSig = components.map((c) => {
+        const pinSig = (c.pins || []).map((p) => `${p.dCol},${p.dRow},${p.net || ''}`).join(';');
+        return `${c.id}|${c.ox},${c.oy},${c.w},${c.h}|${pinSig}`;
+    }).join('||');
+
+    const manualSig = (existingWires || [])
+        .filter((w) => w?.manual && w?.path?.length)
+        .map((w) => `${w.net || ''}:${w.path.map((pt) => pointKey(pt)).join('>')}`)
+        .sort()
+        .join('||');
+
+    return `${cols}x${rows}::${compSig}::${manualSig}`;
+}
+
+function createRouteCache(maxEntries = 400) {
+    const cache = new Map();
+
+    return async (components, cols, rows, onProg = () => { }, checkCancel, existingWires) => {
+        const key = routeCacheKey(components, cols, rows, existingWires);
+        const cached = cache.get(key);
+        if (cached) {
+            return cloneWires(cached);
+        }
+
+        const routed = await route(components, cols, rows, onProg, checkCancel, existingWires);
+        cache.set(key, cloneWires(routed));
+
+        if (cache.size > maxEntries) {
+            const oldest = cache.keys().next().value;
+            cache.delete(oldest);
+        }
+
+        return routed;
+    };
+}
+
+function createLiveRenderer(onStateChange, intervalMs = 120) {
+    let lastRenderAt = 0;
+    return ({ components, wires, cols, rows, force = false }) => {
+        if (!onStateChange) return;
+        const now = performance.now();
+        if (!force && now - lastRenderAt < intervalMs) return;
+        lastRenderAt = now;
+        onStateChange({
+            components: components.map(c => ({ ...c, pins: c.pins })),
+            wires: getRenderableWires(components, wires),
+            cols,
+            rows
+        });
+    };
+}
+
 export async function compactBoard(components, wires, cols, rows, config, options = {}) {
     const { onProgress, onStatusUpdate, onStateChange, onBestSnapshot } = options;
     const setProg = onProgress;
@@ -33,15 +121,8 @@ export async function compactBoard(components, wires, cols, rows, config, option
     let uiRows = rows;
 
     // Flash the main canvas with whatever intermediate state we're exploring
-    const flashUIState = () => {
-        // Spread each component so React sees new references and re-renders positions
-        onStateChange?.({
-            components: components.map(c => ({ ...c, pins: c.pins })),
-            wires: currentWires,
-            cols: uiCols,
-            rows: uiRows
-        });
-    };
+    const flashUIState = createLiveRenderer(onStateChange, options.liveRenderIntervalMs ?? 120);
+    const routeCached = createRouteCache(options.routeCacheSize ?? 400);
     // Push a new "best" snapshot to the bottom bar preview, using full component arrays
     const pushHydratedBest = (liveComps, ws) => {
         const hydratedComps = liveComps.map(c => ({
@@ -59,7 +140,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
     setBestLine(null);
 
     const startSnapshot = saveComps(components);
-    const startWires = await route(components, uiCols, uiRows, () => { }, checkCancel, wires);
+    const startWires = await routeCached(components, uiCols, uiRows, () => { }, checkCancel, wires);
     const startScore = scoreState(components, startWires);
     currentWires = startWires;
 
@@ -74,7 +155,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
     const vRows = 1e6;
 
     setProg?.(0, `Preparing virtual workspace...`);
-    currentWires = await route(components, vCols, vRows, () => { }, checkCancel, currentWires);
+    currentWires = await routeCached(components, vCols, vRows, () => { }, checkCancel, currentWires);
 
     // Track Absolute Best
     let globalBestScore = scoreState(components, currentWires);
@@ -113,7 +194,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
 
                 moveComp(c, nx, ny);
             }
-            currentWires = await route(components, vCols, vRows, () => { }, checkCancel, currentWires);
+            currentWires = await routeCached(components, vCols, vRows, () => { }, checkCancel, currentWires);
             recenterComponents(components, currentWires);
             localBestScore = scoreState(components, currentWires);
             localBestComps = saveComps(components);
@@ -149,7 +230,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
                     }, checkCancel);
 
                     // Re-route after SA since positions changed
-                    currentWires = await route(components, vCols, vRows, () => { }, checkCancel, currentWires);
+                    currentWires = await routeCached(components, vCols, vRows, () => { }, checkCancel, currentWires);
                     recenterComponents(components, currentWires);
 
                     if (stagnation >= deepThresh) stagnation = 0;
@@ -191,7 +272,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
                     }
                 }
                 // Re-route after micro-mutations so wires aren't "detached"
-                currentWires = await route(components, vCols, vRows, () => { }, checkCancel, currentWires);
+                currentWires = await routeCached(components, vCols, vRows, () => { }, checkCancel, currentWires);
                 recenterComponents(components, currentWires);
             }
 
@@ -276,7 +357,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
             if (checkCancel()) break;
             const preEval = saveComps(components);
 
-            const testWires = await route(components, vCols, vRows, () => { }, checkCancel, currentWires);
+            const testWires = await routeCached(components, vCols, vRows, () => { }, checkCancel, currentWires);
             recenterComponents(components, testWires);
             const testScore = scoreState(components, testWires);
 
@@ -304,7 +385,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
             }
 
             // Flash the canvas so the user sees the AI "thinking"
-            flashUIState();
+            flashUIState({ components, wires: currentWires, cols: uiCols, rows: uiRows });
             await new Promise(r => setTimeout(r, 0));
             restoreComps(components, preEval);
         } // End Iter Loop
@@ -323,7 +404,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
     }
 
     setBestLine(null);
-    flashUIState();
+    flashUIState({ components, wires: currentWires, cols: uiCols, rows: uiRows, force: true });
 
     return { improved, score: improved ? finalScore : startScore, wires: currentWires, startScore: startScore };
 }
@@ -333,6 +414,9 @@ export async function optimizeBoard(components, wires, cols, rows, options = {})
     const { onProgress, onStatusUpdate, onStateChange, onBestSnapshot } = options;
     const setProg = (p, m) => onProgress?.(p, m);
     const setBestLine = (m) => onStatusUpdate?.({ best: m });
+
+    const flashUIState = createLiveRenderer(onStateChange, options.liveRenderIntervalMs ?? 120);
+    const routeCached = createRouteCache(options.routeCacheSize ?? 400);
 
     const pushHydratedBest = (liveComps, ws) => {
         const hydratedComps = liveComps.map(c => ({
@@ -350,13 +434,13 @@ export async function optimizeBoard(components, wires, cols, rows, options = {})
     if (!components.length) return;
 
     const startSnapshot = saveComps(components);
-    const startWires = await route(components, cols, rows, () => { }, checkCancel, currentWires);
+    const startWires = await routeCached(components, cols, rows, () => { }, checkCancel, currentWires);
     const startScore = scoreState(components, startWires);
     let bestWires = startWires;
     let bestScore = startScore;
     currentWires = startWires;
 
-    onStateChange?.({ components, wires: bestWires });
+    flashUIState({ components, wires: bestWires, cols, rows, force: true });
     setBestLine(bestScore);
     pushHydratedBest(components, bestWires);
 
@@ -378,7 +462,7 @@ export async function optimizeBoard(components, wires, cols, rows, options = {})
             bestWires = shrinkRes.wires;
             currentWires = bestWires;
             setBestLine(bestScore);
-            onStateChange?.({ components, wires: bestWires });
+            flashUIState({ components, wires: bestWires, cols, rows, force: true });
             pushHydratedBest(components, bestWires);
             await new Promise(r => setTimeout(r, 0));
             continue;
@@ -410,7 +494,7 @@ export async function optimizeBoard(components, wires, cols, rows, options = {})
             if (checkCancel()) break;
 
             restoreComps(components, n.comps);
-            const testWires = await route(components, cols, rows, () => { }, checkCancel, currentWires);
+            const testWires = await routeCached(components, cols, rows, () => { }, checkCancel, currentWires);
             n.wires = testWires;
             n.score = scoreState(components, testWires);
 
@@ -441,7 +525,7 @@ export async function optimizeBoard(components, wires, cols, rows, options = {})
         bestWires = currentWires;
         bestScore = pick.score;
         setBestLine(bestScore);
-        onStateChange?.({ components, wires: bestWires });
+        flashUIState({ components, wires: bestWires, cols, rows, force: true });
         pushHydratedBest(components, bestWires);
         await new Promise(r => setTimeout(r, 0));
     }
