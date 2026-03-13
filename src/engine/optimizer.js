@@ -301,6 +301,7 @@ function createLiveRenderer(onStateChange, intervalMs = 120, initialCompletion =
 
         const now = nowMs();
         if (!force && now - lastRenderAt < intervalMs) return;
+        lastRenderAt = now;
 
         const currentCompletion = completion(wires || []);
         if (resetCompletionFloor) {
@@ -308,7 +309,6 @@ function createLiveRenderer(onStateChange, intervalMs = 120, initialCompletion =
         }
         if (currentCompletion < bestRenderedCompletion) return;
 
-        lastRenderAt = now;
         if (currentCompletion > bestRenderedCompletion) {
             bestRenderedCompletion = currentCompletion;
         }
