@@ -700,7 +700,26 @@ function App() {
             status={status}
             bestSnapshot={bestSnapshot}
             onGoodEnough={() => {
+              // Indicate to the user that we are restoring the best-known state.
               setStatus(prev => ({ ...prev, title: 'Restoring best state...', isProcessing: true }));
+
+              // Apply the best snapshot to the board, if available.
+              if (bestSnapshot && bestSnapshot.board) {
+                setBoard(bestSnapshot.board);
+              }
+
+              // Clear the best snapshot so it is not reused unintentionally.
+              setBestSnapshot(null);
+
+              // Reset processing-related status flags now that we've applied the best state.
+              setStatus(prev => ({
+                ...prev,
+                isProcessing: false,
+                results: null,
+                isInitial: false,
+              }));
+
+              // Finally, cancel the engine to stop any ongoing optimization.
               engine.cancel();
             }}
           />
