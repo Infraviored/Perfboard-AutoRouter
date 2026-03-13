@@ -50,7 +50,6 @@ function getRenderableWires(components, wires, pinsByNet = null) {
     // To distinguish "this wire's points" from "other wires' points", we can just count occurrences of points.
     // If an endpoint occurs > 1 time across the net's ALL paths, it touches a junction.
     const pointOccurrenceCounts = new Map();
-    const pointKey = pt => `${pt.col},${pt.row}`;
 
     wires.forEach(wire => {
         if (!wire?.path?.length || wire.failed) return;
