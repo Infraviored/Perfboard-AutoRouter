@@ -703,24 +703,18 @@ function App() {
               // Indicate to the user that we are restoring the best-known state.
               setStatus(prev => ({ ...prev, title: 'Restoring best state...', isProcessing: true }));
 
-              // Apply the best snapshot to the board, if available.
-              if (bestSnapshot && bestSnapshot.board) {
-                setBoard(bestSnapshot.board);
+              // Finally, cancel the engine to stop any ongoing optimization.
+              engine.cancel();
+
+              // Apply the best snapshot to the engine, if available.
+              if (bestSnapshot && bestSnapshot.components && bestSnapshot.wires) {
+                engine.setState({ components: bestSnapshot.components, wires: bestSnapshot.wires });
+              } else {
+                setStatus({ title: '', progress: 0, best: null, isProcessing: false, isInitial: false, results: null });
               }
 
               // Clear the best snapshot so it is not reused unintentionally.
               setBestSnapshot(null);
-
-              // Reset processing-related status flags now that we've applied the best state.
-              setStatus(prev => ({
-                ...prev,
-                isProcessing: false,
-                results: null,
-                isInitial: false,
-              }));
-
-              // Finally, cancel the engine to stop any ongoing optimization.
-              engine.cancel();
             }}
           />
         </div>
