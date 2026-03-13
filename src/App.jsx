@@ -440,9 +440,19 @@ function App() {
             status={status}
             bestSnapshot={bestSnapshot}
             onGoodEnough={() => {
+              // Indicate to the user that we are restoring the best-known state.
+              setStatus(prev => ({ ...prev, title: 'Restoring best state...', isProcessing: true }));
+
+              // Finally, cancel the engine to stop any ongoing optimization.
               engine.cancel();
-              if (bestSnapshot) { setBoard({ components: bestSnapshot.components, wires: bestSnapshot.wires }); setStatus({ progress: 0, title: '', isProcessing: false }); }
-              else setStatus({ title: '', progress: 0, best: '', isProcessing: false });
+              // Apply the best snapshot to the engine, if available.
+              if (bestSnapshot && bestSnapshot.components && bestSnapshot.wires) {
+                engine.setState({ components: bestSnapshot.components, wires: bestSnapshot.wires });
+              } else {
+                setStatus({ title: '', progress: 0, best: null, isProcessing: false, isInitial: false, results: null });
+              }
+
+              // Clear the best snapshot so it is not reused unintentionally.
               setBestSnapshot(null);
             }}
           />

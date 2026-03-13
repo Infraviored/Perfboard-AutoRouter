@@ -1,4 +1,4 @@
-import { Grid, BLOCKED_WIRE } from './grid.js';
+import { Grid, BLOCKED_COMP, BLOCKED_PIN, BLOCKED_WIRE } from './grid.js';
 
 export const getAllNets = function (components) {
   const m = {};
@@ -10,6 +10,74 @@ export const getAllNets = function (components) {
   }));
   return Object.entries(m).map(([net, pins]) => ({ net, pins }));
 }
+
+function buildOrthogonalPath(start, end, horizontalFirst) {
+  const path = [{ col: start.col, row: start.row }];
+  let c = start.col;
+  let r = start.row;
+
+  if (horizontalFirst) {
+    const dc = end.col > c ? 1 : -1;
+    while (c !== end.col) {
+      c += dc;
+      path.push({ col: c, row: r });
+    }
+    const dr = end.row > r ? 1 : -1;
+    while (r !== end.row) {
+      r += dr;
+      path.push({ col: c, row: r });
+    }
+  } else {
+    const dr = end.row > r ? 1 : -1;
+    while (r !== end.row) {
+      r += dr;
+      path.push({ col: c, row: r });
+    }
+    const dc = end.col > c ? 1 : -1;
+    while (c !== end.col) {
+      c += dc;
+      path.push({ col: c, row: r });
+    }
+  }
+
+  return path;
+}
+
+function canUsePathOnGrid(grid, path) {
+  for (let i = 1; i < path.length - 1; i++) {
+    const pt = path[i];
+    if (!grid.inBounds(pt.col, pt.row)) return false;
+    const cell = grid.cells[grid.idx(pt.col, pt.row)];
+    if (cell & (BLOCKED_COMP | BLOCKED_PIN | BLOCKED_WIRE)) return false;
+  }
+  return true;
+}
+
+function straightenWirePath(path, grid) {
+  if (!path || path.length <= 2) return path;
+
+  const start = path[0];
+  const end = path[path.length - 1];
+  const currentLength = path.length - 1;
+  const minLength = Math.abs(end.col - start.col) + Math.abs(end.row - start.row);
+  if (minLength > currentLength) return path;
+
+  const preferHorizontal = path.length > 1 ? path[1].row === start.row : true;
+  const candidates = [
+    buildOrthogonalPath(start, end, preferHorizontal),
+    buildOrthogonalPath(start, end, !preferHorizontal)
+  ];
+
+  for (const candidate of candidates) {
+    const candLength = candidate.length - 1;
+    if (candLength > currentLength) continue;
+    if (!canUsePathOnGrid(grid, candidate)) continue;
+    return candidate;
+  }
+
+  return path;
+}
+
 export const route = async function (components, cols, rows, onProg, shouldCancel = null, existingWires = []) {
   const nets = getAllNets(components);
 
@@ -44,7 +112,16 @@ export const route = async function (components, cols, rows, onProg, shouldCance
   // Calculate which nets still need routing (exclude pins already connected by manual wires?)
   // For simplicity, we just route everything else normally.
   for (let netIdx = 0; netIdx < nets.length; netIdx++) {
-    if (shouldCancel && shouldCancel()) break;
+    if (shouldCancel && shouldCancel()) {
+      for (let j = netIdx; j < nets.length; j++) {
+        const unroutedNet = nets[j];
+        const pins = unroutedNet.pins;
+        for (let pIdx = 1; pIdx < pins.length; pIdx++) {
+          wires.push({ net: unroutedNet.net, path: [pins[0], pins[pIdx]], failed: true });
+        }
+      }
+      break;
+    }
     const net = nets[netIdx];
     if (onProg) onProg((netIdx + 1) / nets.length, net.net);
 
@@ -70,15 +147,23 @@ export const route = async function (components, cols, rows, onProg, shouldCance
 
     const netResultWires = [];
     while (unroutedPins.length > 0) {
-      if (shouldCancel && shouldCancel()) break;
+      if (shouldCancel && shouldCancel()) {
+        unroutedPins.forEach(failPin => {
+          const firstIdx = routedIndices.size > 0 ? [...routedIndices][0] : grid.idx(failPin.col, failPin.row);
+          const fallbackA = { col: (firstIdx % grid.cols) + grid.minCol, row: Math.floor(firstIdx / grid.cols) + grid.minRow };
+          netResultWires.push({ net: net.net, path: [fallbackA, failPin], failed: true });
+        });
+        break;
+      }
       const targetIndices = unroutedPins.map(p => grid.idx(p.col, p.row));
 
       const result = grid.astarMultiTarget(routedIndices, targetIndices); // STRICT
 
       if (result && result.path) {
-        netResultWires.push({ net: net.net, path: result.path, failed: false });
+        const normalizedPath = straightenWirePath(result.path, grid);
+        netResultWires.push({ net: net.net, path: normalizedPath, failed: false });
         // DO NOT mark grid yet! We might block our own next segment.
-        result.path.forEach(pt => routedIndices.add(grid.idx(pt.col, pt.row)));
+        normalizedPath.forEach(pt => routedIndices.add(grid.idx(pt.col, pt.row)));
         const hitIdx = unroutedPins.findIndex(p => grid.idx(p.col, p.row) === result.hitTargetIdx);
         if (hitIdx !== -1) unroutedPins.splice(hitIdx, 1);
       } else {
@@ -225,8 +310,9 @@ export function incrementalReroute(components, wires, movedComps) {
       const result = grid.astarMultiTarget(routedIndices, targetIndices); // STRICT
 
       if (result && result.path) {
-        netResultWires.push({ net: net.net, path: result.path, failed: false });
-        result.path.forEach(pt => routedIndices.add(grid.idx(pt.col, pt.row)));
+        const normalizedPath = straightenWirePath(result.path, grid);
+        netResultWires.push({ net: net.net, path: normalizedPath, failed: false });
+        normalizedPath.forEach(pt => routedIndices.add(grid.idx(pt.col, pt.row)));
         const hitIdx = unroutedPins.findIndex(p => grid.idx(p.col, p.row) === result.hitTargetIdx);
         if (hitIdx !== -1) unroutedPins.splice(hitIdx, 1);
       } else {
