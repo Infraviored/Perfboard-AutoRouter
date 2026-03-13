@@ -112,7 +112,16 @@ export const route = async function (components, cols, rows, onProg, shouldCance
   // Calculate which nets still need routing (exclude pins already connected by manual wires?)
   // For simplicity, we just route everything else normally.
   for (let netIdx = 0; netIdx < nets.length; netIdx++) {
-    if (shouldCancel && shouldCancel()) break;
+    if (shouldCancel && shouldCancel()) {
+      for (let j = netIdx; j < nets.length; j++) {
+        const unroutedNet = nets[j];
+        const pins = unroutedNet.pins;
+        for (let pIdx = 1; pIdx < pins.length; pIdx++) {
+          wires.push({ net: unroutedNet.net, path: [pins[0], pins[pIdx]], failed: true });
+        }
+      }
+      break;
+    }
     const net = nets[netIdx];
     if (onProg) onProg((netIdx + 1) / nets.length, net.net);
 
@@ -138,7 +147,14 @@ export const route = async function (components, cols, rows, onProg, shouldCance
 
     const netResultWires = [];
     while (unroutedPins.length > 0) {
-      if (shouldCancel && shouldCancel()) break;
+      if (shouldCancel && shouldCancel()) {
+        unroutedPins.forEach(failPin => {
+          const firstIdx = routedIndices.size > 0 ? [...routedIndices][0] : grid.idx(failPin.col, failPin.row);
+          const fallbackA = { col: (firstIdx % grid.cols) + grid.minCol, row: Math.floor(firstIdx / grid.cols) + grid.minRow };
+          netResultWires.push({ net: net.net, path: [fallbackA, failPin], failed: true });
+        });
+        break;
+      }
       const targetIndices = unroutedPins.map(p => grid.idx(p.col, p.row));
 
       const result = grid.astarMultiTarget(routedIndices, targetIndices); // STRICT

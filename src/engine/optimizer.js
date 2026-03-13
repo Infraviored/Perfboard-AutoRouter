@@ -71,15 +71,16 @@ function routeCacheKey(components, cols, rows, existingWires) {
 
     const manualSig = (existingWires || [])
         .filter((w) => w?.manual && w?.path?.length)
-        .map((w) => ({
-            net: w.net || '',
-            path: w.path.map((pt) => [pt.col, pt.row])
-        }))
-        .sort((a, b) => {
-            const aKey = `${a.net}:${JSON.stringify(a.path)}`;
-            const bKey = `${b.net}:${JSON.stringify(b.path)}`;
-            return aKey.localeCompare(bKey);
-        });
+        .map((w) => {
+            const pathArr = w.path.map((pt) => [pt.col, pt.row]);
+            return {
+                net: w.net || '',
+                path: pathArr,
+                _sortKey: `${w.net || ''}:${JSON.stringify(pathArr)}`
+            };
+        })
+        .sort((a, b) => a._sortKey.localeCompare(b._sortKey))
+        .map(({ net, path }) => ({ net, path }));
 
     if (components?.length > 0) {
         return JSON.stringify({ compSig, manualSig });
@@ -119,14 +120,15 @@ function createRouteCache(maxEntries = 400) {
         }
 
         const routed = await route(components, cols, rows, onProg, checkCancel, existingWires);
-        cache.set(key, routed);
+        const clonedToStore = cloneWires(routed);
+        cache.set(key, clonedToStore);
 
         if (cache.size > maxEntries) {
             const oldest = cache.keys().next().value;
             cache.delete(oldest);
         }
 
-        return cloneWires(routed);
+        return cloneWires(clonedToStore);
     };
 }
 
@@ -263,9 +265,9 @@ async function runInwardPotentialCompaction(components, wires, score, cols, rows
     return { improved, wires: workingWires, score: workingScore };
 }
 
-function createLiveRenderer(onStateChange, intervalMs = 120) {
+function createLiveRenderer(onStateChange, intervalMs = 120, initialCompletion = 0) {
     let lastRenderAt = 0;
-    let bestRenderedCompletion = 0;
+    let bestRenderedCompletion = initialCompletion;
     let lastCompSig = '';
     let cachedPinsByNet = new Map();
 
@@ -287,7 +289,7 @@ function createLiveRenderer(onStateChange, intervalMs = 120) {
             bestRenderedCompletion = currentCompletion;
         }
 
-        const compSig = componentsSignature(components);
+        const compSig = JSON.stringify(componentsSignature(components));
         if (compSig !== lastCompSig) {
             cachedPinsByNet = buildPinMapByNet(components);
             lastCompSig = compSig;
@@ -331,8 +333,6 @@ export async function compactBoard(components, wires, cols, rows, config, option
     let uiCols = cols;
     let uiRows = rows;
 
-    // Flash the main canvas with whatever intermediate state we're exploring
-    const flashUIState = createLiveRenderer(onStateChange, options.liveRenderIntervalMs ?? 120);
     const routeCached = createRouteCache(options.routeCacheSize ?? 400);
     // Push a new "best" snapshot to the bottom bar preview, using full component arrays
     const pushHydratedBest = (liveComps, ws) => {
@@ -353,6 +353,10 @@ export async function compactBoard(components, wires, cols, rows, config, option
     const startSnapshot = saveComps(components);
     const startWires = await routeCached(components, uiCols, uiRows, () => { }, checkCancel, wires);
     const startScore = scoreState(components, startWires);
+
+    // Flash the main canvas with whatever intermediate state we're exploring, passing startScore.comp as the floor
+    const flashUIState = createLiveRenderer(onStateChange, options.liveRenderIntervalMs ?? 120, startScore.comp);
+
     currentWires = startWires;
 
     const setIterStatus = (epoch, iter) => {
@@ -626,7 +630,6 @@ export async function optimizeBoard(components, wires, cols, rows, options = {})
     const setProg = (p, m) => onProgress?.(p, m);
     const setBestLine = (m) => onStatusUpdate?.({ best: m });
 
-    const flashUIState = createLiveRenderer(onStateChange, options.liveRenderIntervalMs ?? 120);
     const routeCached = createRouteCache(options.routeCacheSize ?? 400);
 
     const pushHydratedBest = (liveComps, ws) => {
@@ -647,6 +650,9 @@ export async function optimizeBoard(components, wires, cols, rows, options = {})
     const startSnapshot = saveComps(components);
     const startWires = await routeCached(components, cols, rows, () => { }, checkCancel, currentWires);
     const startScore = scoreState(components, startWires);
+
+    const flashUIState = createLiveRenderer(onStateChange, options.liveRenderIntervalMs ?? 120, startScore.comp);
+
     let bestWires = startWires;
     let bestScore = startScore;
     currentWires = startWires;
