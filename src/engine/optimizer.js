@@ -18,6 +18,15 @@ function buildPinMapByNet(components) {
     return map;
 }
 
+function syncComponentPins(components) {
+    for (const comp of components || []) {
+        for (const pin of comp.pins || []) {
+            pin.col = comp.ox + pin.dCol;
+            pin.row = comp.oy + pin.dRow;
+        }
+    }
+}
+
 function buildManualPointMapByNet(wires) {
     const map = new Map();
     for (const wire of wires || []) {
@@ -100,6 +109,7 @@ function createRouteCache(maxEntries = 400) {
     const cache = new Map();
 
     return async (components, cols, rows, onProg = () => { }, checkCancel, existingWires) => {
+        syncComponentPins(components);
         const key = routeCacheKey(components, cols, rows, existingWires);
         const cached = cache.get(key);
         if (cached) {
@@ -180,19 +190,97 @@ async function runFinalWirePullPostprocess(components, wires, score, cols, rows,
     return { improved, wires: workingWires, score: workingScore };
 }
 
+async function runInwardPotentialCompaction(components, wires, score, cols, rows, routeCached, checkCancel) {
+    if (!components?.length) return { improved: false, wires, score };
+
+    let workingWires = wires;
+    let workingScore = score;
+    let improved = false;
+
+    for (let pass = 0; pass < 3; pass++) {
+        if (checkCancel?.()) break;
+
+        const b = calculateComponentBounds(components);
+        const cx = (b.minCol + b.maxCol) / 2;
+        const cy = (b.minRow + b.maxRow) / 2;
+
+        const ordered = [...components].sort((a, bComp) => {
+            const aDist = Math.abs((a.ox + a.w / 2) - cx) + Math.abs((a.oy + a.h / 2) - cy);
+            const bDist = Math.abs((bComp.ox + bComp.w / 2) - cx) + Math.abs((bComp.oy + bComp.h / 2) - cy);
+            return bDist - aDist;
+        });
+
+        let passImproved = false;
+        for (const comp of ordered) {
+            if (checkCancel?.()) break;
+
+            const baseOx = comp.ox;
+            const baseOy = comp.oy;
+            const dx = cx > (baseOx + comp.w / 2) ? 1 : (cx < (baseOx + comp.w / 2) ? -1 : 0);
+            const dy = cy > (baseOy + comp.h / 2) ? 1 : (cy < (baseOy + comp.h / 2) ? -1 : 0);
+
+            const candidates = [];
+            if (dx !== 0) candidates.push({ ox: baseOx + dx, oy: baseOy });
+            if (dy !== 0) candidates.push({ ox: baseOx, oy: baseOy + dy });
+            if (dx !== 0 && dy !== 0) candidates.push({ ox: baseOx + dx, oy: baseOy + dy });
+
+            let best = null;
+            for (const c of candidates) {
+                moveComp(comp, c.ox, c.oy);
+                if (anyOverlap(comp, components)) {
+                    moveComp(comp, baseOx, baseOy);
+                    continue;
+                }
+
+                const testWires = await routeCached(components, cols, rows, () => { }, checkCancel, workingWires);
+                const testScore = scoreState(components, testWires);
+                moveComp(comp, baseOx, baseOy);
+
+                const keepQuality =
+                    testScore.comp >= workingScore.comp &&
+                    testScore.area <= workingScore.area &&
+                    testScore.perim <= workingScore.perim &&
+                    testScore.wl <= workingScore.wl;
+                if (!keepQuality) continue;
+
+                if (!best || isScoreBetter(testScore, best.score)) {
+                    best = { ...c, wires: testWires, score: testScore };
+                }
+            }
+
+            if (best) {
+                moveComp(comp, best.ox, best.oy);
+                workingWires = best.wires;
+                workingScore = best.score;
+                improved = true;
+                passImproved = true;
+            }
+        }
+
+        if (!passImproved) break;
+    }
+
+    return { improved, wires: workingWires, score: workingScore };
+}
+
 function createLiveRenderer(onStateChange, intervalMs = 120) {
     let lastRenderAt = 0;
     let bestRenderedCompletion = 0;
     let lastCompSig = '';
     let cachedPinsByNet = new Map();
 
-    return ({ components, wires, cols, rows, force = false }) => {
+    return ({ components, wires, cols, rows, force = false, resetCompletionFloor = false }) => {
         if (!onStateChange) return;
+        syncComponentPins(components);
+
         const now = nowMs();
         if (!force && now - lastRenderAt < intervalMs) return;
 
         const currentCompletion = completion(wires || []);
-        if (!force && currentCompletion < bestRenderedCompletion) return;
+        if (resetCompletionFloor) {
+            bestRenderedCompletion = currentCompletion;
+        }
+        if (currentCompletion < bestRenderedCompletion) return;
 
         lastRenderAt = now;
         if (currentCompletion > bestRenderedCompletion) {
@@ -206,7 +294,7 @@ function createLiveRenderer(onStateChange, intervalMs = 120) {
         }
 
         onStateChange({
-            components: components.map(c => ({ ...c, pins: c.pins })),
+            components: components.map(c => ({ ...c, pins: c.pins.map(p => ({ ...p })) })),
             wires: getRenderableWires(components, wires, cachedPinsByNet),
             cols,
             rows
@@ -527,7 +615,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
     }
 
     setBestLine(null);
-    flashUIState({ components, wires: currentWires, cols: uiCols, rows: uiRows, force: true });
+    flashUIState({ components, wires: currentWires, cols: uiCols, rows: uiRows, force: true, resetCompletionFloor: true });
 
     return { improved, score: improved ? finalScore : startScore, wires: currentWires, startScore: startScore };
 }
@@ -671,6 +759,24 @@ export async function optimizeBoard(components, wires, cols, rows, options = {})
         pushHydratedBest(components, bestWires);
     }
 
+    const potentialRes = await runInwardPotentialCompaction(
+        components,
+        currentWires,
+        bestScore,
+        cols,
+        rows,
+        routeCached,
+        checkCancel
+    );
+    if (potentialRes.improved) {
+        currentWires = potentialRes.wires;
+        bestWires = currentWires;
+        bestScore = potentialRes.score;
+        setBestLine(bestScore);
+        flashUIState({ components, wires: bestWires, cols, rows, force: true });
+        pushHydratedBest(components, bestWires);
+    }
+
     const finalScore = scoreState(components, currentWires);
     const improved = isScoreBetter(finalScore, startScore);
     if (!improved) {
@@ -679,5 +785,6 @@ export async function optimizeBoard(components, wires, cols, rows, options = {})
     }
 
     setBestLine(null);
+    flashUIState({ components, wires: currentWires, cols, rows, force: true, resetCompletionFloor: true });
     return { improved, score: improved ? finalScore : startScore, wires: currentWires, startScore: startScore };
 }
