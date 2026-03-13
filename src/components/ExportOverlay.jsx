@@ -13,13 +13,13 @@ export function ExportOverlay({ isOpen, onClose, components, wires, bestSnapshot
         const source = bestSnapshot || { components, wires };
 
         if (format === 'svg' && side === 'both') {
-            const svg = generateCombinedSVG(source.components, source.wires, { padding: 24 });
+            const svg = generateCombinedSVG(source.components, source.wires, { padding: 3 });
             downloadFile(svg, `pcb_combined.svg`, 'image/svg+xml');
             return;
         }
 
         if (format === 'png' && side === 'both') {
-            const svg = generateCombinedSVG(source.components, source.wires, { padding: 24 });
+            const svg = generateCombinedSVG(source.components, source.wires, { padding: 3 });
             const pngBlob = await svgToPng(svg);
             if (pngBlob) downloadFile(pngBlob, `pcb_combined.png`, 'image/png');
             return;
@@ -27,7 +27,7 @@ export function ExportOverlay({ isOpen, onClose, components, wires, bestSnapshot
 
         const exportOne = async (exportSide) => {
             const svg = generateBoardSVG(source.components, source.wires, {
-                padding: 24,
+                padding: 3,
 
                 side: exportSide
             });

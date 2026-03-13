@@ -429,7 +429,7 @@ export function generateBoardSVG(components, wires = [], options = {}) {
     components,
     wires,
     side: options.side || 'top',
-    padding: options.padding ?? 3
+    padding: 3
   });
   if (!result) return '';
   const { W, H, inner } = result;
