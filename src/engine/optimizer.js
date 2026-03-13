@@ -43,16 +43,40 @@ function getRenderableWires(components, wires, pinsByNet = null) {
     const pinMap = pinsByNet || buildPinMapByNet(components);
     const manualPointMap = buildManualPointMapByNet(wires);
 
+    // Build a map of ALL points occupied by every net (excluding the current wire under test)
+    // Actually, a simpler approach is to build a full Set of all points per net,
+    // then for each wire, we check if its endpoints are in the pinMap OR are shared with ANOTHER wire in the net.
+
+    // To distinguish "this wire's points" from "other wires' points", we can just count occurrences of points.
+    // If an endpoint occurs > 1 time across the net's ALL paths, it touches a junction.
+    const pointOccurrenceCounts = new Map();
+    const pointKey = pt => `${pt.col},${pt.row}`;
+
+    wires.forEach(wire => {
+        if (!wire?.path?.length || wire.failed) return;
+        if (!pointOccurrenceCounts.has(wire.net)) pointOccurrenceCounts.set(wire.net, new Map());
+        const counts = pointOccurrenceCounts.get(wire.net);
+        wire.path.forEach(pt => {
+            const pk = pointKey(pt);
+            counts.set(pk, (counts.get(pk) || 0) + 1);
+        });
+    });
+
     return wires.filter((wire) => {
         if (!wire?.path?.length || wire.failed) return false;
         const netPins = pinMap.get(wire.net);
         const manualPoints = manualPointMap.get(wire.net);
         if (!netPins?.size && !manualPoints?.size) return false;
 
+        const counts = pointOccurrenceCounts.get(wire.net);
+
         const startKey = pointKey(wire.path[0]);
         const endKey = pointKey(wire.path[wire.path.length - 1]);
-        const hasStartAnchor = netPins?.has(startKey) || manualPoints?.has(startKey);
-        const hasEndAnchor = netPins?.has(endKey) || manualPoints?.has(endKey);
+
+        // A wire is valid if its start and end points either touch a pin, a manual point, or intersect with another wire segment of the same net.
+        const hasStartAnchor = netPins?.has(startKey) || manualPoints?.has(startKey) || (counts.get(startKey) > 1);
+        const hasEndAnchor = netPins?.has(endKey) || manualPoints?.has(endKey) || (counts.get(endKey) > 1);
+
         return hasStartAnchor && hasEndAnchor;
     });
 }
@@ -600,7 +624,7 @@ export async function compactBoard(components, wires, cols, rows, config, option
             }
 
             // Flash the canvas so the user sees the AI "thinking"
-            flashUIState({ components, wires: currentWires, cols: uiCols, rows: uiRows });
+            flashUIState({ components, wires: testWires, cols: uiCols, rows: uiRows });
             await new Promise(r => setTimeout(r, 0));
             restoreComps(components, preEval);
         } // End Iter Loop

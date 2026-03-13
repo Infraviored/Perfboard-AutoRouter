@@ -700,14 +700,8 @@ function App() {
             status={status}
             bestSnapshot={bestSnapshot}
             onGoodEnough={() => {
+              setStatus(prev => ({ ...prev, title: 'Restoring best state...', isProcessing: true }));
               engine.cancel();
-              if (bestSnapshot) {
-                setBoard({ components: bestSnapshot.components, wires: bestSnapshot.wires });
-                setStatus({ progress: 0, title: '', isProcessing: false }); // clear processing
-              } else {
-                setStatus({ title: '', progress: 0, best: '', isProcessing: false });
-              }
-              setBestSnapshot(null);
             }}
           />
         </div>
