@@ -425,110 +425,24 @@ export function generateBoundingBoxSVG(components, wires = []) {
 }
 
 export function generateBoardSVG(components, wires = [], options = {}) {
-  if (!components.length) return '';
-
-  let minC = Infinity, maxC = -Infinity, minR = Infinity, maxR = -Infinity;
-  components.forEach(c => {
-    if (!isFinite(c.ox) || !isFinite(c.oy)) return;
-    minC = Math.min(minC, c.ox);
-    maxC = Math.max(maxC, c.ox + c.w);
-    minR = Math.min(minR, c.oy);
-    maxR = Math.max(maxR, c.oy + c.h);
+  const result = generatePrunedSVG({
+    components,
+    wires,
+    side: options.side || 'top',
+    padding: options.padding ?? 3
   });
+  if (!result) return '';
+  const { W, H, inner } = result;
 
-  wires.forEach(w => w.path?.forEach(pt => {
-    minC = Math.min(minC, pt.col);
-    maxC = Math.max(maxC, pt.col + 1);
-    minR = Math.min(minR, pt.row);
-    maxR = Math.max(maxR, pt.row + 1);
-  }));
-
-  if (!isFinite(minC)) return '';
-
-  const mCenter = minC + maxC; // True bounds before padding
-  const isBottom = options.side === 'bottom';
-
-  const displayComps = isBottom ? components.map(c => ({
-    ...c,
-    ox: mCenter - c.ox - c.w,
-    pins: c.pins.map(p => ({ ...p, col: mCenter - p.col - 1 }))
-  })) : components;
-
-  const displayWires = isBottom ? wires.map(w => ({
-    ...w,
-    path: w.path?.map(pt => ({ ...pt, col: mCenter - pt.col - 1 }))
-  })) : wires;
-
-  const padPx = options.padding ?? 12;
-  const pad = padPx / SP;
-  minC -= pad; minR -= pad;
-  maxC += pad; maxR += pad;
-
-  const W = Math.round((maxC - minC) * SP);
-  const H = Math.round((maxR - minR) * SP);
-
-  let inner = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
-  inner += `<rect width="${W}" height="${H}" fill="#050706"/>`; // Dark background match
-
-  // Perfboard holes logic
-  inner += `<defs><pattern id="holePattern" width="${SP}" height="${SP}" patternUnits="userSpaceOnUse" x="${-minC * SP}" y="${-minR * SP}">`;
-  inner += `<rect width="${SP}" height="${SP}" fill="#1a1208"/>`;
-  inner += `<circle cx="${SP / 2}" cy="${SP / 2}" r="${SP * .22}" fill="#b87333"/>`;
-  inner += `<circle cx="${SP / 2}" cy="${SP / 2}" r="${SP * .09}" fill="#0d0a06"/>`;
-  inner += `</pattern></defs>`;
-  inner += `<rect width="100%" height="100%" fill="url(#holePattern)"/>`;
-
-  // Layer order for Bottom View: Components first, then Wires, then Labels Top-most
-  if (isBottom) {
-    let compsBases = '';
-    let compsLabels = '';
-
-    // Components first (split into base and labels)
-    displayComps.forEach(c => {
-      const sc = { ...c, ox: c.ox - minC, oy: c.oy - minR, pins: c.pins.map(p => ({ ...p, col: p.col - minC, row: p.row - minR })) };
-      const rendered = renderCompSVG(sc, 'split');
-      compsBases += rendered.base;
-      compsLabels += rendered.labels;
-    });
-
-    inner += compsBases;
-
-    // Wires on top of component bases
-    displayWires.forEach(w => {
-      if (!w.path?.length || w.failed) return;
-      const pts = w.path.map(pt => `${Math.round((pt.col - minC) * SP + SP / 2)},${Math.round((pt.row - minR) * SP + SP / 2)}`).join(' ');
-      inner += `<polyline points="${pts}" fill="none" stroke="${netColor(w.net)}" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>`;
-    });
-
-    // Labels on top of EVERYTHING
-    inner += compsLabels;
-
-  } else {
-    // Wires
-    displayWires.forEach(w => {
-      if (!w.path?.length || w.failed) return;
-      const pts = w.path.map(pt => `${Math.round((pt.col - minC) * SP + SP / 2)},${Math.round((pt.row - minR) * SP + SP / 2)}`).join(' ');
-      inner += `<polyline points="${pts}" fill="none" stroke="${netColor(w.net)}" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>`;
-    });
-
-    // Components (Normal)
-    displayComps.forEach(c => {
-      const sc = { ...c, ox: c.ox - minC, oy: c.oy - minR, pins: c.pins.map(p => ({ ...p, col: p.col - minC, row: p.row - minR })) };
-      inner += renderCompSVG(sc, false);
-    });
-  }
-
-  // Optional bounding box
-  if (options.showBoundingBox) {
-    const bbx = padPx;
-    const bby = padPx;
-    const bbw = W - padPx * 2;
-    const bbh = H - padPx * 2;
-    inner += `<rect x="${bbx}" y="${bby}" width="${bbw}" height="${bbh}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="8 6" rx="7"/>`;
-  }
-
-  inner += `</svg>`;
-  return inner;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <defs>
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;800&amp;display=swap');
+        text { font-family: 'Outfit', sans-serif; }
+      </style>
+    </defs>
+    ${inner}
+  </svg>`;
 }
 
 export function generateCombinedSVG(components, wires = [], options = {}) {
@@ -545,26 +459,30 @@ export function generateCombinedSVG(components, wires = [], options = {}) {
   const W = parseInt(W_str);
   const H = parseInt(H_str);
 
-  const gap = 40;
+  const gap = 30;
   const totalW = W * 2 + gap;
   const totalH = H + 60; // Extra room for labels
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${totalH}" viewBox="0 0 ${totalW} ${totalH}">
+  const commonStyles = `
     <defs>
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;800&amp;display=swap');
-        text { font-family: 'Outfit', sans-serif; }
+        text { font-family: 'Outfit', sans-serif; paint-order: stroke; stroke: #000; stroke-width: 2px; stroke-linecap: round; stroke-linejoin: round; }
       </style>
     </defs>
-    <rect width="100%" height="100%" fill="#050706"/>
+  `;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${totalH}" viewBox="0 0 ${totalW} ${totalH}">
+    ${commonStyles}
+    <!-- No global background rect to allow transparency between views -->
     
-    <g transform="translate(0, 40)">
-      <text x="${W / 2}" y="-15" fill="#fff" font-family="Outfit, sans-serif" font-weight="800" font-size="20" text-anchor="middle">TOP VIEW</text>
+    <g transform="translate(0, 45)">
+      <text x="${W / 2}" y="-15" fill="#fff" font-family="Outfit, sans-serif" font-weight="800" font-size="22" text-anchor="middle">TOP VIEW</text>
       ${getInner(topSvg)}
     </g>
-
-    <g transform="translate(${W + gap}, 40)">
-      <text x="${W / 2}" y="-15" fill="#fff" font-family="Outfit, sans-serif" font-weight="800" font-size="20" text-anchor="middle">BOTTOM VIEW</text>
+ 
+    <g transform="translate(${W + gap}, 45)">
+      <text x="${W / 2}" y="-15" fill="#fff" font-family="Outfit, sans-serif" font-weight="800" font-size="22" text-anchor="middle">BOTTOM VIEW</text>
       ${getInner(bottomSvg)}
     </g>
   </svg>`;

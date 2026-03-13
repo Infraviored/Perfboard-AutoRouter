@@ -5,7 +5,7 @@ import { generateBoardSVG, generateCombinedSVG } from '../engine/render-utils.js
 export function ExportOverlay({ isOpen, onClose, components, wires, bestSnapshot }) {
     const [format, setFormat] = useState('svg'); // 'svg' | 'png'
     const [side, setSide] = useState('top'); // 'top' | 'bottom' | 'both'
-    const [showBoundingBox, setShowBoundingBox] = useState(true);
+
 
     if (!isOpen) return null;
 
@@ -13,13 +13,13 @@ export function ExportOverlay({ isOpen, onClose, components, wires, bestSnapshot
         const source = bestSnapshot || { components, wires };
 
         if (format === 'svg' && side === 'both') {
-            const svg = generateCombinedSVG(source.components, source.wires, { padding: 24, showBoundingBox });
+            const svg = generateCombinedSVG(source.components, source.wires, { padding: 24 });
             downloadFile(svg, `pcb_combined.svg`, 'image/svg+xml');
             return;
         }
 
         if (format === 'png' && side === 'both') {
-            const svg = generateCombinedSVG(source.components, source.wires, { padding: 24, showBoundingBox });
+            const svg = generateCombinedSVG(source.components, source.wires, { padding: 24 });
             const pngBlob = await svgToPng(svg);
             if (pngBlob) downloadFile(pngBlob, `pcb_combined.png`, 'image/png');
             return;
@@ -28,7 +28,7 @@ export function ExportOverlay({ isOpen, onClose, components, wires, bestSnapshot
         const exportOne = async (exportSide) => {
             const svg = generateBoardSVG(source.components, source.wires, {
                 padding: 24,
-                showBoundingBox,
+
                 side: exportSide
             });
 
@@ -98,12 +98,13 @@ export function ExportOverlay({ isOpen, onClose, components, wires, bestSnapshot
 
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                canvas.width = width * 2; // High DPI
-                canvas.height = height * 2;
+                const scale = 4; // High DPI (4x original SP size)
+                canvas.width = width * scale;
+                canvas.height = height * scale;
                 const ctx = canvas.getContext('2d');
                 ctx.fillStyle = '#050706'; // Ensure background is filled
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.scale(2, 2);
+                ctx.scale(scale, scale);
                 ctx.drawImage(img, 0, 0);
 
                 canvas.toBlob((blob) => {
@@ -150,12 +151,7 @@ export function ExportOverlay({ isOpen, onClose, components, wires, bestSnapshot
                         </div>
                     </div>
 
-                    <div className="option-group checkbox">
-                        <label className="checkbox-label">
-                            <input type="checkbox" checked={showBoundingBox} onChange={e => setShowBoundingBox(e.target.checked)} />
-                            Include Bounding Box
-                        </label>
-                    </div>
+
                 </div>
 
                 <button className="btn blu export-action-btn" onClick={handleExport}>
