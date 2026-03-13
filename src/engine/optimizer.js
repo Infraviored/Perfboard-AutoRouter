@@ -319,9 +319,13 @@ function createLiveRenderer(onStateChange, intervalMs = 120, initialCompletion =
             lastCompSig = compSig;
         }
 
+        const renderWires = getRenderableWires(components, wires, cachedPinsByNet);
+
         onStateChange({
             components: components.map(c => ({ ...c, pins: c.pins.map(p => ({ ...p })) })),
-            wires: getRenderableWires(components, wires, cachedPinsByNet),
+            // Preserve full engine wire state; use renderWires for UI-only rendering.
+            wires: (wires || []).map(w => ({ ...w })),
+            renderWires,
             cols,
             rows
         });
