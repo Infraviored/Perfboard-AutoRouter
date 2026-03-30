@@ -235,13 +235,15 @@ export function CompEditorOverlay({ component, isOpen, onClose, onSave }) {
                                 <Hash size={16} />
                                 <h4>Identity</h4>
                             </div>
-                            <div className="field-group">
-                                <label>ID</label>
-                                <input type="text" value={data.id} onChange={e => handleUpdate('id', e.target.value)} />
-                            </div>
-                            <div className="field-group">
-                                <label>Value</label>
-                                <input type="text" value={data.value} onChange={e => handleUpdate('value', e.target.value)} />
+                            <div className="grid-2">
+                                <div className="field-group">
+                                    <label>ID</label>
+                                    <input type="text" value={data.id} onChange={e => handleUpdate('id', e.target.value)} />
+                                </div>
+                                <div className="field-group">
+                                    <label>Value</label>
+                                    <input type="text" value={data.value} onChange={e => handleUpdate('value', e.target.value)} />
+                                </div>
                             </div>
                             <div className="field-group">
                                 <label>Model Name</label>
@@ -254,13 +256,16 @@ export function CompEditorOverlay({ component, isOpen, onClose, onSave }) {
                                 <Maximize size={16} />
                                 <h4>Footprint</h4>
                             </div>
-                            <div className="field-group">
-                                <label>Width (Cols)</label>
-                                <input type="number" min="1" value={data.w} onChange={e => handleDimensionChange('w', e.target.value)} />
-                            </div>
-                            <div className="field-group">
-                                <label>Height (Rows)</label>
-                                <input type="number" min="1" value={data.h} onChange={e => handleDimensionChange('h', e.target.value)} />
+                            <div className="dimension-row">
+                                <div className="field-group">
+                                    <label>Width (Cols)</label>
+                                    <input type="number" min="1" value={data.w} onChange={e => handleDimensionChange('w', e.target.value)} />
+                                </div>
+                                <div className="dim-times">×</div>
+                                <div className="field-group">
+                                    <label>Height (Rows)</label>
+                                    <input type="number" min="1" value={data.h} onChange={e => handleDimensionChange('h', e.target.value)} />
+                                </div>
                             </div>
                         </section>
 
@@ -441,7 +446,7 @@ export function CompEditorOverlay({ component, isOpen, onClose, onSave }) {
                     display: flex; justify-content: space-between; align-items: center;
                 }
                 .header-title { display: flex; align-items: center; gap: 12px; }
-                .header-title h3 { font-size: 1.1em; color: var(--txt1); }
+                .header-title h3 { font-size: var(--fs-lg); color: var(--txt1); }
 
                 .editor-layout {
                     flex: 1;
@@ -471,14 +476,16 @@ export function CompEditorOverlay({ component, isOpen, onClose, onSave }) {
                     display: flex; align-items: center; gap: 8px; 
                     color: var(--txt2); margin-bottom: 12px;
                 }
-                .section-header h4 { font-size: 0.75em; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; }
+                .section-header h4 { font-size: var(--fs-sm); font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; }
+
+                .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 
                 .field-group { display: flex; flex-direction: column; gap: 6px; flex: 1; }
-                .field-group label { font-size: 0.72em; color: var(--txt2); font-weight: 700; text-transform: uppercase; }
-                .field-group input { font-size: 0.96em !important; height: 38px; padding: 0 12px; }
+                .field-group label { font-size: var(--fs-xs); color: var(--txt2); font-weight: 700; text-transform: uppercase; }
+                .field-group input { font-size: var(--fs-md) !important; height: 38px; padding: 0 12px; }
 
                 .dimension-row { display: flex; align-items: center; gap: 10px; }
-                .dim-times { font-weight: 800; color: var(--txt2); font-size: 0.85em; }
+                .dim-times { font-weight: 800; color: var(--txt2); font-size: var(--fs-sm); }
 
                 .color-picker-row { display: flex; gap: 10px; align-items: center; }
                 .color-picker-row input[type="color"] { 
@@ -504,9 +511,9 @@ export function CompEditorOverlay({ component, isOpen, onClose, onSave }) {
                 .pin-row:hover { background: rgba(255,255,255,0.02); }
                 .pin-row.selected { background: rgba(31, 111, 235, 0.1); border-left: 2px solid var(--blu-bright); padding-left: 16px; }
 
-                .pin-label-input { width: 70px !important; font-size: 0.96em !important; font-weight: 800; border-radius: 4px; height: 32px; }
+                .pin-label-input { width: 70px !important; font-size: var(--fs-md) !important; font-weight: 800; border-radius: 4px; height: 32px; }
                 .pin-net-container { flex: 1; position: relative; display: flex; align-items: center; }
-                .pin-net-input { color: var(--blu-bright) !important; font-size: 0.96em !important; border-radius: 4px; height: 32px; }
+                .pin-net-input { color: var(--blu-bright) !important; font-size: var(--fs-md) !important; border-radius: 4px; height: 32px; }
                 
                 .add-pin-btn {
                     margin-left: auto;
@@ -541,7 +548,7 @@ export function CompEditorOverlay({ component, isOpen, onClose, onSave }) {
                     display: flex; justify-content: flex-end;
                 }
                 .footer-actions { display: flex; gap: 12px; }
-                .footer-actions .btn { font-size: 0.95em; padding: 12px 24px; min-width: 140px; }
+                .footer-actions .btn { font-size: var(--fs-md); padding: 12px 24px; min-width: 140px; }
 
                 @keyframes selection-pulse { from { opacity: 0.4; } to { opacity: 1; } }
                 .selection-bracket { animation: selection-pulse 0.8s infinite alternate; }

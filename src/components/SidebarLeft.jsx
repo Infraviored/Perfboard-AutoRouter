@@ -127,7 +127,7 @@ export function SidebarLeft({
            color: var(--txt0);
         }
         .section-header h2 {
-           font-size: 0.95rem;
+           font-size: var(--fs-lg);
            font-weight: 700;
            margin: 0;
            letter-spacing: -0.01em;
@@ -164,7 +164,7 @@ export function SidebarLeft({
           color: var(--blu-bright);
           padding: 8px 12px;
           border-radius: 8px;
-          font-size: .78em;
+          font-size: var(--fs-sm);
           font-weight: 700;
           display: flex;
           align-items: center;
@@ -194,7 +194,7 @@ export function SidebarLeft({
            background: transparent !important;
            min-height: 120px;
            width: 100%;
-           font-size: .75em;
+           font-size: var(--fs-sm);
            padding: 10px;
            line-height: 1.5;
            color: var(--txt1);
@@ -203,7 +203,7 @@ export function SidebarLeft({
           padding: 6px 10px;
           border-radius: 8px;
           cursor: pointer;
-          font-size: .72em;
+          font-size: var(--fs-xs);
           font-weight: 600;
           background: var(--bg3);
           border: 1px solid var(--border);
@@ -231,7 +231,7 @@ export function SidebarLeft({
         .empty-state {
           padding: 30px 20px;
           text-align: center;
-          font-size: .75em;
+          font-size: var(--fs-sm);
           color: var(--txt2);
           display: flex;
           flex-direction: column;
@@ -268,7 +268,7 @@ export function SidebarLeft({
         .comp-id-tag {
           font-family: 'Outfit', sans-serif;
           font-weight: 800;
-          font-size: 0.75em;
+          font-size: var(--fs-xs);
           color: var(--txt0);
           min-width: 26px;
           background: rgba(255,255,255,0.05);
@@ -286,7 +286,7 @@ export function SidebarLeft({
           flex: 1;
         }
         .comp-name {
-          font-size: 0.8em;
+          font-size: var(--fs-md);
           font-weight: 600;
           color: var(--txt0);
           white-space: nowrap;
@@ -294,7 +294,7 @@ export function SidebarLeft({
           mask-image: linear-gradient(to right, black 90%, transparent 100%);
         }
         .comp-value {
-          font-size: 0.65em;
+          font-size: var(--fs-xs);
           color: var(--txt1);
           font-family: 'Consolas', monospace;
           white-space: nowrap;
@@ -309,7 +309,7 @@ export function SidebarLeft({
           flex-shrink: 0;
         }
         .comp-pins-tag {
-           font-size: 0.65em;
+           font-size: var(--fs-xs);
            font-weight: 800;
            color: var(--txt1);
            background: var(--bg2);

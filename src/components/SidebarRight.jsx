@@ -241,7 +241,7 @@ export function SidebarRight({
           background: rgba(255,255,255,0.02);
         }
         .section-header h2 {
-           font-size: 0.95rem;
+           font-size: var(--fs-lg);
            font-weight: 700;
            margin: 0;
            letter-spacing: -0.01em;
@@ -281,7 +281,7 @@ export function SidebarRight({
         .empty-state {
           padding: 20px;
           text-align: center;
-          font-size: .75em;
+          font-size: var(--fs-sm);
           color: var(--txt2);
           background: rgba(255,255,255,0.01);
           border-radius: 8px;
@@ -312,14 +312,14 @@ export function SidebarRight({
         }
         .sv {
           font-family: 'Outfit', sans-serif;
-          font-size: 0.8em;
+          font-size: var(--fs-md);
           font-weight: 800;
           color: var(--txt0);
           letter-spacing: -0.01em;
           white-space: nowrap;
         }
         .sl {
-          font-size: .65em;
+          font-size: var(--fs-xs);
           color: var(--txt1);
           font-weight: 700;
           text-transform: uppercase;
@@ -347,7 +347,7 @@ export function SidebarRight({
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 0.65em;
+          font-size: var(--fs-xs);
           font-weight: 900;
           color: #fff;
           text-shadow: 0 1px 2px rgba(0,0,0,0.5);
@@ -380,9 +380,9 @@ export function SidebarRight({
           overflow: hidden;
         }
         .prop-icon { color: var(--txt2); flex-shrink: 0; }
-        .prop-label { font-size: 0.7em; color: var(--txt1); font-weight: 600; width: 45px; flex-shrink: 0; }
+        .prop-label { font-size: var(--fs-xs); color: var(--txt1); font-weight: 600; width: 45px; flex-shrink: 0; }
         .prop-value { 
-          font-size: 0.8em; 
+          font-size: var(--fs-md); 
           color: var(--txt0); 
           font-family: 'Consolas', monospace; 
           white-space: nowrap;
@@ -392,7 +392,7 @@ export function SidebarRight({
 
 
         .pin-list-header {
-           font-size: 0.65em;
+           font-size: var(--fs-xs);
            font-weight: 800;
            color: var(--txt1);
            margin-top: 12px;
@@ -412,7 +412,7 @@ export function SidebarRight({
            padding: 4px 8px;
            background: rgba(255,255,255,0.02);
            border-radius: 4px;
-           font-size: 0.75em;
+           font-size: var(--fs-sm);
         }
         .pin-label { color: var(--txt1); padding-left: 6px; }
         .pin-net { color: var(--txt0); font-family: 'Consolas', monospace; }
@@ -449,7 +449,7 @@ export function SidebarRight({
         .net-dot { display: none; }
         .net-name { 
           flex: 1; 
-          font-size: 0.8em; 
+          font-size: var(--fs-md); 
           color: var(--txt0); 
           font-family: 'Consolas', monospace; 
           font-weight: 600; 
@@ -458,7 +458,7 @@ export function SidebarRight({
           text-overflow: ellipsis;
         }
         .net-count { 
-          font-size: 0.62em; 
+          font-size: var(--fs-xs); 
           font-weight: 800; 
           color: var(--txt2); 
           background: var(--bg2);
