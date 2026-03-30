@@ -10,7 +10,7 @@ import { CompEditorOverlay } from './components/CompEditorOverlay.jsx';
 import { PromptOverlay } from './components/PromptOverlay.jsx';
 import { ConfirmOverlay } from './components/ConfirmOverlay.jsx';
 import { ExportOverlay } from './components/ExportOverlay.jsx';
-import { TEMPLATE, processTemplate } from './engine/templates.js';
+import { TEMPLATE, processTemplate, generateJSONFromState } from './engine/templates.js';
 import { getAllNets } from './engine/router.js';
 import { scoreState } from './engine/optimizer-algorithms.js';
 
@@ -208,7 +208,7 @@ function App() {
       const data = JSON.parse(jsonInput);
       const defs = processTemplate(data);
       if (defs) {
-        engine.initializeBoard(defs);
+        engine.mergeBoard(defs);
         setWorkflowStep(1); setSnapCounter(c => c + 1); saveHistory();
       }
     } catch (e) { console.error(e); }
@@ -330,7 +330,27 @@ function App() {
     setIsLibraryOpen(false); setSelectedId(newId); saveHistory();
   }, [board.components, engine, saveHistory]);
 
-  const handleSaveEdit = useCallback((updated) => { engine.setState({ components: board.components.map(c => c.id === updated.id ? updated : c), wires: [] }); setIsEditorOpen(false); saveHistory(); }, [board.components, engine, saveHistory]);
+  const handleSaveEdit = useCallback(async (updated) => { 
+    if (!editingComp) return;
+    const newComps = board.components.map(c => c.id === editingComp.id ? updated : c);
+    
+    // 1. Two-way sequence: Update text
+    const newJson = generateJSONFromState(newComps);
+    setJsonInput(JSON.stringify(newJson, null, 2));
+    
+    // 2. Safely merge it back to engine memory
+    const defs = processTemplate(newJson);
+    if (defs) {
+        engine.mergeBoard(defs);
+        // Automatically attempt to fix broken wires
+        setStatus(prev => ({ ...prev, isProcessing: true }));
+        try { await engine.routeOnly(); } finally { setStatus(prev => ({ ...prev, isProcessing: false })); }
+    }
+    
+    setIsEditorOpen(false); 
+    setEditingComp(null);
+    saveHistory(); 
+  }, [board.components, engine, saveHistory, editingComp]);
 
   const handleExportState = useCallback(() => {
     const state = { components: board.components, wires: board.wires, cols: board.cols, rows: board.rows };
@@ -378,11 +398,24 @@ function App() {
     const handleKeyDown = (e) => {
       if (e.ctrlKey && e.key === 'z') { e.preventDefault(); handleUndo(); }
       if (e.ctrlKey && e.key === 'y') { e.preventDefault(); handleRedo(); }
-      if (e.ctrlKey && (e.key === 'Delete' || e.key === 'Backspace')) { if (document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); requestDelete(); } }
+      if (e.key === 'Delete' || e.key === 'Backspace') { 
+          if (document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') { 
+              e.preventDefault(); 
+              if (activePin) {
+                  // Instant un-route for active pin
+                  engine.updatePinNet(activePin.compId, activePin.pinIdx, ''); 
+                  setActivePin(null); 
+                  setPreviewPath(null); 
+                  handleRouteOnly();
+              } else {
+                  requestDelete(); 
+              }
+          } 
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, requestDelete]);
+  }, [handleUndo, handleRedo, requestDelete, activePin, engine, handleRouteOnly]);
 
   useEffect(() => {
     if (!localStorage.getItem('pcb_board_state')) handleLoadTemplate();
@@ -430,7 +463,7 @@ function App() {
               components={board.components} wires={board.wires} cols={board.cols} rows={board.rows}
               selectedId={selectedId} onSelect={(id) => { setSelectedId(id); if (id) setSelectedNet(null); }}
               onSelectNet={(net) => { setSelectedNet(net); if (net) setSelectedId(null); }}
-              activeNets={activeNets} onMove={handleMoveComp} onRotate={handleRotateComp} onMoveEnd={saveHistory}
+              activeNets={activeNets} activePin={activePin} onMove={handleMoveComp} onRotate={handleRotateComp} onMoveEnd={saveHistory}
               onManualRoute={handleManualRoute} onPreviewRoute={handlePreviewRoute} previewPath={previewPath}
               tick={board.tick} isProcessing={status.isProcessing || !!status.results} isInitialProcessing={status.isInitial}
               workflowStep={workflowStep} snapCounter={snapCounter}

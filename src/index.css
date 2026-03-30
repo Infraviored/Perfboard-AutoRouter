@@ -532,3 +532,10 @@ kbd {
   filter: drop-shadow(0 0 2px var(--wire-color));
   stroke-width: 3.8px;
 }
+.active-pin {
+  filter: drop-shadow(0 0 3px var(--active-color));
+  animation: halo-flicker 2s infinite;
+  stroke: #fff;
+  stroke-width: 2px;
+  stroke-opacity: 0.8;
+}

@@ -67,3 +67,40 @@ export function processTemplate(data) {
         };
     }).filter(Boolean);
 }
+
+export function generateJSONFromState(components) {
+    const json = { components: [] };
+    components.forEach(c => {
+        const compJson = {
+            id: c.id,
+            name: c.name || '',
+            value: c.value || '',
+            pins: c.pins.map(p => ({
+                offset: [p.dCol, p.dRow],
+                net: p.net,
+                label: p.lbl || ''
+            }))
+        };
+        if (c.routeUnder) compJson.routeUnder = true;
+        json.components.push(compJson);
+    });
+
+    // Reconstruct connections document for readability
+    const connectionsMap = new Map();
+    components.forEach(c => {
+        c.pins.forEach(p => {
+            if (p.net) {
+                if (!connectionsMap.has(p.net)) connectionsMap.set(p.net, []);
+                connectionsMap.get(p.net).push(`${c.id}[${p.lbl}]`);
+            }
+        });
+    });
+    const connections = [];
+    for (const [net, pts] of connectionsMap.entries()) {
+        if (pts.length > 1) {
+            connections.push({ net, comment: pts.join(' → ') });
+        }
+    }
+    json.connections = connections;
+    return json;
+}

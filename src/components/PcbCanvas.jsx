@@ -41,6 +41,7 @@ export function PcbCanvas({
     onPreviewRoute,
     previewPath,
     onSelectNet,
+    activePin,
     customComponentsSvg // Optional prop if we want to override
 }) {
     const svgRef = useRef(null);
@@ -482,7 +483,7 @@ export function PcbCanvas({
     const background = useMemo(() => generateBackgroundSVG(cols, rows, bounds), [cols, rows, bounds]);
     const wiresSvg = useMemo(() => generateWiresSVG(wires, activeNets), [wires, activeNets, tick]);
     const ratsnestSvg = useMemo(() => generateRatsnestSVG(components, wires), [components, wires, tick]);
-    const renderedComponentsSvg = useMemo(() => customComponentsSvg || components.map(c => renderCompSVG(c, c.id === selectedId, routingMode?.startPin)).join(''), [components, selectedId, routingMode, tick, customComponentsSvg]);
+    const renderedComponentsSvg = useMemo(() => customComponentsSvg || components.map(c => renderCompSVG(c, c.id === selectedId, activePin || routingMode?.startPin)).join(''), [components, selectedId, routingMode, activePin, tick, customComponentsSvg]);
     const boundingBoxSvg = useMemo(() => generateBoundingBoxSVG(components, wires), [components, wires, tick]);
 
     // Removal of failing simZoom useEffect

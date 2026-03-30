@@ -309,6 +309,120 @@ export class AutorouterEngine {
         this.notify();
     }
 
+    mergeBoard(compDefs) {
+        if (!compDefs || compDefs.length === 0) {
+            this.components = [];
+            this.wires = [];
+            this.notify();
+            return;
+        }
+
+        const newIDs = new Set(compDefs.map(d => d.id));
+        const oldIDs = new Set(this.components.map(c => c.id));
+
+        const missingOld = [...oldIDs].filter(id => !newIDs.has(id));
+        const addedNew = [...newIDs].filter(id => !oldIDs.has(id));
+
+        const renameMap = new Map();
+        if (missingOld.length === 1 && addedNew.length === 1) {
+            renameMap.set(addedNew[0], missingOld[0]); // map newID -> oldID
+        }
+
+        // 1. Remove missing components that aren't renames
+        for (const id of missingOld) {
+            if (!Array.from(renameMap.values()).includes(id)) {
+                this.deleteComponent(id);
+            }
+        }
+
+        // 2. Add / Update components
+        compDefs.forEach(def => {
+            const searchId = renameMap.get(def.id) || def.id;
+            const oldComp = this.components.find(c => c.id === searchId);
+            if (!oldComp) {
+                // Add new
+                const freshComps = placeInitial([def], this.cols, this.rows);
+                if (freshComps && freshComps.length > 0) {
+                    this.components.push(freshComps[0]); 
+                }
+            } else {
+                // Update in-place
+                oldComp.id = def.id; // Apply rename if occurred
+                oldComp.name = def.name;
+                oldComp.value = def.value;
+                oldComp.routeUnder = def.routeUnder;
+
+                const incomingPins = def.offsets.map((off, idx) => ({
+                    dCol: off[0],
+                    dRow: off[1],
+                    net: def.pinNets[idx],
+                    lbl: def.pinLbls[idx]
+                }));
+
+                const oldPinsMap = new Map();
+                oldComp.pins.forEach(p => oldPinsMap.set(`${p.dCol},${p.dRow}`, p));
+
+                const dimensionsChanged = (oldComp.w !== def.w || oldComp.h !== def.h);
+                if (dimensionsChanged) {
+                    oldComp.w = def.w;
+                    oldComp.h = def.h;
+                }
+
+                // Detect topological changes
+                const changedCoords = new Set();
+                incomingPins.forEach(inp => {
+                    const key = `${inp.dCol},${inp.dRow}`;
+                    const oldP = oldPinsMap.get(key);
+                    if (!oldP || oldP.net !== inp.net || oldP.lbl !== inp.lbl) {
+                        changedCoords.add(key);
+                    }
+                });
+                oldPinsMap.forEach((oldP, key) => {
+                    if (!incomingPins.find(inp => inp.dCol === oldP.dCol && inp.dRow === oldP.dRow)) {
+                        changedCoords.add(key);
+                    }
+                });
+
+                if (changedCoords.size > 0 || dimensionsChanged) {
+                    oldComp.pins = incomingPins.map(inp => ({
+                        col: oldComp.ox + inp.dCol,
+                        row: oldComp.oy + inp.dRow,
+                        dCol: inp.dCol,
+                        dRow: inp.dRow,
+                        net: inp.net,
+                        lbl: inp.lbl
+                    }));
+
+                    // Rip-up wires attached to shifted/changed pins
+                    const oldAbsCoords = Array.from(changedCoords).map(key => {
+                        const [dc, dr] = key.split(',').map(Number);
+                        return `${oldComp.ox + dc},${oldComp.oy + dr}`;
+                    });
+                    const oldAbsSet = new Set(oldAbsCoords);
+
+                    this.wires = this.wires.map(w => {
+                        if (!w.path) return w;
+                        const startsAtChanged = oldAbsSet.has(`${w.path[0].col},${w.path[0].row}`);
+                        const endsAtChanged = oldAbsSet.has(`${w.path[w.path.length - 1].col},${w.path[w.path.length - 1].row}`);
+                        if (startsAtChanged || endsAtChanged) {
+                            return { ...w, failed: true, path: [w.path[0], w.path[w.path.length - 1]] };
+                        }
+                        return w;
+                    });
+                }
+            }
+        });
+
+        // Cleanup orphaned wires
+        this.wires = this.wires.filter(w => {
+            const pinCount = this.components.reduce((acc, c) => acc + c.pins.filter(p => p.net === w.net).length, 0);
+            return pinCount >= 2;
+        });
+
+        this.tick++;
+        this.notify();
+    }
+
     deleteComponent(id) {
         // Collect all nets associated with the component being deleted
         const comp = this.components.find(c => c.id === id);
