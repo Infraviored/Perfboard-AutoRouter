@@ -533,9 +533,5 @@ kbd {
   stroke-width: 3.8px;
 }
 .active-pin {
-  filter: drop-shadow(0 0 3px var(--active-color));
-  animation: halo-flicker 2s infinite;
-  stroke: #fff;
-  stroke-width: 2px;
-  stroke-opacity: 0.8;
+  filter: drop-shadow(0 0 5px var(--active-color)) drop-shadow(0 0 10px var(--active-color));
 }

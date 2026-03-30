@@ -258,8 +258,14 @@ export function renderCompSVG(c, isSelected = false, activePin = null) {
   c.pins.forEach((p, idx) => {
     const px = p.col * SP + SP / 2, py = p.row * SP + SP / 2;
     const isActive = activePin && activePin.compId === c.id && activePin.pinIdx === idx;
-    // Centered pin design: Label inside the colored pad
-    out += `<circle cx="${px}" cy="${py}" r="${SP * .22}" fill="${netColor(p.net)}" class="${isActive ? 'active-pin' : ''}" style="${isActive ? `--active-color: ${netColor(p.net)}` : ''}"/>`;
+    const pinColor = netColor(p.net);
+    // Active pin: soft outer halo ring behind the pad (glow only, no size change)
+    if (isActive) {
+      out += `<circle cx="${px}" cy="${py}" r="${SP * .38}" fill="${pinColor}" opacity="0.15" style="pointer-events:none"/>`;
+    }
+    // Centered pin design: Label inside the colored pad (always same size)
+    out += `<circle cx="${px}" cy="${py}" r="${SP * .22}" fill="${pinColor}" class="${isActive ? 'active-pin' : ''}" style="${isActive ? `--active-color: ${pinColor}` : ''}"/>`;
+
 
     const textAttrs = `x="${px}" y="${py}" dy=".35em" fill="#fff" font-family="'Outfit', sans-serif" font-weight="900" font-size="${Math.min(SP * .22, 6)}" text-anchor="middle" paint-order="stroke" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;user-select:none"`;
     labelsOut += `<text ${textAttrs}>${p.lbl}</text>`;

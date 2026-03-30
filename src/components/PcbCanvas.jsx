@@ -63,14 +63,7 @@ export function PcbCanvas({
     const lastPos = useRef({ x: 0, y: 0 });
     const [draggingId, setDraggingId] = useState(null);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-    const [routingMode, setRoutingMode] = useState(null); // { startPin, currentPos }
-
-    // Sink routing mode if preview is cleared externally
-    useEffect(() => {
-        if (!previewPath && routingMode) {
-            setRoutingMode(null);
-        }
-    }, [previewPath, routingMode]);
+    const [routingPos, setRoutingPos] = useState(null); // Local mouse tracking for routing
 
     const hasInitializedFit = useRef(!!localStorage.getItem('pcb_camera_state'));
 
@@ -117,50 +110,43 @@ export function PcbCanvas({
         const wireHit = hitWire(col, row, wires);
         const compHit = hitComp(col, row, components);
 
-        // 1. If in routing mode and hit a pin OR a wire, commit the route
-        if (routingMode && (pinHit || wireHit)) {
+        // 1. If in routing mode (activePin is set) and hit a pin OR a wire, commit the route
+        if (activePin && (pinHit || wireHit)) {
             if (pinHit) {
-                if (pinHit.compId !== routingMode.startPin.compId || pinHit.pinIdx !== routingMode.startPin.pinIdx) {
-                    onManualRoute?.(routingMode.startPin, pinHit, previewPath);
-                    setRoutingMode(null);
-                    onPreviewRoute?.(null);
-                } else {
-                    setRoutingMode(null);
+                // Only commit if it's a DIFFERENT pin
+                if (pinHit.compId !== activePin.compId || pinHit.pinIdx !== activePin.pinIdx) {
+                    onManualRoute?.(activePin, pinHit, previewPath);
                     onPreviewRoute?.(null);
                 }
             } else if (wireHit) {
-                onManualRoute?.(routingMode.startPin, wireHit.net, previewPath);
-                setRoutingMode(null);
+                onManualRoute?.(activePin, wireHit.net, previewPath);
                 onPreviewRoute?.(null);
             }
             return;
         }
 
         // 2. Clicked while NOT in routing mode
-        if (pinHit && pinHit.compId === selectedId) {
-            // Started routing IMMEDIATELY because it's already selected and we hit a pin
-            setRoutingMode({ startPin: pinHit, currentPos: { col, row } });
+        if (pinHit && selectedId === pinHit.compId) {
+            // Already selected and hitting a pin: start routing immediately
+            setRoutingPos({ col, row });
             setDraggingId(null);
             onPreviewRoute?.(pinHit, { col, row });
         } else if (compHit) {
-            // Standard selection and dragging
+            // New component or body click: select only (allows drag)
             setDraggingId(compHit.id);
             setDragOffset({ x: worldX - compHit.ox * SP, y: worldY - compHit.oy * SP });
             onSelect?.(compHit.id);
-        } else if (wireHit) {
-            // Wire selection
-            onSelectNet?.(wireHit.net);
-            onSelect?.(null);
+            // If we were routing and clicked another component, cancel routing
+            if (activePin) {
+                onPreviewRoute?.(null);
+            }
         } else {
-            // Pan or Reset
+            // Empty space: Pan and Reset ALL
             setIsPanning(true);
             lastPos.current = pos;
             onSelect?.(null);
             onSelectNet?.(null);
-            if (routingMode) {
-                setRoutingMode(null);
-                onPreviewRoute?.(null);
-            }
+            onPreviewRoute?.(null);
         }
         e.currentTarget.setPointerCapture(e.pointerId);
     };
@@ -172,11 +158,11 @@ export function PcbCanvas({
         const col = Math.floor(worldX / SP);
         const row = Math.floor(worldY / SP);
 
-        if (routingMode) {
-            if (routingMode.currentPos.col !== col || routingMode.currentPos.row !== row) {
-                setRoutingMode(prev => ({ ...prev, currentPos: { col, row } }));
+        if (activePin) {
+            if (!routingPos || routingPos.col !== col || routingPos.row !== row) {
+                setRoutingPos({ col, row });
                 const targetWire = hitWire(col, row, wires);
-                onPreviewRoute?.(routingMode.startPin, { col, row }, targetWire?.net);
+                onPreviewRoute?.(activePin, { col, row }, targetWire?.net);
             }
         } else if (draggingId) {
             const nx = Math.round((worldX - dragOffset.x) / SP);
@@ -206,14 +192,13 @@ export function PcbCanvas({
     // Keyboard ESC to cancel routing
     useEffect(() => {
         const handleEsc = (e) => {
-            if (e.key === 'Escape' && routingMode) {
-                setRoutingMode(null);
+            if (e.key === 'Escape' && activePin) {
                 onPreviewRoute?.(null);
             }
         };
         window.addEventListener('keydown', handleEsc);
         return () => window.removeEventListener('keydown', handleEsc);
-    }, [routingMode, onPreviewRoute]);
+    }, [activePin, onPreviewRoute]);
 
     const handleMouseDown = (e) => {
         if (e.button === 2 && draggingId) {
@@ -483,13 +468,13 @@ export function PcbCanvas({
     const background = useMemo(() => generateBackgroundSVG(cols, rows, bounds), [cols, rows, bounds]);
     const wiresSvg = useMemo(() => generateWiresSVG(wires, activeNets), [wires, activeNets, tick]);
     const ratsnestSvg = useMemo(() => generateRatsnestSVG(components, wires), [components, wires, tick]);
-    const renderedComponentsSvg = useMemo(() => customComponentsSvg || components.map(c => renderCompSVG(c, c.id === selectedId, activePin || routingMode?.startPin)).join(''), [components, selectedId, routingMode, activePin, tick, customComponentsSvg]);
+    const renderedComponentsSvg = useMemo(() => customComponentsSvg || components.map(c => renderCompSVG(c, c.id === selectedId, activePin)).join(''), [components, selectedId, activePin, tick, customComponentsSvg]);
     const boundingBoxSvg = useMemo(() => generateBoundingBoxSVG(components, wires), [components, wires, tick]);
 
     // Removal of failing simZoom useEffect
 
     return (
-        <div className={`canvas-container ${isProcessing ? 'pb-active' : ''}`} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} onMouseDown={handleMouseDown} onWheel={handleWheel} onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', cursor: routingMode ? 'crosshair' : (isPanning || draggingId ? 'grabbing' : 'crosshair'), background: '#050706', '--pb-height': '240px' }}>
+        <div className={`canvas-container ${isProcessing ? 'pb-active' : ''}`} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} onMouseDown={handleMouseDown} onWheel={handleWheel} onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', cursor: activePin ? 'crosshair' : (isPanning || draggingId ? 'grabbing' : 'crosshair'), background: '#050706', '--pb-height': '240px' }}>
             <svg ref={svgRef} width="100%" height="100%" style={{ display: 'block' }}>
                 <g transform={`translate(${camera.x}, ${camera.y}) scale(${camera.z})`}>
                     <g id="main-content">
@@ -499,7 +484,7 @@ export function PcbCanvas({
                         <g dangerouslySetInnerHTML={{ __html: renderedComponentsSvg }} />
                         <g dangerouslySetInnerHTML={{ __html: boundingBoxSvg }} />
 
-                        {routingMode && (
+                        {activePin && (
                             <g className="routing-preview-layer">
                                 {(() => {
                                     const segments = [];
@@ -533,14 +518,14 @@ export function PcbCanvas({
                                             key={i}
                                             points={seg.path.map(pt => `${pt.col * SP + SP / 2},${pt.row * SP + SP / 2}`).join(' ')}
                                             fill="none"
-                                            stroke={seg.isCrossing ? '#ff2222' : netColor(routingMode.startPin.pin.net)}
+                                            stroke={seg.isCrossing ? '#ff2222' : netColor(activePin.pin.net)}
                                             strokeWidth="5"
                                             strokeLinecap="round"
                                             strokeLinejoin="round"
                                             strokeDasharray={seg.isCrossing ? "5 5" : ""}
                                             style={{
                                                 pointerEvents: 'none',
-                                                filter: `drop-shadow(0 0 8px ${seg.isCrossing ? '#ff2222' : netColor(routingMode.startPin.pin.net)})`
+                                                filter: `drop-shadow(0 0 8px ${seg.isCrossing ? '#ff2222' : netColor(activePin.pin.net)})`
                                             }}
                                         />
                                     ));

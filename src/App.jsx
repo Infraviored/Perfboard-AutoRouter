@@ -302,18 +302,22 @@ function App() {
   }, [engine]);
 
   const requestDelete = useCallback(() => {
-    if (activePin) setConfirmData({ isOpen: true, type: 'pin', targetId: `${activePin.compId}.${activePin.pin.lbl}` });
+    if (activePin) setConfirmData({ isOpen: true, type: 'pin', targetId: `${activePin.compId}.${activePin.pin.lbl}`, activePin });
     else if (selectedId) setConfirmData({ isOpen: true, type: 'comp', targetId: selectedId });
     else if (selectedNet) setConfirmData({ isOpen: true, type: 'net', targetId: selectedNet });
   }, [activePin, selectedId, selectedNet]);
 
   const handleConfirmDelete = useCallback(() => {
-    if (confirmData.type === 'pin' && activePin) { engine.updatePinNet(activePin.compId, activePin.pinIdx, ''); setActivePin(null); setPreviewPath(null); handleRouteOnly(); }
+    if (confirmData.type === 'pin' && confirmData.activePin) { 
+      const p = confirmData.activePin;
+      engine.updatePinNet(p.compId, p.pinIdx, ''); 
+      handleRouteOnly(); 
+    }
     else if (confirmData.type === 'comp') { engine.deleteComponent(confirmData.targetId); setSelectedId(null); }
     else if (confirmData.type === 'net') { engine.deleteWire(confirmData.targetId); setSelectedNet(null); }
     else if (confirmData.type === 'reset') handleLoadTemplate();
     setConfirmData({ isOpen: false, type: null, targetId: null }); saveHistory();
-  }, [confirmData, engine, activePin, handleRouteOnly, handleLoadTemplate, saveHistory]);
+  }, [confirmData, engine, handleRouteOnly, handleLoadTemplate, saveHistory]);
 
   const handleReset = useCallback(() => setConfirmData({ isOpen: true, type: 'reset', targetId: 'board' }), []);
   const handleAddFromLibrary = useCallback((compDef) => {
@@ -402,11 +406,11 @@ function App() {
           if (document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') { 
               e.preventDefault(); 
               if (activePin) {
-                  // Instant un-route for active pin
-                  engine.updatePinNet(activePin.compId, activePin.pinIdx, ''); 
+                  // Open confirm dialog
+                  requestDelete(); 
+                  // Instantly exit routing mode visually
                   setActivePin(null); 
-                  setPreviewPath(null); 
-                  handleRouteOnly();
+                  setPreviewPath(null);
               } else {
                   requestDelete(); 
               }
